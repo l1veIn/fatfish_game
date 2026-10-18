@@ -387,6 +387,10 @@ var _fg := PackedFloat32Array()      # gravity of each piece (its kind's fall sp
 var stall_lv := {}                    # stall id -> level (0 = closed)
 var _flash: Array = []                # 合成 flashes: {pos, t, name}
 var _food_tex: Array = []             # one texture per kind
+var _rim_tex: Array = []              # per kind: a glow hugging its outline (prep_canteen.food_rims), padded RIM_PAD
+var _sheen_tex: Array = []            # per kind: SHEEN_FRAMES frames of a light band crossing it
+const RIM_PAD := 14.0
+const SHEEN_FRAMES := 10
 var _box_tex := {}                    # n -> lunch box art
 var _box_grid := {}                   # n -> Rect2: the compartment grid, as fractions of the art
 var _auntie := {}                     # mood -> 梁阿姨 art
@@ -686,6 +690,8 @@ func _maybe(path: String) -> Texture2D:
 func _load_art() -> void:
 	for k in FOOD_ART:
 		_food_tex.append(load(ART + "food_%s.png" % k))
+		_rim_tex.append(_maybe(ART + "rim/food_%s.png" % k))
+		_sheen_tex.append(_maybe(ART + "sheen/food_%s.png" % k))
 	var grid: Dictionary = JSON.parse_string(FileAccess.get_file_as_string("res://data/canteen_art.json")).box_grid
 	for n in [2, 3, 4]:   # 2 rows x n columns
 		var key := "box_2" if n == 2 else "box_2x%d" % n
@@ -2684,21 +2690,45 @@ func _draw_food(kind: int, at: Vector2, rot: float, scale_k: float) -> void:
 	_draw_food_on(self, kind, at, rot, scale_k)
 
 
-## An item: the dish, a slowly turning silver shimmer (优质) or golden glow with a twinkle
-## (金牌) around it, and a little flame if 高温 touched it.
-func _draw_item(it: int, at: Vector2, rot: float, scale_k: float) -> void:
+## An item: the dish as it is (its picture never changes), with light that tells its grade:
+## 优质 (silver) — a cool white sheen sweeps across it every 1.8 s, now and then a faint star;
+## 金牌 (gold) — a warm glow hugging its own outline breathes (1.2 s), a quicker warm sheen, gold
+## stars taking turns on its edge. In a box (`boxed`, small cells) only the sheen stays.
+## 高温: a little flame.
+func _draw_item(it: int, at: Vector2, rot: float, scale_k: float, boxed := false) -> void:
 	var k := K(it)
 	var r: float = SIZE_PX[k] * scale_k * 0.55
 	var g := grade(it)
-	if g > 0:
-		var spin := float(it % 97)
-		_sprite(self, "fx_gold" if g == 2 else "fx_silver", at, r * 2.7, _t * (0.7 if g == 2 else -0.5) + spin,
-			Color(1, 1, 1, 0.95 if g == 2 else 0.8))
+	var off := float(it % 97) * 0.137   # each piece on its own beat
+	var tex: Texture2D = _food_tex[k]
+	var ks: float = SIZE_PX[k] * scale_k / maxf(tex.get_width(), tex.get_height())
+	if g == 2 and not boxed and _rim_tex[k] != null:
+		var breath := 0.5 + 0.5 * sin((_t / 1.2 + off) * TAU)
+		draw_set_transform(at, rot, Vector2(ks, ks))
+		draw_texture(_rim_tex[k], -tex.get_size() * 0.5 - Vector2(RIM_PAD, RIM_PAD), Color(1.0, 0.78, 0.32, 0.55 + 0.4 * breath))
+		draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 	_draw_food_on(self, k, at, rot, scale_k)
-	if g == 2:   # now and then a star twinkles on its rim
-		var ph := fmod(_t * 0.9 + float(it % 97) * 0.13, 1.0)
-		if ph < 0.3:
-			_sprite(self, "fx_star", at + Vector2(r * 0.8, -r * 0.7), r * 1.1 * sin(ph / 0.3 * PI), ph * 2.0)
+	if g > 0 and _sheen_tex[k] != null:
+		var period := 1.1 if g == 2 else 1.8
+		var ph := fmod(_t / period + off, 1.0)
+		if ph < 0.32:   # the sweep takes a third of the period, then it rests
+			var fr := int(ph / 0.32 * SHEEN_FRAMES)
+			var sz := tex.get_size()
+			draw_set_transform(at, rot, Vector2(ks, ks))
+			draw_texture_rect_region(_sheen_tex[k], Rect2(-sz * 0.5, sz), Rect2(fr * sz.x, 0, sz.x, sz.y),
+				Color(1.0, 0.88, 0.55, 0.95) if g == 2 else Color(0.88, 0.95, 1.0, 0.85 if not boxed else 0.6))
+			draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+	if not boxed:
+		if g == 2:   # gold stars take turns on its edge
+			for j in 3:
+				var pj := fmod(_t * 1.3 + off + j / 3.0, 1.0)
+				if pj < 0.28:
+					var dir := Vector2.from_angle(-2.2 + j * 1.6 + off)
+					_sprite(self, "fx_star", at + dir * r * 0.95, r * 0.75 * sin(pj / 0.28 * PI), pj * 3.0)
+		elif g == 1:   # silver: a faint white star now and then
+			var pj := fmod(_t * 0.55 + off, 1.0)
+			if pj < 0.18:
+				_sprite(self, "fx_star", at + Vector2(r * 0.7, -r * 0.65), r * 0.5 * sin(pj / 0.18 * PI), 0.0, Color(0.85, 0.92, 1.0, 0.8))
 	if is_hot(it):
 		_sprite(self, "icon_flame", at + Vector2(r * 0.75, -r * 0.75), maxf(18.0, 30.0 * scale_k), sin(_t * 9.0) * 0.12)
 
@@ -2788,7 +2818,7 @@ func _draw_basin(at: Vector2, b: Dictionary, slosh: float, scale_k: float, font:
 			continue
 		var centre := Vector2(gx0 + (cell_i % n + span * 0.5) * cw + wobble, gy0 + (cell_i / n + 0.5) * ch - ch * 0.12)
 		var want := cw * (0.88 + 0.42 * (span - 1))
-		_draw_item(items[i], centre, 0.0, want / SIZE_PX[K(items[i])])
+		_draw_item(items[i], centre, 0.0, want / SIZE_PX[K(items[i])], true)
 	if ghosts > 0:   # 幻觉 / 投机解码: bites that take no cell
 		_label(font, Vector2(gx0 + gw - 10, gy0 + 4), "+%d" % ghosts, HORIZONTAL_ALIGNMENT_LEFT, -1, int(26 * scale_k) + 10, Color(0.85, 0.75, 1.0))
 	for f in _flash:   # 合成: a cartoon burst, stars flying out
@@ -2844,7 +2874,7 @@ func _load_hud() -> void:
 	_nfont = UiKit.numerals()
 	for n in ["icon_token", "icon_flame", "icon_drool", "icon_chain", "icon_leaf", "icon_crown", "icon_clock", "icon_box",
 			"icon_dice", "icon_shield", "icon_bolt", "icon_bell", "ui_badge", "ui_bubble", "ui_chalkboard", "ui_paper", "ui_banner", "ui_tray",
-			"fx_silver", "fx_gold", "fx_burst", "fx_steam", "fx_star", "tray_empty", "tray_full", "ui_arrow", "sign_plate", "warm_box"]:
+			"fx_burst", "fx_steam", "fx_star", "tray_empty", "tray_full", "ui_arrow", "sign_plate", "warm_box"]:
 		_ui[n] = _maybe(ART + n + ".png")
 	_ui["hand"] = _maybe("res://assets/ui/cursor_hand.png")
 	_bar_bg = UiKit.box(Color(0.2, 0.12, 0.07, 0.85), Color(0.55, 0.36, 0.2), 2, 6)

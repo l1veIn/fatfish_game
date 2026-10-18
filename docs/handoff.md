@@ -21,6 +21,11 @@
 - **特效和结账（2026-10-18 打磨）**：
   - Demo 时期的画圈、画方块特效都换成了 `gen_assets.sh polish` 生成的图：品级光晕、合成爆光、热气、星星、托盘、箭头、铜锁。
   - 九宫格和光晕工具在 `UiKit.nine()` / `glow()` / `vignette()`。
+  - 食物品级不画圈（用户定的方案 D）：只改光，食物图不变。
+    - 优质：冷白斜向扫光，偶尔一颗小星。
+    - 金牌：贴轮廓的暖金辉光，会呼吸，加更快的扫光和轮流闪的金星。
+    - 装进饭盒后只保留扫光。
+    - 辉光和扫光帧由 `prep_canteen.food_rims()` 离线烘到 `canteen/rim/`、`canteen/sheen/`；`fx_silver` / `fx_gold` 不再用于食物。
   - 关门结账是饭票小票，见 `docs/settlement_design.md`。
   - 截图测试：`polish_test`、`checkout_test`、`crew_spread_test`（都在 `game/tests/`，加 `-- --autotest --out=<dir>`）。
 - **节奏（机器人实测）**：第 13 顿发布 R1，21 顿 V3.1，25 顿 V3.2，31 顿 V4，35 顿 AGI。

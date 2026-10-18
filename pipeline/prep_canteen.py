@@ -235,6 +235,49 @@ def stamp_ring() -> None:
     im.save(os.path.join(OUT, "stamp_ring.png"))
 
 
+RIM_PAD = 14   # px of room around a food sprite for its glow
+
+
+def food_rims() -> None:
+    """rim/food_<x>.png: a soft white glow hugging each food's own outline (its alpha grown
+    out and blurred, the food itself cut away), padded by RIM_PAD on every side. The game tints
+    it warm gold and lets it breathe under 金牌 food (docs: no circles, the light follows the
+    dish's shape)."""
+    from PIL import ImageFilter
+    import numpy as np
+    os.makedirs(os.path.join(OUT, "rim"), exist_ok=True)
+    for f in sorted(os.listdir(OUT)):
+        if not (f.startswith("food_") and f.endswith(".png")):
+            continue
+        im = Image.open(os.path.join(OUT, f)).convert("RGBA")
+        a = Image.new("L", (im.width + RIM_PAD * 2, im.height + RIM_PAD * 2), 0)
+        a.paste(im.getchannel("A"), (RIM_PAD, RIM_PAD))
+        grown = a.filter(ImageFilter.MaxFilter(9)).filter(ImageFilter.GaussianBlur(5))
+        g = np.asarray(grown).astype(np.float32) / 255.0
+        own = np.asarray(a).astype(np.float32) / 255.0
+        rim = np.clip(g * 1.6 - own * 0.85, 0.0, 1.0)
+        out = np.dstack([np.full_like(rim, 255), np.full_like(rim, 255), np.full_like(rim, 255), rim * 255]).astype(np.uint8)
+        Image.fromarray(out, "RGBA").save(os.path.join(OUT, "rim", f))
+        # the sheen: SHEEN_FRAMES frames side by side of a soft diagonal band of light crossing
+        # the dish, cut to the dish's own alpha (so it only shows on the food)
+        al = np.asarray(im.getchannel("A")).astype(np.float32) / 255.0
+        h, w = al.shape
+        ys, xs = np.mgrid[0:h, 0:w]
+        diag = (xs / w + ys / h) * 0.5          # 0 top-left .. 1 bottom-right
+        frames = []
+        for i in range(SHEEN_FRAMES):
+            c = -0.2 + 1.4 * i / (SHEEN_FRAMES - 1)
+            band = np.exp(-((diag - c) / 0.055) ** 2) + 0.35 * np.exp(-((diag - c + 0.13) / 0.03) ** 2)
+            a2 = np.clip(band, 0, 1) * al * 0.9
+            frames.append(np.dstack([np.full_like(a2, 255), np.full_like(a2, 255), np.full_like(a2, 255), a2 * 255]))
+        os.makedirs(os.path.join(OUT, "sheen"), exist_ok=True)
+        Image.fromarray(np.concatenate(frames, axis=1).astype(np.uint8), "RGBA").save(os.path.join(OUT, "sheen", f))
+
+
+SHEEN_FRAMES = 10
+
+
 if __name__ == "__main__":
     main()
     stamp_ring()
+    food_rims()
