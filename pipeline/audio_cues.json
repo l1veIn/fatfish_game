@@ -1,0 +1,257 @@
+{
+ "_doc": "ElevenLabs prompts for every sound (pipeline/gen_audio.py). name_vN = variants of one sound, picked at random in game. Music is instrumental and made loopable by gen_audio (crossfade of the end into the start).",
+ "sfx": {
+  "ui_hover": {
+   "text": "very soft short wooden tick, subtle cute menu hover blip",
+   "duration": 0.5
+  },
+  "ui_click": {
+   "text": "soft bubbly pop click, cute game menu button press",
+   "duration": 0.5
+  },
+  "ui_back": {
+   "text": "soft descending two-note blip, cute game menu cancel",
+   "duration": 0.5
+  },
+  "buy": {
+   "text": "cheerful upgrade purchase sound, soft rising chime with a gentle coin sparkle, cute casual game UI",
+   "duration": 0.8
+  },
+  "deny": {
+   "text": "soft muted error boop, short and gentle, cute game UI cannot afford sound",
+   "duration": 0.5
+  },
+  "ticket": {
+   "text": "rubber stamp thump on paper followed by a tiny cheerful ding, approval stamp, cute game",
+   "duration": 1.0
+  },
+  "fling": {
+   "text": "quick light whoosh of food tossed from a metal ladle, short air swish",
+   "duration": 0.5
+  },
+  "catch_v1": {
+   "text": "soft muffled thud of a rice ball landing in a metal lunch box, light tin clink, cute",
+   "duration": 0.5
+  },
+  "catch_v2": {
+   "text": "small soft plop of food dropping into a steel bento box compartment, gentle clink",
+   "duration": 0.5
+  },
+  "catch_gold": {
+   "text": "sparkly magical twinkle with a bright coin chime, rare golden item collected",
+   "duration": 0.8
+  },
+  "bounce": {
+   "text": "comedic springy boing of food bouncing off a full metal lunch box",
+   "duration": 0.5
+  },
+  "spill": {
+   "text": "food sloshing and spilling out of a metal lunch box, quick messy splat and clatter",
+   "duration": 0.8
+  },
+  "floor": {
+   "text": "soft squishy splat of food falling on a tiled floor, small and cute",
+   "duration": 0.5
+  },
+  "deliver": {
+   "text": "metal lunch box set down on a wooden table, solid clack with a little rattle",
+   "duration": 0.5
+  },
+  "chomp_v1": {
+   "text": "cute quick chomp and munch, a small mouth eagerly eating rice, cartoon",
+   "duration": 0.5
+  },
+  "chomp_v2": {
+   "text": "tiny cartoon nom nom bite, soft and cute eating sound",
+   "duration": 0.5
+  },
+  "chomp_v3": {
+   "text": "small eager gulp and munch, cute cartoon eating",
+   "duration": 0.5
+  },
+  "token": {
+   "text": "tiny digital coin blip, bright and short, reward counter tick",
+   "duration": 0.5
+  },
+  "crit": {
+   "text": "big satisfying cartoon gulp followed by a sparkly ding, bonus reward",
+   "duration": 1.0
+  },
+  "veg_reject": {
+   "text": "cartoon pfft spit and a disgusted little raspberry blow, comedic and cute",
+   "duration": 0.8
+  },
+  "box_return": {
+   "text": "light whoosh of an empty metal tray sliding through the air",
+   "duration": 0.5
+  },
+  "peak_start": {
+   "text": "cartoon rush hour alert: quick brass fanfare with a kitchen bell ringing, hurry up energy",
+   "duration": 1.5
+  },
+  "peak_end": {
+   "text": "relieved descending soft chime, things calming down",
+   "duration": 1.0
+  },
+  "shift_start": {
+   "text": "cheerful school canteen lunch bell, bright two-tone ding dong, lunch time",
+   "duration": 1.5
+  },
+  "shift_full": {
+   "text": "cute satisfied little burp followed by a happy sigh, cartoon, not gross",
+   "duration": 1.2
+  },
+  "shift_closed": {
+   "text": "canteen closing time: metal shutter rolling down with a gentle bell",
+   "duration": 1.5
+  },
+  "think_start": {
+   "text": "dreamy slow-motion whoosh, time slowing down, soft reverse cymbal into a low hum",
+   "duration": 1.0
+  },
+  "think_end": {
+   "text": "time speeding back up, quick rising whoosh",
+   "duration": 0.6
+  },
+  "server_busy": {
+   "text": "short digital error buzzer, server busy, comedic retro computer beep",
+   "duration": 0.6
+  },
+  "crash": {
+   "text": "comedic computer crash, glitchy power-down sound with little sparks",
+   "duration": 1.5
+  },
+  "trial_pass": {
+   "text": "triumphant short festive fanfare with firecrackers and a gong, Chinese New Year celebration, cute game victory jingle",
+   "duration": 3.0
+  },
+  "trial_fail": {
+   "text": "comedic sad trombone wah wah wah, cute game failure jingle",
+   "duration": 2.5
+  },
+  "version_up": {
+   "text": "magical level up jingle, rising sparkles and a bright happy chord",
+   "duration": 2.5
+  },
+  "result": {
+   "text": "short cozy reward jingle, warm marimba arpeggio ending on a sparkle",
+   "duration": 2.0
+  },
+  "fish_squeak_v1": {
+   "text": "cute small happy squeak of a chubby cartoon sea creature, adorable",
+   "duration": 0.6
+  },
+  "fish_squeak_v2": {
+   "text": "adorable tiny surprised squeak, cute cartoon creature being poked",
+   "duration": 0.6
+  },
+  "pan": {
+   "text": "soft paper rustle, a map being dragged",
+   "duration": 0.5
+  },
+  "clang_v1": {
+   "text": "a metal spoon banging on an empty stainless steel basin, one bright clang, cartoon",
+   "duration": 0.5
+  },
+  "clang_v2": {
+   "text": "single tinny clank of a spoon hitting a metal bowl rim, cute game sound",
+   "duration": 0.5
+  },
+  "clang_v3": {
+   "text": "a quick hollow metallic bong of a spoon on a steel wash basin",
+   "duration": 0.5
+  },
+  "helmet": {
+   "text": "an empty metal basin plonked upside down onto someone's head, hollow comedic bonk",
+   "duration": 0.7
+  },
+  "hmph": {
+   "text": "a cute small huffy 'hmph' of a sulking cartoon girl, short",
+   "duration": 0.6
+  },
+  "crew_hop": {
+   "text": "tiny soft cartoon footstep hop, light and cute",
+   "duration": 0.5
+  },
+  "catch_crisp_v1": {
+   "text": "light crispy crunch of a fried chicken drumstick dropping into a metal lunch box, crackly golden batter, short",
+   "duration": 0.5
+  },
+  "catch_crisp_v2": {
+   "text": "short crunchy rustle of french fries and fried dough landing in a tin bento box, crisp crackle",
+   "duration": 0.5
+  },
+  "catch_slosh_v1": {
+   "text": "small liquid slosh of a cup of soup landing in a metal lunch tray, gentle splash, short",
+   "duration": 0.5
+  },
+  "catch_slosh_v2": {
+   "text": "short wet gloop of porridge and a drink cup dropped into a steel bento box, soft splish",
+   "duration": 0.5
+  },
+  "catch_saucy_v1": {
+   "text": "wet saucy splat of stir fried vegetables landing in a metal lunch box, juicy, short and soft",
+   "duration": 0.5
+  },
+  "catch_saucy_v2": {
+   "text": "short juicy plop of braised pork with sauce dropping into a tin tray compartment",
+   "duration": 0.5
+  },
+  "catch_wobble_v1": {
+   "text": "cute jiggly jelly wobble of a pudding landing on a plate, bouncy boing, short",
+   "duration": 0.5
+  },
+  "catch_wobble_v2": {
+   "text": "soft springy jello wiggle of a dessert dropping into a lunch box, playful, short",
+   "duration": 0.5
+  },
+  "combo_v1": {
+   "text": "bright single service bell ding, cheerful kitchen order up, clean and short",
+   "duration": 0.6
+  },
+  "combo_v2": {
+   "text": "small microwave ready ding, crisp cute chime, short",
+   "duration": 0.6
+  },
+  "perc_shaker": {
+   "text": "single short shaker hit, dry, one hit only, percussion sample",
+   "duration": 0.5
+  },
+  "perc_clap": {
+   "text": "single tight hand clap, dry studio percussion one shot",
+   "duration": 0.5
+  },
+  "perc_bongo": {
+   "text": "single high bongo drum hit, dry, one shot percussion sample",
+   "duration": 0.5
+  },
+  "perc_block": {
+   "text": "single wooden temple block knock, dry clock tick, one shot",
+   "duration": 0.5
+  }
+ },
+ "loops": {
+  "amb_canteen": {
+   "text": "busy school canteen ambience, soft crowd chatter, cutlery and plates clinking, distant kitchen sounds, warm and lively, no music",
+   "duration": 20
+  }
+ },
+ "music": {
+  "bgm_title": {
+   "prompt": "Cozy cheerful lofi-pop title theme for a cute anime canteen game, warm electric piano and pizzicato strings, soft brushed drums, glockenspiel melody, inviting and a little silly, 95 bpm, steady groove that loops, instrumental, no vocals",
+   "length_ms": 75000
+  },
+  "bgm_run": {
+   "prompt": "Upbeat bouncy cartoon lunch-rush music for a cute catching game, marimba and plucky ukulele, snappy snare and handclaps, playful whistled lead, busy school canteen energy, 125 bpm, steady groove that loops, instrumental, no vocals",
+   "length_ms": 75000
+  },
+  "bgm_tree": {
+   "prompt": "Calm cozy lofi beat for an upgrade menu, warm Rhodes piano, soft vinyl crackle, round bass, content and sleepy after a big meal, 80 bpm, steady groove that loops, instrumental, no vocals",
+   "length_ms": 75000
+  },
+  "bgm_trial": {
+   "prompt": "Frantic festive Chinese New Year chase music for a cute game, fast erhu and suona lead, guzheng plucks, firecracker percussion and gongs, comedic panic, 150 bpm, steady groove that loops, instrumental, no vocals",
+   "length_ms": 60000
+  }
+ }
+}

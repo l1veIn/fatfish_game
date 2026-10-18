@@ -1,0 +1,93 @@
+{
+ "body_px": 1024,
+ "face_rect": [
+  350,
+  370,
+  320,
+  190
+ ],
+ "faces": {
+  "blink": {
+   "err": 0.0284
+  },
+  "happy": {
+   "err": 0.0321
+  },
+  "chew": {
+   "err": 0.0304
+  },
+  "open": {
+   "err": 0.0332
+  },
+  "puppy": {
+   "err": 0.0313
+  },
+  "pout": {
+   "err": 0.0341
+  },
+  "surprised": {
+   "err": 0.0302
+  },
+  "sleepy": {
+   "err": 0.0336
+  },
+  "think": {
+   "err": 0.0289
+  },
+  "star": {
+   "err": 0.034
+  },
+  "blank": {
+   "err": 0.032
+  },
+  "jitome": {
+   "err": 0.0308
+  },
+  "stuffed": {
+   "err": 0.0344
+  },
+  "o": {
+   "err": 0.0273
+  },
+  "tear": {
+   "err": 0.0288
+  },
+  "grimace": {
+   "err": 0.0271
+  },
+  "grok": {
+   "err": 0.0435
+  },
+  "blink_flat": {}
+ },
+ "poses": {
+  "eat_lift": {
+   "err": 0.0408,
+   "cover": 0.412
+  },
+  "eat_scoop": {
+   "err": 0.046,
+   "cover": 0.495
+  },
+  "bang_up": {
+   "err": 0.0396,
+   "cover": 0.384
+  },
+  "bang_down": {
+   "err": 0.0495,
+   "cover": 0.539
+  },
+  "sulk": {
+   "err": 0.0,
+   "cover": 0.719
+  },
+  "full": {
+   "err": 0.0797,
+   "cover": 0.662
+  },
+  "think": {
+   "err": 0.0533,
+   "cover": 0.487
+  }
+ }
+}

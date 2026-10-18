@@ -1,0 +1,244 @@
+<title>声音收尾试听</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=ZCOOL+KuaiLe&family=Noto+Sans+SC:wght@400;500;700&display=swap">
+<style>
+/* Layout: the canteen order sheet of the sound list, one row per thing to listen to; before/after pairs side by side */
+:root {
+  --bg: #f3ecdf;          /* kraft paper */
+  --sheet: #fffaf0;
+  --ink: #3a2414;
+  --muted: #84705c;
+  --line: #dccbb0;
+  --red: #c8372d;         /* ticket red */
+  --enamel: #2f5d9e;      /* enamel blue */
+  --old: #8a7a68;
+  --ok: #3f8f4f; --change: #c98a1c; --cut: #b83a3a;
+  --f-display: "ZCOOL KuaiLe", "Noto Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif;
+  --f-body: "Noto Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #1c1712; --sheet: #26201a; --ink: #f1e6d4; --muted: #ab977f; --line: #463a2e;
+  --red: #e0604f; --enamel: #6f9be0; --old: #9c8b78;
+  --ok: #5cb86c; --change: #e0a83a; --cut: #e05a5a; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #1c1712; --sheet: #26201a; --ink: #f1e6d4; --muted: #ab977f; --line: #463a2e;
+  --red: #e0604f; --enamel: #6f9be0; --old: #9c8b78;
+  --ok: #5cb86c; --change: #e0a83a; --cut: #e05a5a; color-scheme: dark }
+* { box-sizing: border-box }
+body { background: var(--bg); color: var(--ink); font-family: var(--f-body); font-size: 15px; line-height: 1.6;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 20px 60px }
+.wrap { max-width: 1080px; margin: 0 auto; display: flex; flex-direction: column; gap: 18px }
+h1 { font-family: var(--f-display); font-weight: 400; font-size: 38px; margin: 0; color: var(--red); text-wrap: balance }
+h2 { font-family: var(--f-display); font-weight: 400; font-size: 24px; margin: 0; text-wrap: balance }
+.lead { margin: 4px 0 0; color: var(--muted); max-width: 68ch }
+.sub { margin: -2px 0 2px; color: var(--muted); font-size: 14px; max-width: 72ch }
+.bar { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5;
+  background: var(--bg); padding-block: 8px; border-bottom: 1px solid var(--line) }
+.chip { font: inherit; font-size: 13px; padding: 3px 12px; border-radius: 999px; border: 1px solid var(--line); background: var(--sheet); color: var(--ink); cursor: pointer }
+.chip[aria-pressed="true"] { background: var(--ink); color: var(--bg); border-color: var(--ink) }
+.count { margin-left: auto; font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums }
+section { display: flex; flex-direction: column; gap: 8px }
+.row { display: grid; grid-template-columns: 52px minmax(0, 1.1fr) minmax(0, 1.2fr) minmax(0, 1.1fr); gap: 10px 16px; align-items: start;
+  background: var(--sheet); border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px }
+.row[data-s="ok"] { border-left: 5px solid var(--ok) } .row[data-s="change"] { border-left: 5px solid var(--change) } .row[data-s="cut"] { border-left: 5px solid var(--cut) }
+.num { font-family: var(--f-display); font-size: 20px; color: var(--enamel); border: 2px solid var(--enamel); border-radius: 8px; text-align: center; line-height: 36px }
+.moment { font-weight: 500 }
+.foods { font-size: 13px; color: var(--muted); margin-top: 2px }
+.like { font-size: 14px; color: var(--ink); min-width: 0 }
+.plays { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px }
+.play { font: inherit; font-size: 13px; display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 6px; border: 1px solid var(--enamel); background: transparent; color: var(--enamel); cursor: pointer }
+.play.was { border-color: var(--old); color: var(--old); border-style: dashed }
+.play::before { content: ""; width: 0; height: 0; border-left: 8px solid currentColor; border-top: 5px solid transparent; border-bottom: 5px solid transparent }
+.play.on { background: var(--enamel); color: var(--sheet); border-style: solid; border-color: var(--enamel) }
+.play.on::before { width: 8px; height: 10px; border: 0; background: linear-gradient(90deg, currentColor 0 3px, transparent 3px 5px, currentColor 5px 8px) }
+.len { font-size: 12px; opacity: .75; font-variant-numeric: tabular-nums }
+.note { display: flex; flex-direction: column; gap: 6px; min-width: 0 }
+.status { display: flex; gap: 6px; flex-wrap: wrap }
+.status button { font: inherit; font-size: 12px; padding: 2px 10px; border-radius: 999px; border: 1px solid var(--line); background: transparent; color: var(--ink); cursor: pointer }
+.status button[aria-pressed="true"][data-s="ok"] { background: var(--ok); color: #fff; border-color: var(--ok) }
+.status button[aria-pressed="true"][data-s="change"] { background: var(--change); color: #fff; border-color: var(--change) }
+.status button[aria-pressed="true"][data-s="cut"] { background: var(--cut); color: #fff; border-color: var(--cut) }
+textarea { width: 100%; min-height: 40px; resize: vertical; font: inherit; font-size: 13px; padding: 6px 8px; border-radius: 6px; border: 1px solid var(--line); background: var(--bg); color: var(--ink) }
+.save { display: flex; gap: 8px; align-items: center; font-size: 12px; color: var(--muted) }
+.save button { font: inherit; font-size: 12px; padding: 3px 12px; border-radius: 6px; border: 0; background: var(--red); color: #fff; cursor: pointer }
+.save button:disabled { opacity: .45; cursor: default }
+button:focus-visible, textarea:focus-visible { outline: 2px solid var(--red); outline-offset: 2px }
+.notice { font-size: 13px; color: var(--muted); margin: 0 }
+.reply { font-size: 13px; color: var(--ok); border-top: 1px dashed var(--line); padding-top: 6px }
+.foot { font-size: 13px; color: var(--muted); border-top: 1px solid var(--line); padding-top: 12px; max-width: 72ch }
+@media (max-width: 860px) { .row { grid-template-columns: 44px minmax(0, 1fr) } .like, .note { grid-column: 2 } }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important } }
+</style>
+
+<div class="wrap">
+  <header>
+    <h1>声音收尾试听</h1>
+    <p class="lead">声音这一组剩下的三件事都做完了：接菜声按食物分开、音乐跟着局面变、大事件的时候其他声音让一让。下面每一条都按游戏里真实的音量混好了，点 ▶ 听。虚线按钮是「以前」，实线是「现在」。听完点「好听 / 要改 / 删掉」，想说的写进框里保存。</p>
+  </header>
+  <div class="bar" role="toolbar" aria-label="筛选">
+    <div id="groups" style="display:flex;flex-wrap:wrap;gap:6px"></div>
+    <span class="count" id="count"></span>
+  </div>
+  <p class="notice" id="notice">正在连接批注存储……</p>
+  <div id="list" style="display:flex;flex-direction:column;gap:26px"></div>
+  <p class="foot">另外两处不用专门听：有人说话时，音乐会自动低一点点，让台词更清楚；很多声音同时响（高峰时接一大堆菜）也不会破音。梁阿姨再多录几句的事还没做，你觉得需要的话在任意一条里提一句就行。</p>
+</div>
+
+<script>
+const GROUP_INFO = {
+  "接菜声": "菜落进饭盒的那一下，按菜是什么出不同的声音。同一类有两个变体，游戏里随机挑，现在每个变体一样响。",
+  "音乐": "上班音乐不再从头到尾一个样。下面三段是游戏里会听到的样子，后两条是单独的音乐层。",
+  "混音": "让重要的声音听得清。"
+};
+const SOUNDS = [
+  {id: "c1", group: "接菜声", moment: "米饭、面食", foods: "饭团、一碗饭、金饭团、馒头、炒饭、包子、饺子、小笼包",
+   like: "软软的「咚」，就是原来那个声音。以前两个变体一个比另一个响一截，现在一样响了。",
+   clips: [["catch_v1.mp3", "变体 1"], ["catch_v2.mp3", "变体 2"]]},
+  {id: "c2", group: "接菜声", moment: "炸物", foods: "鸡腿、油条、薯条、炸鸡汉堡",
+   like: "酥脆的「咔嚓」。", clips: [["catch_crisp_v1.mp3", "变体 1"], ["catch_crisp_v2.mp3", "变体 2"]]},
+  {id: "c3", group: "接菜声", moment: "粥和饮料", foods: "白粥、豆浆、奶茶、冰可乐",
+   like: "一小声「哗啦」的水响。", clips: [["catch_slosh_v1.mp3", "变体 1"], ["catch_slosh_v2.mp3", "变体 2"]]},
+  {id: "c4", group: "接菜声", moment: "炒菜", foods: "青菜、土豆丝、番茄炒蛋、红烧肉、宫保鸡丁",
+   like: "带汁的「啪嗒」。", clips: [["catch_saucy_v1.mp3", "变体 1"], ["catch_saucy_v2.mp3", "变体 2"]]},
+  {id: "c5", group: "接菜声", moment: "甜品", foods: "布丁、双皮奶、冰激凌",
+   like: "Q 弹的「啵嘤」。", clips: [["catch_wobble_v1.mp3", "变体 1"], ["catch_wobble_v2.mp3", "变体 2"]]},
+  {id: "c6", group: "接菜声", moment: "金饭团、金牌菜", foods: "金色的菜，还有解出来的难题",
+   like: "它本来的落地声上面，叠一声小小的闪光。以前鸡腿也会闪，现在只有真正金色的才闪。",
+   clips: [["catch_gold_dish.mp3", "金饭团落进饭盒"]]},
+  {id: "c7", group: "接菜声", moment: "凑齐一份套餐", foods: "饭盒里自动合成的时候（第一次做出新菜谱还是升级乐句）",
+   like: "「叮」一声，像窗口喊「好了」。以前合成和金牌菜用的是同一个闪光声，分不出来。",
+   clips: [["combo_v1.mp3", "变体 1"], ["combo_v2.mp3", "变体 2"]]},
+
+  {id: "m1", group: "音乐", moment: "高峰来了", foods: "示范 16 秒：前 4 秒平时，中间 8 秒高峰，最后回到平时",
+   like: "铃一响、阿姨喊「快快快」，音乐里多出一层沙锤、拍手和小手鼓，踩着原曲的节拍；菜也下得更密。高峰结束，鼓点慢慢退掉。",
+   clips: [["demo_peak.mp3", "听高峰", "16 秒"]]},
+  {id: "m2", group: "音乐", moment: "关门前最后 10 秒", foods: "示范 17 秒：3 秒平时，10 秒倒计时，然后关门",
+   like: "音乐里加进「嘀、嗒、嘀、嗒」，每拍一下，音乐也一点点变快，到最后快一小截。卷帘门一拉，音乐退到后面，结算卡上的数字听得清。",
+   clips: [["demo_final.mp3", "听最后 10 秒", "17 秒"]]},
+  {id: "m3", group: "音乐", moment: "按住深度思考", foods: "示范 12 秒：第 3 秒按住，第 8 秒松开",
+   like: "时间变慢的时候，音乐也沉下去、发闷、稍微变慢，像隔着一层水。松开马上恢复。",
+   clips: [["demo_think.mp3", "听深度思考", "12 秒"]]},
+  {id: "m4", group: "音乐", moment: "上班音乐的三层（单独听）", foods: "同一段 20 秒",
+   like: "方便只听加上去的那一层：原曲、加高峰鼓点、加倒计时。",
+   clips: [["bgm_run_plain.mp3", "原曲", "20 秒"], ["bgm_run_peak.mp3", "加高峰鼓点", "20 秒"], ["bgm_run_final.mp3", "加倒计时", "20 秒"]]},
+  {id: "m5", group: "音乐", moment: "评测音乐也一样", foods: "同一段 20 秒",
+   like: "评测时那首过年的热闹音乐也有这两层。「快问快答」那几轮也会加上鼓点，催你快接。",
+   clips: [["bgm_trial_plain.mp3", "原曲", "20 秒"], ["bgm_trial_peak.mp3", "加高峰鼓点", "20 秒"], ["bgm_trial_final.mp3", "加倒计时", "20 秒"]]},
+
+  {id: "x1", group: "混音", moment: "新菜谱、顿悟这类大事件", foods: "示范：饭盒里接菜正忙，第 2.5 秒出新菜谱",
+   like: "升级乐句响的时候，接菜、咀嚼和音乐都退开一点，乐句更突出；乐句过去，再慢慢回来。保温箱、红章横幅、评测结果也一样。",
+   clips: [["demo_duck_off.mp3", "以前", "7 秒", true], ["demo_duck_on.mp3", "现在", "7 秒"]]},
+  {id: "x2", group: "混音", moment: "两个人同时想说话", foods: "示范：阿姨正说「多吃点菜」，大肥鱼把青菜呸掉",
+   like: "以前两个人的声音能叠在一起。现在同一时刻只有一句：更要紧的那句说，一样要紧就新的打断旧的；「唔姆」这种随口的小声音碰上别人在说话，就不出声。",
+   clips: [["demo_voice_both.mp3", "以前", "4 秒", true], ["demo_voice_one.mp3", "现在", "4 秒"]]},
+];
+
+const GROUPS = ["全部", ...new Set(SOUNDS.map(s => s.group))];
+let filter = "全部", notes = {}, db = null;
+const player = new Audio();
+let playingBtn = null;
+
+function stopPlaying() { player.pause(); if (playingBtn) playingBtn.classList.remove("on"); playingBtn = null; }
+player.addEventListener("ended", stopPlaying);
+
+function el(tag, attrs = {}, ...kids) {
+  const e = document.createElement(tag);
+  for (const k in attrs) { if (k === "class") e.className = attrs[k]; else e.setAttribute(k, attrs[k]); }
+  for (const c of kids) e.append(c);
+  return e;
+}
+
+function countDone() {
+  const done = SOUNDS.filter(s => { const n = notes[s.id]; return n && (n.status || n.text); }).length;
+  document.getElementById("count").textContent = "已批注 " + done + " / " + SOUNDS.length;
+}
+
+function row(s) {
+  const note = notes[s.id] || {};
+  let cur = note.status || "";
+  const r = el("div", {class: "row", id: s.id});
+  if (cur) r.dataset.s = cur;
+  const plays = el("div", {class: "plays"});
+  for (const [src, label, len, was] of s.clips) {
+    const b = el("button", {class: "play" + (was ? " was" : ""), type: "button", "aria-label": "播放 " + s.moment + " " + label}, label);
+    if (len) b.append(el("span", {class: "len"}, len));
+    b.addEventListener("click", () => {
+      const again = playingBtn === b;
+      stopPlaying();
+      if (again) return;
+      player.src = src; player.currentTime = 0;
+      player.play().then(() => { playingBtn = b; b.classList.add("on"); }).catch(() => {});
+    });
+    plays.append(b);
+  }
+  const statusBox = el("div", {class: "status", role: "group", "aria-label": s.moment + " 的结论"});
+  const ta = el("textarea", {id: "note-" + s.id, placeholder: "哪里怪？比如：太吵 / 不像炸鸡 / 想再短一点……"});
+  ta.value = note.text || "";
+  const saveBtn = el("button", {type: "button"}, "保存");
+  const saved = el("span", {}, note.text || note.status ? "已保存" : "");
+  const setStatus = v => { cur = v; statusBox.querySelectorAll("button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.s === v))); };
+  for (const [k, t] of [["ok", "好听"], ["change", "要改"], ["cut", "删掉"]]) {
+    const b = el("button", {type: "button", "data-s": k, "aria-pressed": String(cur === k)}, t);
+    b.addEventListener("click", () => { setStatus(cur === k ? "" : k); r.dataset.s = cur; saved.textContent = "没保存"; });
+    statusBox.append(b);
+  }
+  ta.addEventListener("input", () => { saved.textContent = "没保存"; });
+  saveBtn.disabled = !db;
+  saveBtn.addEventListener("click", async () => {
+    if (!db) return;
+    saveBtn.disabled = true;
+    try {
+      const doc = {status: cur, text: ta.value.trim(), reply: (notes[s.id] || {}).reply || "", id: s.id, moment: s.moment,
+        sound: s.clips.map(c => c[0]).join("+"), updatedAt: new Date().toISOString()};
+      await db.doc("notes/" + s.id).set(doc);
+      notes[s.id] = doc;
+      saved.textContent = "已保存";
+      countDone();
+    } catch (e) { saved.textContent = "没存上，再点一次"; }
+    saveBtn.disabled = false;
+  });
+  const reply = note.reply ? el("div", {class: "reply"}, "已改：" + note.reply) : "";
+  r.append(
+    el("div", {class: "num"}, s.id.toUpperCase()),
+    el("div", {}, el("div", {class: "moment"}, s.moment), el("div", {class: "foods"}, s.foods), plays),
+    el("div", {class: "like"}, s.like),
+    el("div", {class: "note"}, statusBox, ta, el("div", {class: "save"}, saveBtn, saved), reply)
+  );
+  return r;
+}
+
+function render() {
+  const list = document.getElementById("list");
+  list.innerHTML = "";
+  for (const g of GROUPS.slice(1)) {
+    if (filter !== "全部" && filter !== g) continue;
+    const sec = el("section", {}, el("h2", {}, g), el("p", {class: "sub"}, GROUP_INFO[g]));
+    for (const s of SOUNDS.filter(x => x.group === g)) sec.append(row(s));
+    list.append(sec);
+  }
+  countDone();
+}
+
+const gbox = document.getElementById("groups");
+for (const g of GROUPS) {
+  const b = el("button", {class: "chip", type: "button", "aria-pressed": String(g === filter)}, g);
+  b.addEventListener("click", () => { filter = g; gbox.querySelectorAll(".chip").forEach(x => x.setAttribute("aria-pressed", String(x === b))); stopPlaying(); render(); });
+  gbox.append(b);
+}
+render();
+
+(async () => {
+  db = window.claude ? await window.claude.use("db") : null;
+  const notice = document.getElementById("notice");
+  if (!db) { notice.textContent = "试听随时能用；批注要在 claude.ai 里打开这页才能保存。"; return; }
+  notice.hidden = true;
+  let first = true;
+  db.collection("notes").onSnapshot(snap => {
+    notes = {};
+    for (const d of snap.docs) notes[d.id] = d.data();
+    if (first) { first = false; render(); }   // later updates come from this page's own saves (or Claude's replies)
+    else countDone();
+  }, () => { notice.hidden = false; notice.textContent = "批注存储暂时连不上，刷新页面再试。"; });
+  render();
+})();
+</script>

@@ -1,0 +1,200 @@
+{
+ "idle": {
+  "sheet": "res://assets/fatfish/anims/idle.png",
+  "w": 256,
+  "h": 256,
+  "cols": 10,
+  "frames": 12,
+  "source": "tnd:idle",
+  "fps": 6,
+  "loop": true,
+  "pivot": [
+   128,
+   244
+  ]
+ },
+ "nibble": {
+  "sheet": "res://assets/fatfish/anims/nibble.png",
+  "w": 256,
+  "h": 256,
+  "cols": 10,
+  "frames": 17,
+  "source": "tnd:ds_token_nibble",
+  "fps": 8,
+  "loop": false,
+  "pivot": [
+   128,
+   244
+  ],
+  "loop_from": 5,
+  "loop_to": 13
+ },
+ "slurp": {
+  "sheet": "res://assets/fatfish/anims/slurp.png",
+  "w": 256,
+  "h": 256,
+  "cols": 10,
+  "frames": 33,
+  "source": "tnd:ds_rice_slurp",
+  "fps": 10,
+  "loop": false,
+  "pivot": [
+   128,
+   244
+  ],
+  "loop_from": 13,
+  "loop_to": 21
+ },
+ "think": {
+  "sheet": "res://assets/fatfish/anims/think.png",
+  "w": 256,
+  "h": 256,
+  "cols": 10,
+  "frames": 46,
+  "source": "tnd:ds_deep_think",
+  "fps": 8,
+  "loop": false,
+  "pivot": [
+   128,
+   244
+  ],
+  "loop_from": 26,
+  "loop_to": 36
+ },
+ "outsource": {
+  "sheet": "res://assets/fatfish/anims/outsource.png",
+  "w": 256,
+  "h": 256,
+  "cols": 10,
+  "frames": 55,
+  "source": "tnd:ds_outsource_nap",
+  "fps": 8,
+  "loop": false,
+  "pivot": [
+   128,
+   244
+  ],
+  "loop_from": 26,
+  "loop_to": 42
+ },
+ "beg": {
+  "sheet": "res://assets/fatfish/anims/beg.png",
+  "w": 256,
+  "h": 256,
+  "cols": 10,
+  "frames": 17,
+  "source": "tnd:ds_beg_rice",
+  "fps": 8,
+  "loop": false,
+  "pivot": [
+   128,
+   244
+  ],
+  "loop_from": 5,
+  "loop_to": 13
+ },
+ "happy": {
+  "sheet": "res://assets/fatfish/anims/happy.png",
+  "w": 256,
+  "h": 256,
+  "cols": 10,
+  "frames": 13,
+  "source": "tnd:happy_jump",
+  "fps": 12,
+  "loop": false,
+  "pivot": [
+   128,
+   244
+  ]
+ },
+ "not_fat": {
+  "sheet": "res://assets/fatfish/anims/not_fat.png",
+  "w": 256,
+  "h": 256,
+  "cols": 10,
+  "frames": 34,
+  "source": "tnd:ds_not_fat",
+  "fps": 10,
+  "loop": false,
+  "pivot": [
+   128,
+   244
+  ],
+  "loop_from": 5,
+  "loop_to": 11
+ },
+ "full_belly": {
+  "sheet": "res://assets/fatfish/anims/full_belly.png",
+  "w": 256,
+  "h": 256,
+  "cols": 10,
+  "frames": 97,
+  "source": "tnd_extra:ds_full_belly_nobubble",
+  "fps": 10,
+  "loop": false,
+  "pivot": [
+   128,
+   244
+  ],
+  "loop_from": 65,
+  "loop_to": 96
+ },
+ "basin": {
+  "sheet": "res://assets/fatfish/anims/basin.png",
+  "w": 256,
+  "h": 256,
+  "cols": 10,
+  "frames": 41,
+  "source": "tnd:ds_basin",
+  "fps": 10,
+  "loop": false,
+  "pivot": [
+   128,
+   244
+  ],
+  "loop_from": 16,
+  "loop_to": 26
+ },
+ "eat_rice": {
+  "sheet": "res://assets/fatfish/anims/eat_rice.png",
+  "w": 231,
+  "h": 274,
+  "cols": 10,
+  "frames": 100,
+  "source": "dsh:吃白饭",
+  "fps": 10,
+  "loop": true,
+  "pivot": [
+   115,
+   274
+  ]
+ },
+ "broke": {
+  "sheet": "res://assets/fatfish/anims/broke.png",
+  "w": 432,
+  "h": 285,
+  "cols": 10,
+  "frames": 100,
+  "source": "dsh:余额-分文不剩",
+  "fps": 10,
+  "loop": true,
+  "pivot": [
+   216,
+   285
+  ]
+ },
+ "title_idle": {
+  "sheet": "res://assets/fatfish/anims/title_idle.png",
+  "w": 349,
+  "h": 420,
+  "cols": 10,
+  "frames": 32,
+  "source": "yun:dense-idle",
+  "fps": 10,
+  "loop": true,
+  "pivot": [
+   174,
+   420
+  ]
+ }
+}

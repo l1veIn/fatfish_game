@@ -1,0 +1,13 @@
+[gd_resource type="FontVariation" load_steps=3 format=3]
+
+[ext_resource type="FontFile" path="res://assets/ui/NotoSansSC-VF.ttf" id="1"]
+
+[sub_resource type="SystemFont" id="SystemFont_sys"]
+font_names = PackedStringArray("Microsoft YaHei UI", "Microsoft YaHei", "PingFang SC", "Noto Sans CJK SC", "SimHei")
+
+[resource]
+base_font = ExtResource("1")
+variation_opentype = {
+2003265652: 600
+}
+fallbacks = Array[Font]([SubResource("SystemFont_sys")])

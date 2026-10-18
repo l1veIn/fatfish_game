@@ -1,0 +1,857 @@
+{
+ "_doc": "梁阿姨的档口、菜和套餐（docs/menu_design.md）。foods: 每样菜；id 是代码里的名字，前 9 样（ball..ji_gold）是老的固定编号，不要改顺序。stall/level: 哪个档口几级出这道菜；w: 出菜权重；cells: 占几格；value: token；fall: 下落快慢（1 = 普通，每次再随机 ±12%）；art/tint/glyph: 暂用的贴图、染色和字（新图生成前）；picky: 单独吃会被她呸掉。stalls: speed 是出餐快慢，max 最高级，base 开局等级（技能树的 stall_<id> 属性）。recipes: 饭盒里凑齐 needs 就自动合成一份套餐（needs 里也可以是别的套餐），cells 是合成后占的格子，价值 = 原料价值之和（青菜算 1，套套餐时用里面那份的原料和）× 套餐等级倍率；等级按展开后的原料数自动定：2 样小炒、3 样二级、4–5 样三级、6 样以上或 hidden 神级（docs/tree_model.md）。mult 是旧字段，排序用。kind: self 本档口 / cross 跨档口 / hidden 隐藏（图鉴里只显示 hint）/ special 不靠配方合成（乱炖、涌现乱炖，由技能生成，tier 指定等级）。 cat: 主/荤/素/饮/甜（均衡倍率只看主荤素，复合菜各算一半）。sig: 招牌菜效果（stack: 本顿每吃一份这道菜价值 +x 叠加；mult: 价值 ×x、本档口出餐慢 slow；balance: 每份均衡倍率 +x）。 snd: 落进饭盒的声音（crisp 炸物脆 / slosh 汤饮水声 / saucy 炒菜带汁 / wobble 甜品 Q 弹；不写 = 米饭面食的软「咚」）。",
+ "foods": [
+  {
+   "id": "ball",
+   "name": "饭团",
+   "stall": "main",
+   "level": 2,
+   "w": 3,
+   "cells": 1,
+   "value": 1,
+   "fall": 1.0,
+   "art": "ball",
+   "cat": [
+    "主"
+   ],
+   "sig": {
+    "stack": 0.02
+   }
+  },
+  {
+   "id": "bowl",
+   "name": "一碗饭",
+   "stall": "main",
+   "level": 1,
+   "w": 3,
+   "cells": 2,
+   "value": 4,
+   "fall": 0.8,
+   "art": "bowl",
+   "cat": [
+    "主"
+   ]
+  },
+  {
+   "id": "leg",
+   "name": "鸡腿",
+   "stall": "fry",
+   "level": 1,
+   "w": 3,
+   "cells": 1,
+   "value": 6,
+   "fall": 1.35,
+   "art": "leg",
+   "cat": [
+    "荤"
+   ],
+   "snd": "crisp"
+  },
+  {
+   "id": "gold",
+   "name": "金饭团",
+   "stall": "main",
+   "level": 4,
+   "w": 0.3,
+   "cells": 1,
+   "value": 10,
+   "fall": 1.6,
+   "art": "gold",
+   "rare": true,
+   "cat": [
+    "主"
+   ]
+  },
+  {
+   "id": "veg",
+   "name": "青菜",
+   "stall": "wok",
+   "level": 1,
+   "w": 3,
+   "cells": 1,
+   "value": 0,
+   "fall": 0.6,
+   "art": "veg",
+   "picky": true,
+   "cat": [
+    "素"
+   ],
+   "snd": "saucy"
+  },
+  {
+   "id": "dump",
+   "name": "饺子",
+   "stall": "dim",
+   "level": 2,
+   "w": 3,
+   "cells": 1,
+   "value": 2,
+   "fall": 0.95,
+   "art": "dump",
+   "cat": [
+    "主",
+    "荤"
+   ],
+   "sig": {
+    "stack": 0.03
+   }
+  },
+  {
+   "id": "q",
+   "name": "难题",
+   "cells": 1,
+   "value": 6,
+   "fall": 1.0,
+   "art": "gold",
+   "tint": [
+    0.78,
+    0.62,
+    1.0
+   ],
+   "glyph": "题"
+  },
+  {
+   "id": "ji",
+   "name": "极",
+   "cells": 1,
+   "value": 0,
+   "fall": 1.0,
+   "art": "ball",
+   "tint": [
+    0.42,
+    0.36,
+    0.4
+   ],
+   "glyph": "极"
+  },
+  {
+   "id": "ji_gold",
+   "name": "金色「极」",
+   "cells": 1,
+   "value": 15,
+   "fall": 1.0,
+   "art": "gold",
+   "tint": [
+    1.15,
+    1.0,
+    0.55
+   ],
+   "glyph": "极"
+  },
+  {
+   "id": "mantou",
+   "name": "馒头",
+   "stall": "main",
+   "level": 1,
+   "w": 3,
+   "cells": 1,
+   "value": 1,
+   "fall": 1.0,
+   "art": "ball",
+   "tint": [
+    1.05,
+    1.0,
+    0.92
+   ],
+   "glyph": "馒",
+   "cat": [
+    "主"
+   ]
+  },
+  {
+   "id": "congee",
+   "name": "白粥",
+   "stall": "main",
+   "level": 2,
+   "w": 2,
+   "cells": 2,
+   "value": 3,
+   "fall": 0.7,
+   "art": "bowl",
+   "tint": [
+    1.05,
+    1.05,
+    1.0
+   ],
+   "glyph": "粥",
+   "cat": [
+    "主"
+   ],
+   "sig": {
+    "balance": 0.04
+   },
+   "snd": "slosh"
+  },
+  {
+   "id": "friedrice",
+   "name": "炒饭",
+   "stall": "main",
+   "level": 3,
+   "w": 2,
+   "cells": 1,
+   "value": 4,
+   "fall": 0.95,
+   "art": "bowl",
+   "tint": [
+    1.15,
+    1.0,
+    0.55
+   ],
+   "glyph": "炒",
+   "cat": [
+    "主"
+   ]
+  },
+  {
+   "id": "egg",
+   "name": "番茄炒蛋",
+   "stall": "wok",
+   "level": 1,
+   "w": 3,
+   "cells": 1,
+   "value": 3,
+   "fall": 1.0,
+   "art": "dump",
+   "tint": [
+    1.2,
+    0.75,
+    0.45
+   ],
+   "glyph": "蛋",
+   "cat": [
+    "荤"
+   ],
+   "snd": "saucy"
+  },
+  {
+   "id": "potato",
+   "name": "土豆丝",
+   "stall": "wok",
+   "level": 2,
+   "w": 2,
+   "cells": 1,
+   "value": 1,
+   "fall": 0.7,
+   "art": "veg",
+   "tint": [
+    1.25,
+    1.1,
+    0.5
+   ],
+   "glyph": "丝",
+   "cat": [
+    "素"
+   ],
+   "sig": {
+    "stack": 0.04
+   },
+   "snd": "saucy"
+  },
+  {
+   "id": "pork",
+   "name": "红烧肉",
+   "stall": "wok",
+   "level": 2,
+   "w": 2,
+   "cells": 1,
+   "value": 5,
+   "fall": 1.2,
+   "art": "leg",
+   "tint": [
+    0.85,
+    0.5,
+    0.35
+   ],
+   "glyph": "肉",
+   "cat": [
+    "荤"
+   ],
+   "sig": {
+    "mult": 2.5,
+    "slow": 0.3
+   },
+   "snd": "saucy"
+  },
+  {
+   "id": "kungpao",
+   "name": "宫保鸡丁",
+   "stall": "wok",
+   "level": 3,
+   "w": 2,
+   "cells": 1,
+   "value": 6,
+   "fall": 1.25,
+   "art": "leg",
+   "tint": [
+    1.2,
+    0.55,
+    0.4
+   ],
+   "glyph": "宫",
+   "cat": [
+    "荤"
+   ],
+   "snd": "saucy"
+  },
+  {
+   "id": "bun",
+   "name": "包子",
+   "stall": "dim",
+   "level": 1,
+   "w": 3,
+   "cells": 1,
+   "value": 2,
+   "fall": 1.0,
+   "art": "dump",
+   "tint": [
+    1.05,
+    1.02,
+    0.95
+   ],
+   "glyph": "包",
+   "cat": [
+    "主",
+    "荤"
+   ]
+  },
+  {
+   "id": "youtiao",
+   "name": "油条",
+   "stall": "dim",
+   "level": 1,
+   "w": 3,
+   "cells": 1,
+   "value": 1,
+   "fall": 1.1,
+   "art": "leg",
+   "tint": [
+    1.3,
+    1.05,
+    0.55
+   ],
+   "glyph": "油",
+   "cat": [
+    "主"
+   ],
+   "snd": "crisp"
+  },
+  {
+   "id": "soymilk",
+   "name": "豆浆",
+   "stall": "dim",
+   "level": 2,
+   "w": 2,
+   "cells": 1,
+   "value": 2,
+   "fall": 0.9,
+   "art": "bowl",
+   "tint": [
+    1.1,
+    1.05,
+    0.85
+   ],
+   "glyph": "浆",
+   "cat": [
+    "饮"
+   ],
+   "sig": {
+    "balance": 0.04
+   },
+   "snd": "slosh"
+  },
+  {
+   "id": "xlb",
+   "name": "小笼包",
+   "stall": "dim",
+   "level": 3,
+   "w": 2,
+   "cells": 1,
+   "value": 4,
+   "fall": 1.0,
+   "art": "dump",
+   "tint": [
+    1.0,
+    0.95,
+    0.9
+   ],
+   "glyph": "笼",
+   "cat": [
+    "荤"
+   ]
+  },
+  {
+   "id": "fries",
+   "name": "薯条",
+   "stall": "fry",
+   "level": 1,
+   "w": 3,
+   "cells": 1,
+   "value": 1,
+   "fall": 1.1,
+   "art": "veg",
+   "tint": [
+    1.4,
+    1.2,
+    0.4
+   ],
+   "glyph": "薯",
+   "cat": [
+    "素"
+   ],
+   "sig": {
+    "stack": 0.04
+   },
+   "snd": "crisp"
+  },
+  {
+   "id": "cola",
+   "name": "冰可乐",
+   "stall": "fry",
+   "level": 2,
+   "w": 2,
+   "cells": 1,
+   "value": 2,
+   "fall": 1.5,
+   "art": "bowl",
+   "tint": [
+    0.55,
+    0.35,
+    0.3
+   ],
+   "glyph": "乐",
+   "cat": [
+    "饮"
+   ],
+   "snd": "slosh"
+  },
+  {
+   "id": "burger",
+   "name": "炸鸡汉堡",
+   "stall": "fry",
+   "level": 3,
+   "w": 2,
+   "cells": 2,
+   "value": 7,
+   "fall": 1.2,
+   "art": "gold",
+   "tint": [
+    1.0,
+    0.7,
+    0.4
+   ],
+   "glyph": "堡",
+   "cat": [
+    "主",
+    "荤"
+   ],
+   "sig": {
+    "mult": 3.0,
+    "slow": 0.3
+   },
+   "snd": "crisp"
+  },
+  {
+   "id": "pudding",
+   "name": "布丁",
+   "stall": "sweet",
+   "level": 1,
+   "w": 3,
+   "cells": 1,
+   "value": 3,
+   "fall": 0.9,
+   "art": "ball",
+   "tint": [
+    1.3,
+    1.1,
+    0.5
+   ],
+   "glyph": "布",
+   "cat": [
+    "甜"
+   ],
+   "snd": "wobble"
+  },
+  {
+   "id": "milktea",
+   "name": "奶茶",
+   "stall": "sweet",
+   "level": 1,
+   "w": 3,
+   "cells": 1,
+   "value": 3,
+   "fall": 1.0,
+   "art": "bowl",
+   "tint": [
+    1.05,
+    0.85,
+    0.65
+   ],
+   "glyph": "奶",
+   "cat": [
+    "饮"
+   ],
+   "sig": {
+    "balance": 0.04
+   },
+   "snd": "slosh"
+  },
+  {
+   "id": "shuangpi",
+   "name": "双皮奶",
+   "stall": "sweet",
+   "level": 2,
+   "w": 2,
+   "cells": 1,
+   "value": 4,
+   "fall": 0.85,
+   "art": "bowl",
+   "tint": [
+    1.1,
+    1.08,
+    1.0
+   ],
+   "glyph": "双",
+   "cat": [
+    "甜"
+   ],
+   "snd": "wobble"
+  },
+  {
+   "id": "icecream",
+   "name": "冰激凌",
+   "stall": "sweet",
+   "level": 3,
+   "w": 2,
+   "cells": 1,
+   "value": 6,
+   "fall": 1.3,
+   "art": "ball",
+   "tint": [
+    1.0,
+    0.85,
+    1.15
+   ],
+   "glyph": "冰",
+   "cat": [
+    "甜"
+   ],
+   "sig": {
+    "mult": 2.5,
+    "slow": 0.3
+   },
+   "snd": "wobble"
+  }
+ ],
+ "stalls": {
+  "main": {
+   "name": "主食",
+   "speed": 1.25,
+   "max": 4,
+   "base": 1
+  },
+  "wok": {
+   "name": "炒菜",
+   "speed": 1.0,
+   "max": 3,
+   "base": 0
+  },
+  "dim": {
+   "name": "面点",
+   "speed": 1.2,
+   "max": 3,
+   "base": 0
+  },
+  "fry": {
+   "name": "炸物",
+   "speed": 0.75,
+   "max": 3,
+   "base": 0
+  },
+  "sweet": {
+   "name": "甜品",
+   "speed": 0.7,
+   "max": 3,
+   "base": 0
+  }
+ },
+ "recipes": [
+  {
+   "id": "carb",
+   "name": "碳水炸弹",
+   "kind": "self",
+   "needs": [
+    "bowl",
+    "mantou",
+    "ball"
+   ],
+   "cells": 2,
+   "mult": 1.15,
+   "glyph": "碳"
+  },
+  {
+   "id": "congee_mantou",
+   "name": "白粥馒头",
+   "kind": "self",
+   "needs": [
+    "congee",
+    "mantou"
+   ],
+   "cells": 2,
+   "mult": 1.15,
+   "glyph": "粥"
+  },
+  {
+   "id": "egg_veg",
+   "name": "番茄炒蛋配青菜",
+   "kind": "self",
+   "needs": [
+    "egg",
+    "veg"
+   ],
+   "cells": 1,
+   "mult": 1.15,
+   "glyph": "蛋"
+  },
+  {
+   "id": "two_one",
+   "name": "两荤一素",
+   "kind": "self",
+   "needs": [
+    "pork",
+    "kungpao",
+    "potato"
+   ],
+   "cells": 2,
+   "mult": 1.15,
+   "glyph": "荤"
+  },
+  {
+   "id": "breakfast",
+   "name": "豆浆油条",
+   "kind": "self",
+   "needs": [
+    "soymilk",
+    "youtiao"
+   ],
+   "cells": 1,
+   "mult": 1.15,
+   "glyph": "早"
+  },
+  {
+   "id": "happy",
+   "name": "快乐套餐",
+   "kind": "self",
+   "needs": [
+    "burger",
+    "fries",
+    "cola"
+   ],
+   "cells": 2,
+   "mult": 1.15,
+   "glyph": "乐"
+  },
+  {
+   "id": "tea",
+   "name": "下午茶",
+   "kind": "self",
+   "needs": [
+    "pudding",
+    "milktea"
+   ],
+   "cells": 1,
+   "mult": 1.15,
+   "glyph": "茶"
+  },
+  {
+   "id": "homestyle",
+   "name": "家常便饭",
+   "kind": "cross",
+   "needs": [
+    "bowl",
+    "egg_veg"
+   ],
+   "cells": 2,
+   "mult": 1.3,
+   "glyph": "家"
+  },
+  {
+   "id": "porkrice",
+   "name": "红烧肉盖饭",
+   "kind": "cross",
+   "needs": [
+    "bowl",
+    "pork",
+    "potato"
+   ],
+   "cells": 2,
+   "mult": 1.3,
+   "glyph": "盖"
+  },
+  {
+   "id": "bento",
+   "name": "饭团便当",
+   "kind": "cross",
+   "needs": [
+    "ball",
+    "leg",
+    "veg"
+   ],
+   "cells": 2,
+   "mult": 1.3,
+   "glyph": "便"
+  },
+  {
+   "id": "chicken_rice",
+   "name": "炸鸡配炒饭",
+   "kind": "cross",
+   "needs": [
+    "friedrice",
+    "leg",
+    "cola"
+   ],
+   "cells": 2,
+   "mult": 1.3,
+   "glyph": "鸡"
+  },
+  {
+   "id": "dimsum",
+   "name": "早点铺",
+   "kind": "cross",
+   "needs": [
+    "xlb",
+    "congee",
+    "soymilk"
+   ],
+   "cells": 2,
+   "mult": 1.3,
+   "glyph": "点"
+  },
+  {
+   "id": "summer",
+   "name": "夏日特供",
+   "kind": "cross",
+   "needs": [
+    "happy",
+    "icecream"
+   ],
+   "cells": 2,
+   "mult": 1.3,
+   "glyph": "夏"
+  },
+  {
+   "id": "deep",
+   "name": "深度思考套餐",
+   "kind": "hidden",
+   "needs": [
+    "congee",
+    "icecream"
+   ],
+   "cells": 1,
+   "mult": 1.6,
+   "glyph": "思",
+   "hint": "一个要慢慢喝，一个会化"
+  },
+  {
+   "id": "full",
+   "name": "满血版",
+   "kind": "hidden",
+   "needs": [
+    "homestyle",
+    "happy",
+    "breakfast",
+    "tea"
+   ],
+   "cells": 3,
+   "mult": 1.6,
+   "glyph": "满",
+   "hint": "五个窗口的招牌，一盒装下"
+  },
+  {
+   "id": "deluxe_breakfast",
+   "name": "豪华早点",
+   "kind": "cross",
+   "needs": [
+    "breakfast",
+    "xlb",
+    "bun"
+   ],
+   "cells": 2,
+   "mult": 1.3,
+   "glyph": "早"
+  },
+  {
+   "id": "bucket",
+   "name": "全家桶",
+   "kind": "cross",
+   "needs": [
+    "happy",
+    "leg"
+   ],
+   "cells": 2,
+   "mult": 1.3,
+   "glyph": "桶"
+  },
+  {
+   "id": "dessert_bar",
+   "name": "甜品台",
+   "kind": "cross",
+   "needs": [
+    "tea",
+    "shuangpi",
+    "icecream"
+   ],
+   "cells": 2,
+   "mult": 1.3,
+   "glyph": "甜"
+  },
+  {
+   "id": "kungpao_rice",
+   "name": "宫保套饭",
+   "kind": "cross",
+   "needs": [
+    "two_one",
+    "bowl"
+   ],
+   "cells": 2,
+   "mult": 1.3,
+   "glyph": "宫"
+  },
+  {
+   "id": "family",
+   "name": "食堂全家福",
+   "kind": "hidden",
+   "needs": [
+    "bowl",
+    "pork",
+    "xlb",
+    "leg",
+    "pudding",
+    "mantou"
+   ],
+   "cells": 3,
+   "mult": 1.6,
+   "glyph": "福",
+   "hint": "五个窗口各来一样，再配一碗饭"
+  },
+  {
+   "id": "stew",
+   "name": "乱炖",
+   "kind": "special",
+   "needs": [],
+   "cells": 1,
+   "mult": 1.0,
+   "glyph": "乱",
+   "tier": 2
+  },
+  {
+   "id": "emerge_stew",
+   "name": "涌现乱炖",
+   "kind": "special",
+   "needs": [],
+   "cells": 2,
+   "mult": 1.0,
+   "glyph": "涌",
+   "tier": 4
+  }
+ ]
+}

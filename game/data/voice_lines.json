@@ -1,0 +1,10 @@
+{
+  "_doc": "所有配音台词。voice 对应 pipeline/gen_voice.py 里的 VOICES；file 是 game/assets/audio/voice/ 下的文件名（不带扩展名）。",
+  "lines": [
+    {"voice": "fatfish", "file": "bark_lunch", "text": "我去吃饭了！"},
+    {"voice": "fatfish", "file": "bark_what_to_eat", "text": "中午吃什么呢……"},
+    {"voice": "fatfish", "file": "bark_no_think", "text": "卧槽，我不思考了！"},
+    {"voice": "fatfish", "file": "bark_partial", "text": "这次只写了一部分。"},
+    {"voice": "fatfish", "file": "bark_sleep", "text": "我去睡了，明早起来应该就编译完了。"}
+  ]
+}

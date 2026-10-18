@@ -1,0 +1,1546 @@
+{
+ "_doc": "技能树数据，由 pipeline/build_tree.py 生成（别手改）。模型见 docs/tree_model.md。ring 是节点所属的版本环（0 = V3，1 = R1，2 = V3.1，3 = V3.2，4 = V4），版本发布前这一环不显示；kind=ticket 是门票节点，opens 是它开放的评测；key 是开一种新赚钱方式的节点。pos 是相对树中心的坐标（像素）；parents 里任意一个父节点买过，这个节点才会出现；cost = cost × growth^当前等级（token）；effects 每升一级叠加一次：add 加法，mul 乘法。可用属性见 game.gd 的 BASE。",
+ "nodes": [
+  {
+   "id": "start",
+   "name": "先吃饭吧！",
+   "desc": "目标是实现AGI！但是也要先吃饱。",
+   "pos": [
+    0,
+    0
+   ],
+   "parents": [],
+   "max": 1,
+   "cost": 0,
+   "growth": 1,
+   "effects": {}
+  },
+  {
+   "id": "stall_main",
+   "name": "预训练语料·主食",
+   "desc": "主食窗口（柜台正中间）升级，菜单多一道菜：饭团和白粥 → 炒饭 → 金饭团。",
+   "pos": [
+    -129,
+    -286
+   ],
+   "parents": [
+    "start"
+   ],
+   "max": 3,
+   "cost": 60,
+   "growth": 4.0,
+   "effects": {
+    "stall_main": {
+     "add": 1
+    }
+   }
+  },
+  {
+   "id": "stall_wok",
+   "name": "预训练语料·炒菜",
+   "desc": "开张炒菜窗口：番茄炒蛋和青菜。再升级会出土豆丝、红烧肉，最后是宫保鸡丁。小心：她不爱吃青菜。",
+   "pos": [
+    360,
+    -360
+   ],
+   "parents": [
+    "start"
+   ],
+   "max": 3,
+   "cost": 60,
+   "growth": 4.0,
+   "effects": {
+    "stall_wok": {
+     "add": 1
+    }
+   }
+  },
+  {
+   "id": "stall_dim",
+   "name": "预训练语料·面点",
+   "desc": "开张面点窗口：包子和油条。再升级会出豆浆、饺子，最后是小笼包。",
+   "pos": [
+    416,
+    -520
+   ],
+   "parents": [
+    "stall_wok"
+   ],
+   "max": 3,
+   "cost": 81,
+   "growth": 4.0,
+   "effects": {
+    "stall_dim": {
+     "add": 1
+    }
+   }
+  },
+  {
+   "id": "stall_fry",
+   "name": "预训练语料·炸物",
+   "desc": "开张炸物窗口：鸡腿和薯条。再升级会出冰可乐，最后是炸鸡汉堡。",
+   "pos": [
+    338,
+    -677
+   ],
+   "parents": [
+    "stall_dim"
+   ],
+   "max": 3,
+   "cost": 4250,
+   "growth": 4.0,
+   "effects": {
+    "stall_fry": {
+     "add": 1
+    }
+   },
+   "ring": 1
+  },
+  {
+   "id": "stall_sweet",
+   "name": "多模态·甜品窗口",
+   "desc": "开张甜品窗口：布丁和奶茶。再升级会出双皮奶，最后是冰激凌。",
+   "pos": [
+    286,
+    -838
+   ],
+   "parents": [
+    "stall_fry"
+   ],
+   "max": 3,
+   "cost": 51250,
+   "growth": 4.0,
+   "effects": {
+    "stall_sweet": {
+     "add": 1
+    }
+   },
+   "ring": 2
+  },
+  {
+   "id": "menu",
+   "name": "System Prompt：今日菜单",
+   "desc": "解锁「今日菜单」按钮：开饭前划掉不想要的菜，它就不会再出，同窗口的其他菜出得更多。每级多划 1 道。",
+   "pos": [
+    -43,
+    -454
+   ],
+   "parents": [
+    "stall_wok"
+   ],
+   "max": 4,
+   "cost": 81,
+   "growth": 4.0,
+   "effects": {
+    "menu_cut": {
+     "add": 1
+    }
+   }
+  },
+  {
+   "id": "sft",
+   "name": "SFT 监督微调",
+   "desc": "抛下来的菜有几率是「优质菜」：带银圈，价值 ×2。每级几率 +8%。",
+   "pos": [
+    -270,
+    -417
+   ],
+   "parents": [
+    "stall_main"
+   ],
+   "max": 5,
+   "cost": 81,
+   "growth": 4.0,
+   "effects": {
+    "sft": {
+     "add": 0.08
+    }
+   }
+  },
+  {
+   "id": "lora",
+   "name": "LoRA 微调",
+   "desc": "今日菜单里每划掉 1 道菜，剩下的菜是优质菜的几率 +3%。",
+   "pos": [
+    -111,
+    -611
+   ],
+   "parents": [
+    "menu",
+    "sft"
+   ],
+   "max": 1,
+   "cost": 150,
+   "growth": 1.0,
+   "effects": {
+    "lora": {
+     "add": 0.03
+    }
+   }
+  },
+  {
+   "id": "dpo",
+   "name": "DPO 偏好优化",
+   "desc": "优质菜有几率直接升成「金牌菜」：带金圈，价值 ×4。每级几率 +20%。",
+   "pos": [
+    -343,
+    -575
+   ],
+   "parents": [
+    "sft"
+   ],
+   "max": 3,
+   "cost": 4250,
+   "growth": 4.0,
+   "effects": {
+    "dpo": {
+     "add": 0.2
+    }
+   },
+   "ring": 1
+  },
+  {
+   "id": "fp32",
+   "name": "FP32 满精度",
+   "desc": "金牌菜的价值从 ×4 提到 ×5。",
+   "pos": [
+    -311,
+    -740
+   ],
+   "parents": [
+    "dpo"
+   ],
+   "max": 1,
+   "cost": 768750,
+   "growth": 1.0,
+   "effects": {
+    "fp32": {
+     "add": 1
+    }
+   },
+   "ring": 3
+  },
+  {
+   "id": "moe",
+   "name": "MoE 激活专家",
+   "desc": "解锁「招牌菜」按钮：开饭前选一道招牌菜，这一顿它有特别加成（比如越吃越值钱）。每级多选一道。",
+   "pos": [
+    -365,
+    -226
+   ],
+   "parents": [
+    "stall_main"
+   ],
+   "max": 3,
+   "cost": 81,
+   "growth": 4.0,
+   "effects": {
+    "sig_slots": {
+     "add": 1
+    }
+   }
+  },
+  {
+   "id": "canteen_std",
+   "name": "食堂标配",
+   "desc": "每个窗口抛菜时，有几率顺手多给一勺青菜（每级 +15%）。青菜能凑套餐、补素菜，也是「顿悟」的训练材料。",
+   "pos": [
+    650,
+    -537
+   ],
+   "parents": [
+    "stall_wok"
+   ],
+   "max": 3,
+   "cost": 3380,
+   "growth": 4.0,
+   "effects": {
+    "veg_std": {
+     "add": 0.15
+    }
+   },
+   "ring": 1
+  },
+  {
+   "id": "conc",
+   "name": "并发请求",
+   "desc": "梁阿姨多长一条触手：多一把勺子在抛菜，菜更多。",
+   "pos": [
+    278,
+    -205
+   ],
+   "parents": [
+    "start"
+   ],
+   "max": 5,
+   "cost": 60,
+   "growth": 4.0,
+   "effects": {
+    "tentacles": {
+     "add": 1
+    }
+   }
+  },
+  {
+   "id": "lunch",
+   "name": "中午吃什么",
+   "desc": "每一口有几率暴击：这口 ×2，她会先托腮想一下再狠狠咬下去。每级暴击几率 +3%、倍数 +0.1。",
+   "pos": [
+    102,
+    -322
+   ],
+   "parents": [
+    "start"
+   ],
+   "max": 5,
+   "cost": 60,
+   "growth": 4.0,
+   "effects": {
+    "crit_chance": {
+     "add": 0.03
+    },
+    "crit_mult": {
+     "add": 0.1
+    }
+   }
+  },
+  {
+   "id": "api",
+   "name": "API 价格打骨折",
+   "desc": "梁阿姨出菜更快，每级快 12%。",
+   "pos": [
+    593,
+    -377
+   ],
+   "parents": [
+    "conc"
+   ],
+   "max": 5,
+   "cost": 81,
+   "growth": 4.0,
+   "effects": {
+    "throw_rate": {
+     "mul": 1.12
+    }
+   }
+  },
+  {
+   "id": "batch",
+   "name": "Batch Size ×2",
+   "desc": "每一勺有几率多抛一样菜，每级几率 +25%。",
+   "pos": [
+    874,
+    -590
+   ],
+   "parents": [
+    "api"
+   ],
+   "max": 3,
+   "cost": 4250,
+   "growth": 4.0,
+   "effects": {
+    "batch": {
+     "add": 0.25
+    }
+   },
+   "ring": 1
+  },
+  {
+   "id": "peak",
+   "name": "推理高峰",
+   "desc": "饭点里隔一会儿来一阵「高峰」：出菜 ×2.5，稀有菜更常见。每级高峰多 3 秒。",
+   "pos": [
+    190,
+    -475
+   ],
+   "parents": [
+    "conc"
+   ],
+   "max": 3,
+   "cost": 3380,
+   "growth": 4.0,
+   "effects": {
+    "peaks": {
+     "add": 1
+    },
+    "peak_time": {
+     "add": 3
+    }
+   },
+   "ring": 1
+  },
+  {
+   "id": "temp",
+   "name": "Temperature 1.0",
+   "desc": "菜掉进饭盒时，有几率变成同窗口更高级的菜（比如青菜 → 土豆丝），最高级的就变成优质菜。变过的菜带小火苗，价值再 ×1.5。你正在凑的套餐原料不会被变走。每级几率 +8%。",
+   "pos": [
+    511,
+    -223
+   ],
+   "parents": [
+    "conc"
+   ],
+   "max": 5,
+   "cost": 200,
+   "growth": 4.0,
+   "effects": {
+    "temp": {
+     "add": 0.08
+    }
+   },
+   "key": true
+  },
+  {
+   "id": "hot",
+   "name": "高温采样",
+   "desc": "带小火苗的菜（被变过的、幻觉出来的、暴击的那口）每级再值钱 +0.25 倍。",
+   "pos": [
+    769,
+    -267
+   ],
+   "parents": [
+    "temp"
+   ],
+   "max": 4,
+   "cost": 4250,
+   "growth": 4.0,
+   "effects": {
+    "hot": {
+     "add": 0.25
+    }
+   },
+   "ring": 1
+  },
+  {
+   "id": "halluc",
+   "name": "幻觉",
+   "desc": "菜掉进饭盒时，有几率凭空多出一口同窗口的菜，不占格子（饭盒角上显示 +1）。每级几率 +8%。",
+   "pos": [
+    689,
+    -113
+   ],
+   "parents": [
+    "temp"
+   ],
+   "max": 3,
+   "cost": 4250,
+   "growth": 4.0,
+   "effects": {
+    "halluc": {
+     "add": 0.08
+    }
+   },
+   "ring": 1
+  },
+  {
+   "id": "regen",
+   "name": "重新生成",
+   "desc": "送上桌的饭盒有几率整盒「重抽」：盒里每样散菜都换成更高级的菜。每级几率 +10%。",
+   "pos": [
+    828,
+    -428
+   ],
+   "parents": [
+    "hot"
+   ],
+   "max": 2,
+   "cost": 3075000,
+   "growth": 4.0,
+   "effects": {
+    "regen": {
+     "add": 0.1
+    }
+   },
+   "ring": 4
+  },
+  {
+   "id": "emerge",
+   "name": "涌现能力",
+   "desc": "一盒里凑够 3 样带小火苗的菜时，有 25% 几率合成「涌现乱炖」：神级套餐，非常值钱。",
+   "pos": [
+    933,
+    166
+   ],
+   "parents": [
+    "halluc",
+    "hodge"
+   ],
+   "max": 1,
+   "cost": 4612500,
+   "growth": 1.0,
+   "effects": {
+    "emerge": {
+     "add": 1
+    }
+   },
+   "ring": 4
+  },
+  {
+   "id": "overfit",
+   "name": "过拟合：看什么都像青菜",
+   "desc": "（要先「顿悟」）掉进饭盒的散菜有 15% 几率变成青菜。开窍后的她最爱青菜。",
+   "pos": [
+    921,
+    0
+   ],
+   "parents": [
+    "grok",
+    "temp"
+   ],
+   "max": 1,
+   "cost": 76870,
+   "growth": 1.0,
+   "effects": {
+    "overfit": {
+     "add": 1
+    }
+   },
+   "ring": 2
+  },
+  {
+   "id": "vram",
+   "name": "显存扩容",
+   "desc": "饭盒变宽一列（2×2 → 2×3 → 2×4），接菜范围也变宽；每级还多给你一个饭盒。",
+   "pos": [
+    226,
+    -44
+   ],
+   "parents": [
+    "start"
+   ],
+   "max": 2,
+   "cost": 60,
+   "growth": 6.0,
+   "effects": {
+    "box_n": {
+     "add": 1
+    },
+    "basins": {
+     "add": 1
+    }
+   }
+  },
+  {
+   "id": "ocr",
+   "name": "光学压缩",
+   "desc": "每一盒饭的收入 +20%（每级）。",
+   "pos": [
+    50,
+    -161
+   ],
+   "parents": [
+    "start"
+   ],
+   "max": 3,
+   "cost": 60,
+   "growth": 4.0,
+   "effects": {
+    "box_bonus": {
+     "add": 0.2
+    }
+   }
+  },
+  {
+   "id": "prompt",
+   "name": "Prompt 模板",
+   "desc": "「小炒」（2 样菜合成的套餐）更值钱，每级 +0.2 倍。",
+   "pos": [
+    241,
+    121
+   ],
+   "parents": [
+    "stall_wok"
+   ],
+   "max": 5,
+   "cost": 60,
+   "growth": 4.0,
+   "effects": {
+    "tier1": {
+     "add": 1
+    }
+   }
+  },
+  {
+   "id": "mat",
+   "name": "饭盒材质",
+   "desc": "换更好的饭盒：铁 → 铜 → 银 → 金，整顿收入 ×1.5 / ×2 / ×3。",
+   "pos": [
+    474,
+    105
+   ],
+   "parents": [
+    "vram"
+   ],
+   "max": 3,
+   "cost": 81,
+   "growth": 30.0,
+   "effects": {
+    "material": {
+     "add": 1
+    }
+   }
+  },
+  {
+   "id": "fill",
+   "name": "上下文填满",
+   "desc": "送出的饭盒一格都没空着，这盒收入 +25%。",
+   "pos": [
+    461,
+    -60
+   ],
+   "parents": [
+    "ocr"
+   ],
+   "max": 1,
+   "cost": 5060,
+   "growth": 1.0,
+   "effects": {
+    "fill_bonus": {
+     "add": 0.25
+    }
+   },
+   "ring": 1
+  },
+  {
+   "id": "fewshot",
+   "name": "Few-shot 示例",
+   "desc": "「二级套餐」（3 样菜合成）更值钱，每级 +0.3 倍。乱炖也算二级套餐。",
+   "pos": [
+    253,
+    286
+   ],
+   "parents": [
+    "prompt"
+   ],
+   "max": 5,
+   "cost": 81,
+   "growth": 4.0,
+   "effects": {
+    "tier2": {
+     "add": 1
+    }
+   }
+  },
+  {
+   "id": "inject",
+   "name": "提示词注入",
+   "desc": "合成套餐时，盒里的一棵青菜会被偷偷藏进套餐：不占格子，她吃不出来，还算吃了一份素。",
+   "pos": [
+    180,
+    444
+   ],
+   "parents": [
+    "prompt"
+   ],
+   "max": 1,
+   "cost": 5060,
+   "growth": 1.0,
+   "effects": {
+    "inject": {
+     "add": 1
+    }
+   },
+   "ring": 1
+  },
+  {
+   "id": "compress",
+   "name": "上下文压缩",
+   "desc": "合成出来的套餐少占 1 格（最少 1 格），一盒能装更多套餐。",
+   "pos": [
+    486,
+    269
+   ],
+   "parents": [
+    "mat"
+   ],
+   "max": 1,
+   "cost": 6380,
+   "growth": 1.0,
+   "effects": {
+    "compress": {
+     "add": 1
+    }
+   },
+   "ring": 1
+  },
+  {
+   "id": "agentwf",
+   "name": "Agent 工作流",
+   "desc": "「三级大餐」（4–5 样菜合成）更值钱，每级 +0.4 倍。",
+   "pos": [
+    414,
+    428
+   ],
+   "parents": [
+    "fewshot"
+   ],
+   "max": 5,
+   "cost": 4250,
+   "growth": 4.0,
+   "effects": {
+    "tier3": {
+     "add": 1
+    }
+   },
+   "ring": 1
+  },
+  {
+   "id": "fuse3",
+   "name": "模型融合",
+   "desc": "饭盒里有 3 份一模一样的菜时，会合成 1 份更高品级的（普通 → 优质 → 金牌），只占 1 格。",
+   "pos": [
+    698,
+    52
+   ],
+   "parents": [
+    "sft",
+    "fill"
+   ],
+   "max": 1,
+   "cost": 63750,
+   "growth": 1.0,
+   "effects": {
+    "fuse3": {
+     "add": 1
+    }
+   },
+   "ring": 2
+  },
+  {
+   "id": "hodge",
+   "name": "MoE 大杂烩",
+   "desc": "饭盒装满了又凑不出套餐时，3 样来自不同窗口的散菜会自动压成一份「乱炖」（二级套餐），腾出格子。",
+   "pos": [
+    247,
+    597
+   ],
+   "parents": [
+    "temp",
+    "fewshot"
+   ],
+   "max": 1,
+   "cost": 63750,
+   "growth": 1.0,
+   "effects": {
+    "hodge": {
+     "add": 1
+    }
+   },
+   "ring": 2
+  },
+  {
+   "id": "cot",
+   "name": "思维链",
+   "desc": "套餐还能当原料，合成更大的套餐。一盒里每这样连着合成一次，这盒收入 +30%（最多 3 次）。",
+   "pos": [
+    662,
+    381
+   ],
+   "parents": [
+    "compress"
+   ],
+   "max": 1,
+   "cost": 76870,
+   "growth": 1.0,
+   "effects": {
+    "cot": {
+     "add": 0.3
+    }
+   },
+   "ring": 2
+  },
+  {
+   "id": "rag",
+   "name": "RAG 检索增强",
+   "desc": "套餐里每用到一样优质或金牌原料，这份套餐每级再值钱 +2（还会乘套餐倍率）。",
+   "pos": [
+    709,
+    219
+   ],
+   "parents": [
+    "dpo",
+    "agentwf"
+   ],
+   "max": 3,
+   "cost": 51250,
+   "growth": 4.0,
+   "effects": {
+    "rag": {
+     "add": 2
+    }
+   },
+   "ring": 2
+  },
+  {
+   "id": "agirec",
+   "name": "AGI 菜谱",
+   "desc": "「神级套餐」（6 样以上，或隐藏配方）更值钱，每级 +0.6 倍。",
+   "pos": [
+    711,
+    543
+   ],
+   "parents": [
+    "agentwf"
+   ],
+   "max": 5,
+   "cost": 512500,
+   "growth": 4.0,
+   "effects": {
+    "tier4": {
+     "add": 1
+    }
+   },
+   "ring": 3
+  },
+  {
+   "id": "spec",
+   "name": "投机解码",
+   "desc": "每次合成套餐有 20% 几率「猜下一样」：如果盒里某个套餐只差 1 样，直接帮你补上；不然就送她一口零食。",
+   "pos": [
+    888,
+    328
+   ],
+   "parents": [
+    "halluc",
+    "cot"
+   ],
+   "max": 1,
+   "cost": 900000,
+   "growth": 1.0,
+   "effects": {
+    "spec": {
+     "add": 0.2
+    }
+   },
+   "ring": 3
+  },
+  {
+   "id": "eat",
+   "name": "猛炫",
+   "desc": "她吃得更快，每级 +25%。桌上的饭盒消化得越快，你越不用等空饭盒。",
+   "pos": [
+    14,
+    163
+   ],
+   "parents": [
+    "start"
+   ],
+   "max": 12,
+   "cost": 60,
+   "growth": 2.0,
+   "effects": {
+    "eat_rate": {
+     "mul": 1.25
+    }
+   }
+  },
+  {
+   "id": "stream",
+   "name": "流式输出",
+   "desc": "越吃越香：这一顿她吃过 40 口以后，后面每一口越来越值钱（她头顶会显示现在 ×几）。有上限，发布新版本会抬高。每级涨得更快。",
+   "pos": [
+    -204,
+    367
+   ],
+   "parents": [
+    "eat"
+   ],
+   "max": 5,
+   "cost": 200,
+   "growth": 4.0,
+   "effects": {
+    "stream": {
+     "add": 0.2
+    }
+   },
+   "key": true
+  },
+  {
+   "id": "ttft",
+   "name": "降低首 Token 延迟",
+   "desc": "「越吃越香」开始得更早：第 40 口 → 第 30 口 → 第 20 口。",
+   "pos": [
+    18,
+    563
+   ],
+   "parents": [
+    "stream"
+   ],
+   "max": 2,
+   "cost": 100,
+   "growth": 4.0,
+   "effects": {
+    "ttft": {
+     "add": 1
+    }
+   }
+  },
+  {
+   "id": "mtp",
+   "name": "MTP 多 Token 预测",
+   "desc": "她每吃一口，额外 +1 token（每级）。吃得越多越划算。",
+   "pos": [
+    -214,
+    531
+   ],
+   "parents": [
+    "stream"
+   ],
+   "max": 4,
+   "cost": 100,
+   "growth": 4.0,
+   "effects": {
+    "mtp": {
+     "add": 1
+    }
+   }
+  },
+  {
+   "id": "busy",
+   "name": "服务器繁忙，请稍后再试",
+   "desc": "她手里没饭吃的时候会越等越馋：下一盒饭的收入跟着涨（头顶显示「馋 ×几」），等 10 秒左右就涨得差不多了。适合凑好一盒大的再送。每级更馋。",
+   "pos": [
+    -215,
+    202
+   ],
+   "parents": [
+    "start"
+   ],
+   "max": 5,
+   "cost": 150,
+   "growth": 4.0,
+   "effects": {
+    "crave": {
+     "add": 0.5
+    }
+   },
+   "key": true
+  },
+  {
+   "id": "queue",
+   "name": "排队中……",
+   "desc": "馋得更快：同样等几秒，「馋」的倍数涨得更多。",
+   "pos": [
+    -428,
+    273
+   ],
+   "parents": [
+    "busy"
+   ],
+   "max": 2,
+   "cost": 3380,
+   "growth": 4.0,
+   "effects": {
+    "crave_tau": {
+     "add": -1.25
+    }
+   },
+   "ring": 1
+  },
+  {
+   "id": "multiturn",
+   "name": "多轮对话",
+   "desc": "连着送出「至少有 2 份二级以上套餐」的饭盒，就能叠「连击」：每连一盒，之后的饭盒更值钱。手里的饭盒达标时会亮「连击✓」，送一盒不达标的就断。",
+   "pos": [
+    -415,
+    438
+   ],
+   "parents": [
+    "busy",
+    "fewshot"
+   ],
+   "max": 4,
+   "cost": 10620,
+   "growth": 4.0,
+   "effects": {
+    "combo": {
+     "add": 0.05
+    }
+   },
+   "ring": 1,
+   "key": true
+  },
+  {
+   "id": "memory",
+   "name": "上下文记忆",
+   "desc": "连击断了不再清零：1 级只掉一半；2 级每顿第一次断掉不算。",
+   "pos": [
+    -254,
+    695
+   ],
+   "parents": [
+    "multiturn"
+   ],
+   "max": 2,
+   "cost": 51250,
+   "growth": 4.0,
+   "effects": {
+    "memory": {
+     "add": 1
+    }
+   },
+   "ring": 2
+  },
+  {
+   "id": "warm",
+   "name": "KV Cache 保温箱",
+   "desc": "桌子左边多一个保温箱：端着装好的饭盒碰一下就放进去。关门后她最后吃这盒，收入 ×2，而且按馋到最高算。放进更好的一盒，旧的会回到桌上。好吃的留到最后吃。",
+   "pos": [
+    -450,
+    603
+   ],
+   "parents": [
+    "multiturn"
+   ],
+   "max": 1,
+   "cost": 128120,
+   "growth": 1.0,
+   "effects": {
+    "warm": {
+     "add": 1
+    }
+   },
+   "ring": 2,
+   "key": true
+  },
+  {
+   "id": "final",
+   "name": "Final Answer",
+   "desc": "保温箱那一盒更值钱：×2 → ×3 → ×4 → ×5。",
+   "pos": [
+    -511,
+    790
+   ],
+   "parents": [
+    "warm"
+   ],
+   "max": 3,
+   "cost": 60000,
+   "growth": 4.0,
+   "effects": {
+    "final": {
+     "add": 1
+    }
+   },
+   "ring": 2
+  },
+  {
+   "id": "bon",
+   "name": "Best-of-N",
+   "desc": "保温箱会自动换成这一顿最值钱的那一盒，不用你自己放。",
+   "pos": [
+    -296,
+    858
+   ],
+   "parents": [
+    "warm"
+   ],
+   "max": 1,
+   "cost": 900000,
+   "growth": 1.0,
+   "effects": {
+    "bon": {
+     "add": 1
+    }
+   },
+   "ring": 3
+  },
+  {
+   "id": "rlhf",
+   "name": "RLHF 人类偏好对齐",
+   "desc": "她吃得越均衡（主食 : 荤 : 素 接近 4 : 3 : 3，看右上角的条），关门结算的加成越高。每级把最高加成提高 0.25 倍。",
+   "pos": [
+    25,
+    326
+   ],
+   "parents": [
+    "eat"
+   ],
+   "max": 4,
+   "cost": 81,
+   "growth": 4.0,
+   "effects": {
+    "balance_max": {
+     "add": 0.25
+    }
+   }
+  },
+  {
+   "id": "constit",
+   "name": "宪法 AI·膳食宝塔",
+   "desc": "均衡的判定放宽：差一点也算吃得很均衡。",
+   "pos": [
+    483,
+    586
+   ],
+   "parents": [
+    "rlhf"
+   ],
+   "max": 1,
+   "cost": 637500,
+   "growth": 1.0,
+   "effects": {
+    "constit": {
+     "add": 1
+    }
+   },
+   "ring": 3
+  },
+  {
+   "id": "grok",
+   "name": "顿悟（Grokking）",
+   "desc": "她不再把青菜吐掉，而是皱着眉硬咽下去（这几口不赚钱）。这一顿咽够 30 口，她会突然开窍：「原来青菜这么好吃！」之后每口青菜都值 6 token，嚼得飞快。",
+   "pos": [
+    222,
+    761
+   ],
+   "parents": [
+    "stall_wok",
+    "rlhf"
+   ],
+   "max": 1,
+   "cost": 12810,
+   "growth": 1.0,
+   "effects": {
+    "grok": {
+     "add": 1
+    }
+   },
+   "ring": 1,
+   "key": true
+  },
+  {
+   "id": "warmup",
+   "name": "学习率预热",
+   "desc": "开窍得更快：要硬咽的青菜从 30 口降到 24 → 18 → 12 口。",
+   "pos": [
+    355,
+    899
+   ],
+   "parents": [
+    "grok"
+   ],
+   "max": 3,
+   "cost": 6000,
+   "growth": 4.0,
+   "effects": {
+    "grok_need": {
+     "add": -6
+    }
+   },
+   "ring": 1
+  },
+  {
+   "id": "aftertaste",
+   "name": "回甘",
+   "desc": "开窍以后，每口青菜再值钱 +2（每级）。",
+   "pos": [
+    120,
+    910
+   ],
+   "parents": [
+    "grok"
+   ],
+   "max": 4,
+   "cost": 60000,
+   "growth": 4.0,
+   "effects": {
+    "aftertaste": {
+     "add": 2
+    }
+   },
+   "ring": 2
+  },
+  {
+   "id": "drift",
+   "name": "向量漂移",
+   "desc": "开窍以后，她吃的青菜一半算素、一半算荤：青菜吃得再多也不会不均衡。",
+   "pos": [
+    155,
+    1074
+   ],
+   "parents": [
+    "aftertaste"
+   ],
+   "max": 1,
+   "cost": 1031250,
+   "growth": 1.0,
+   "effects": {
+    "drift": {
+     "add": 1
+    }
+   },
+   "ring": 3
+  },
+  {
+   "id": "skills",
+   "name": "Skill：自动推送 / 自动回收",
+   "desc": "两个省事的自动技能：你手里空了，她会给你丢一个空饭盒；你的饭盒装满了，会自己飞回桌上。",
+   "pos": [
+    -229,
+    38
+   ],
+   "parents": [
+    "start"
+   ],
+   "max": 1,
+   "cost": 90,
+   "growth": 1.0,
+   "effects": {
+    "auto_push": {
+     "add": 1
+    },
+    "auto_return": {
+     "add": 1
+    }
+   }
+  },
+  {
+   "id": "hire",
+   "name": "本地小模型：招募小助手",
+   "desc": "招一个小助手：她自带饭盒在地上跑来跑去接菜，接得差不多就送到桌上。每级多招一个（问问、谱谱、小G、克劳、双子、格格，各有一个小特长）。",
+   "pos": [
+    -443,
+    107
+   ],
+   "parents": [
+    "skills"
+   ],
+   "max": 6,
+   "cost": 81,
+   "growth": 4.0,
+   "effects": {
+    "helper": {
+     "add": 1
+    }
+   }
+  },
+  {
+   "id": "orch",
+   "name": "多 Agent 编排",
+   "desc": "小助手跑得更快（每级 +30%）。",
+   "pos": [
+    -663,
+    275
+   ],
+   "parents": [
+    "hire"
+   ],
+   "max": 2,
+   "cost": 4250,
+   "growth": 4.0,
+   "effects": {
+    "helper_speed": {
+     "add": 0.3
+    }
+   },
+   "ring": 1
+  },
+  {
+   "id": "fc",
+   "name": "Function Calling：点单",
+   "desc": "小助手会优先去接「现在能做的最值钱套餐」要用的原料。",
+   "pos": [
+    -679,
+    110
+   ],
+   "parents": [
+    "hire"
+   ],
+   "max": 1,
+   "cost": 6380,
+   "growth": 1.0,
+   "effects": {
+    "fc": {
+     "add": 1
+    }
+   },
+   "ring": 1
+  },
+  {
+   "id": "nutri",
+   "name": "营养师 Agent",
+   "desc": "小助手会优先接这一顿吃得最少的那一类（主食、荤菜或素菜），帮她吃均衡。",
+   "pos": [
+    -652,
+    440
+   ],
+   "parents": [
+    "orch"
+   ],
+   "max": 1,
+   "cost": 76870,
+   "growth": 1.0,
+   "effects": {
+    "nutri": {
+     "add": 1
+    }
+   },
+   "ring": 2
+  },
+  {
+   "id": "clip",
+   "name": "梯度裁剪",
+   "desc": "关门结算时，这一顿最差的那 20% 饭盒按平均水平算：收入更稳。",
+   "pos": [
+    -699,
+    603
+   ],
+   "parents": [
+    "nutri"
+   ],
+   "max": 1,
+   "cost": 90000,
+   "growth": 1.0,
+   "effects": {
+    "clip": {
+     "add": 1
+    }
+   },
+   "ring": 2
+  },
+  {
+   "id": "async",
+   "name": "异步调用",
+   "desc": "小助手送来的饭盒不会打断她的「馋」：吃完它们，她照样接着馋。",
+   "pos": [
+    -879,
+    206
+   ],
+   "parents": [
+    "hire",
+    "busy"
+   ],
+   "max": 1,
+   "cost": 768750,
+   "growth": 1.0,
+   "effects": {
+    "async": {
+     "add": 1
+    }
+   },
+   "ring": 3
+  },
+  {
+   "id": "sleep",
+   "name": "我去睡了",
+   "desc": "关门时桌上没吃完的饭盒，她会在梦里吃掉，算一半的收入。",
+   "pos": [
+    -868,
+    373
+   ],
+   "parents": [
+    "orch"
+   ],
+   "max": 1,
+   "cost": 768750,
+   "growth": 1.0,
+   "effects": {
+    "sleep": {
+     "add": 1
+    }
+   },
+   "ring": 3
+  },
+  {
+   "id": "think",
+   "name": "深度思考",
+   "desc": "R1 送你的能力：按住空格或右键，时间变慢，还能看到每道菜会落在哪儿。点这张票，思考时间多 1 秒。",
+   "pos": [
+    -416,
+    -64
+   ],
+   "parents": [
+    "ticket_r1"
+   ],
+   "max": 1,
+   "cost": 0,
+   "growth": 1.0,
+   "effects": {
+    "think_time": {
+     "add": 1
+    }
+   },
+   "ring": 1
+  },
+  {
+   "id": "diverge",
+   "name": "发散思维",
+   "desc": "思考（按住空格）的时候，饭盒会把附近的菜吸过来，每级吸得更远。",
+   "pos": [
+    -653,
+    -53
+   ],
+   "parents": [
+    "think"
+   ],
+   "max": 2,
+   "cost": 4250,
+   "growth": 4.0,
+   "effects": {
+    "diverge": {
+     "add": 120
+    }
+   },
+   "ring": 1
+  },
+  {
+   "id": "converge",
+   "name": "收敛思维",
+   "desc": "思考的时候，用不上的菜（比如她不吃的青菜）会直接穿过饭盒。和「发散思维」都点，就是只吸你需要的菜。",
+   "pos": [
+    -602,
+    -215
+   ],
+   "parents": [
+    "think"
+   ],
+   "max": 1,
+   "cost": 6380,
+   "growth": 1.0,
+   "effects": {
+    "converge": {
+     "add": 1
+    }
+   },
+   "ring": 1
+  },
+  {
+   "id": "critic",
+   "name": "美食评鉴（刷榜）",
+   "desc": "这一顿吃到的套餐种类越多越好：从第 5 种起，每多一种不同的套餐，整顿收入 +4%。",
+   "pos": [
+    -728,
+    -355
+   ],
+   "parents": [
+    "stall_dim"
+   ],
+   "max": 1,
+   "cost": 128120,
+   "growth": 1.0,
+   "effects": {
+    "critic": {
+     "add": 0.04
+    }
+   },
+   "ring": 2,
+   "key": true
+  },
+  {
+   "id": "bench",
+   "name": "Benchmark 全家桶",
+   "desc": "「美食评鉴」每多一种套餐的加成，每级再 +2%。",
+   "pos": [
+    -958,
+    -391
+   ],
+   "parents": [
+    "critic"
+   ],
+   "max": 2,
+   "cost": 60000,
+   "growth": 4.0,
+   "effects": {
+    "critic": {
+     "add": 0.02
+    }
+   },
+   "ring": 2
+  },
+  {
+   "id": "ticket_r1",
+   "kind": "ticket",
+   "opens": "spring",
+   "name": "申请发布 R1",
+   "desc": "交门票，开始「发布 R1」的评测：这一顿赚到 2,000 token 就通过，解锁新的技能和「深度思考」。没过只是门票没了，随时再来。",
+   "pos": [
+    -180,
+    -125
+   ],
+   "parents": [
+    "start"
+   ],
+   "max": 1,
+   "cost": 300,
+   "growth": 1,
+   "effects": {}
+  },
+  {
+   "id": "ticket_v31",
+   "kind": "ticket",
+   "opens": "hybrid",
+   "name": "申请发布 V3.1",
+   "desc": "评测：一顿赚到 2 万 token 就发布 V3.1，解锁新技能、自动标出好菜的落点。",
+   "pos": [
+    -492,
+    -364
+   ],
+   "parents": [
+    "ticket_r1"
+   ],
+   "max": 1,
+   "cost": 6000,
+   "growth": 1,
+   "effects": {},
+   "ring": 1
+  },
+  {
+   "id": "ticket_v32",
+   "kind": "ticket",
+   "opens": "ji",
+   "name": "申请发布 V3.2",
+   "desc": "评测：一顿赚到 6 万 token 就发布 V3.2，解锁新技能和更聪明的吸附。V3.1-Terminus 终于不再到处冒「极」字了。",
+   "pos": [
+    -624,
+    -502
+   ],
+   "parents": [
+    "ticket_v31"
+   ],
+   "max": 1,
+   "cost": 40000,
+   "growth": 1,
+   "effects": {},
+   "ring": 2
+  },
+  {
+   "id": "ticket_v4",
+   "kind": "ticket",
+   "opens": "v4",
+   "name": "申请发布 V4",
+   "desc": "评测：一顿赚到 40 万 token 就发布 V4，解锁最后一批技能。",
+   "pos": [
+    -584,
+    -665
+   ],
+   "parents": [
+    "ticket_v32"
+   ],
+   "max": 1,
+   "cost": 250000,
+   "growth": 1,
+   "effects": {},
+   "ring": 3
+  },
+  {
+   "id": "ticket_agi",
+   "kind": "ticket",
+   "opens": "agi",
+   "name": "实现 AGI",
+   "desc": "终极评测：一顿赚到 200 万 token，大肥鱼就实现了 AGI。但是也要先吃饱。",
+   "pos": [
+    -817,
+    -688
+   ],
+   "parents": [
+    "ticket_v4"
+   ],
+   "max": 1,
+   "cost": 1200000,
+   "growth": 1,
+   "effects": {},
+   "ring": 4
+  }
+ ]
+}

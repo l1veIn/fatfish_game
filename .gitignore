@@ -1,0 +1,18 @@
+# secrets: API keys live here, never commit
+.env
+
+# tools and outputs (Godot is downloaded into tools/; builds are made by export.bat)
+build/
+tools/
+__pycache__/
+*.tmp
+*.tmp.wav
+
+# third-party material, kept local only:
+#   art_src/third_party/          clones of public repos (versions pinned in CREDITS.md, re-clone them)
+#   art_src/third_party_frames/   frames cut from them by pipeline/preview_third_party.py
+#   refs/                         other people's art used as references (never fed to generators
+#                                 unless licensed, never shipped)
+art_src/third_party/
+art_src/third_party_frames/
+refs/
