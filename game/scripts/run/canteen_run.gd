@@ -1232,7 +1232,6 @@ func _try_deliver() -> void:
 		Audio.sfx("deliver", -8.0)
 		return
 	if _busy_t > 0.0:
-		_say("服务器繁忙，请稍后重试")
 		Audio.sfx("server_busy", -6.0)
 		return
 	if legacy != "":
@@ -1792,6 +1791,7 @@ func _crew_floor(x: float, it: int) -> bool:
 ## floor under where food will land, and brings the box back to the queue when it is full.
 func _update_crew(delta: float) -> void:
 	var floor_y := FLOOR_Y + 40
+	var plan := _plan_crew(floor_y - HELPER_BOX_Y)
 	for c in _crew:
 		var speed := HELPER_SPEED * helper_speed * (1.6 if CREW[c.id].trick == "fast" else 1.0)
 		var goal: float = c.x
@@ -1809,7 +1809,7 @@ func _update_crew(delta: float) -> void:
 					c["still"] = 0.0
 					c["n"] = 0
 			"catch":
-				goal = _crew_target(c, floor_y - HELPER_BOX_Y, speed)
+				goal = float(plan.get(c.id, c.x))
 				if c.box.items.size() != int(c.n):
 					c.n = c.box.items.size()
 					c.still = 0.0
@@ -1859,42 +1859,122 @@ func _update_crew(delta: float) -> void:
 			c.box.pos = Vector2(c.x, floor_y - lift - HELPER_BOX_Y)
 
 
-## Where a helper should stand: under the richest spot where food will cross its box's height,
-## leaving the spot right under the player's box to the player.
-func _crew_target(c: Dictionary, y: float, speed: float) -> float:
-	var best: float = c.x
-	var best_w := 0.0
+## Where each catching helper should stand, planned for all of them at once (id -> x):
+## the food that will cross their box height is shared out (the best catch per helper first, one
+## helper per piece), they keep a box apart from each other, and nobody stands under the
+## player's box: what falls there is the player's.
+func _plan_crew(y: float) -> Dictionary:
+	var helpers: Array = _crew.filter(func(c): return c.state == "catch" and c.box != null)
+	var plan := {}
+	if helpers.is_empty():
+		return plan
+	var gap := _width() * 0.6 + 12.0                      # one helper box apart
+	var mine := _width() * 0.5 + gap * 0.5                # the player's column, kept clear
+	var hx: float = _hand.pos.x if _hand != null else -9999.0
+	# the pieces they could catch: (landing x, time, value weight)
+	var food: Array = []
 	for i in _fp.size():
 		var p := _fp[i]
-		var v := _fv[i]
 		var k := K(int(_fk[i]))
 		if p.y > y or (k == I.VEG and not _grokked) or k == I.JI:
 			continue
 		var t := _time_to(i, y)
-		var x := p.x + v.x * t
-		if t > 1.6 or x < 60.0 or x > 1400.0:
+		var x := p.x + _fv[i].x * t
+		if t > 1.6 or x < 60.0 or x > 1400.0 or absf(x - hx) < mine:
 			continue
-		if _hand != null and absf(x - _hand.pos.x) < _width() * 0.5 and _hand.pos.y < y:
-			continue   # the player will get that one
-		var reach := absf(x - c.x) / speed
-		if reach > t + 0.1:
-			continue
-		var w2: float = (VALUE[k] + 0.5) / (1.0 + reach)
+		var w: float = VALUE[k] + 0.5
 		if nutri and CATS[k].has(_lacking()):
-			w2 *= 2.5   # 营养师: what this meal is short of
+			w *= 2.5   # 营养师: what this meal is short of
 		if _fc_kind >= 0 and _ingredients(_fc_kind).has(k):
-			w2 *= 3.0   # 点单: the ordered 套餐's ingredients
-		if w2 > best_w:
-			best_w = w2
-			best = x
-	if best_w <= 0.0 and not _arms.is_empty():
-		# nothing to catch right now: wait under the window that throws next (helpers spread out)
-		var next = _arms[0]
-		for a in _arms:
-			if a.t < next.t:
-				next = a
-		best = float(next.x) + (float(_crew.find(c)) - (_crew.size() - 1) * 0.5) * 90.0
-	return clampf(best, 60.0, 1400.0)
+			w *= 3.0   # 点单: the ordered 套餐's ingredients
+		food.append([x, t, w])
+	# greedy: the best (helper, piece) pair first; a helper then also covers what lands in her box,
+	# and the next helper has to stand at least a box away from the ones already placed
+	var taken: Array = []
+	var free: Array = helpers.duplicate()
+	while not free.is_empty() and not food.is_empty():
+		var best := [-1.0, null, null]
+		for c in free:
+			var speed := HELPER_SPEED * helper_speed * (1.6 if CREW[c.id].trick == "fast" else 1.0)
+			for f in food:
+				if (f[1] + 0.1) * speed < absf(float(f[0]) - c.x):
+					continue   # can't get there in time
+				if taken.any(func(tx): return absf(tx - float(f[0])) < gap):
+					continue
+				var score: float = f[2] / (1.0 + absf(float(f[0]) - c.x) / speed)
+				if score > best[0]:
+					best = [score, c, f]
+		if best[1] == null:
+			break
+		var x: float = best[2][0]
+		plan[best[1].id] = x
+		taken.append(x)
+		free.erase(best[1])
+		food = food.filter(func(f): return absf(float(f[0]) - x) >= gap * 0.5)
+	# the rest wait under the windows that throw next, spread out and out of the player's way
+	if not free.is_empty() and not _arms.is_empty():
+		var arms: Array = _arms.duplicate()
+		arms.sort_custom(func(a, b): return a.t < b.t)
+		var spots: Array = []
+		for a in arms:
+			for off in [0.0, gap, -gap]:
+				spots.append(float(a.x) + off)
+		for c in free:
+			var pick: float = c.x
+			var best_d := INF
+			for sx in spots:
+				var x := clampf(sx, 60.0, 1400.0)
+				if absf(x - hx) < mine or taken.any(func(tx): return absf(tx - x) < gap):
+					continue
+				var d := absf(x - c.x) + spots.find(sx) * 40.0   # prefer the next window, then the nearest
+				if d < best_d:
+					best_d = d
+					pick = x
+			plan[c.id] = pick
+			taken.append(pick)
+	# keep them apart and out from under the player's box: the spots left of the box pack into
+	# the room on its left, the rest on its right, a box apart; then the spots go out in the order
+	# the helpers stand in, so nobody runs through anybody
+	var goals: Array = plan.values()
+	var lo := 60.0
+	var hi := 1400.0
+	var left: Array = goals.filter(func(gx): return gx < hx)
+	var right: Array = goals.filter(func(gx): return gx >= hx)
+	if _hand == null:
+		left = []
+		right = goals
+	elif hx - mine - lo < gap * (left.size() - 1):     # no room on the left: all go right
+		right.append_array(left)
+		left = []
+	elif hi - (hx + mine) < gap * (right.size() - 1):  # ...or the other way round
+		left.append_array(right)
+		right = []
+	goals = _spread(left, lo, hx - mine, gap) + _spread(right, hx + mine if _hand != null else lo, hi, gap)
+	var order: Array = helpers.filter(func(c): return plan.has(c.id))
+	order.sort_custom(func(a, b): return a.x < b.x)
+	for i in order.size():
+		plan[order[i].id] = goals[i]
+	return plan
+
+
+## Spots `xs` moved as little as possible to lie within lo..hi and at least `gap` apart, sorted.
+static func _spread(xs: Array, lo: float, hi: float, gap: float) -> Array:
+	var g: Array = xs.duplicate()
+	g.sort()
+	for i in g.size():
+		g[i] = clampf(g[i], lo, hi)
+	for i in range(1, g.size()):
+		g[i] = maxf(g[i], g[i - 1] + gap)
+	for i in range(g.size() - 2, -1, -1):
+		g[i] = minf(g[i], g[i + 1] - gap)
+	if not g.is_empty() and g[-1] > hi:
+		var d: float = g[-1] - hi
+		for i in g.size():
+			g[i] -= d
+	if not g.is_empty() and g[0] < lo:   # too many for the room: share it out evenly
+		for i in g.size():
+			g[i] = lerpf(lo, hi, float(i) / maxf(g.size() - 1, 1))
+	return g
 
 
 
@@ -1924,7 +2004,7 @@ func _update_fish(wdt: float, delta: float) -> void:
 		if _fish.clip != mood and _fish.clip not in ["surprised", "happy", "dig_in"]:
 			_fish.play(mood, true)
 			if mood == "bang":
-				_say("饭呢？饭呢？" if crave <= 0.0 else "服务器繁忙，请稍后再试……")
+				_say("饭呢？饭呢？")
 				Audio.vo("fish_bang", 1)
 			elif mood == "sulk":
 				_say("哼！不理你了")
@@ -2807,18 +2887,20 @@ func _draw_hud(font: Font) -> void:
 	# C: her badges
 	var y := 300.0
 	var rows: Array = []
+	# [icon, name, value, id, number]: the name says which multiplier it is (the icons alone
+	# didn't), right-aligned under the tray
 	if stream > 0.0:
-		rows.append(["flame", "×%.2f" % _stream_mult(), "stream", _stream_mult()])
+		rows.append(["flame", tr("流式"), "×%.2f" % _stream_mult(), "stream", _stream_mult()])
 	if crave > 0.0:
-		rows.append(["drool", "×%.2f" % _crave_x(_crave_t if _eating == null else 0.0), "crave", _crave_x(_crave_t)])
+		rows.append(["drool", tr("馋"), "×%.2f" % _crave_x(_crave_t if _eating == null else 0.0), "crave", _crave_x(_crave_t)])
 	if combo > 0.0:
-		rows.append(["chain", "%d" % _combo_n, "combo", float(_combo_n)])
+		rows.append(["chain", tr("连击"), "%d" % _combo_n, "combo", float(_combo_n)])
 	if grok:
-		rows.append(["leaf", "✓" if _grokked else "%d/%d" % [_grok_n, grok_need], "grok", float(_grok_n)])
+		rows.append(["leaf", tr("顿悟"), "✓" if _grokked else "%d/%d" % [_grok_n, grok_need], "grok", float(_grok_n)])
 	if critic > 0.0:
-		rows.append(["crown", tr("%d 种") % _kinds_eaten.size(), "critic", float(_kinds_eaten.size())])
+		rows.append(["crown", tr("评鉴"), tr("%d 种") % _kinds_eaten.size(), "critic", float(_kinds_eaten.size())])
 	for r in rows:
-		_badge(Vector2(1815, y), r[0], r[1], r[2], r[3])
+		_badge(Vector2(0, y), r[0], r[2], r[3], r[4], r[1], 1890.0)
 		y += 64.0
 	# E: the banner
 	if not _banners.is_empty():
@@ -2850,19 +2932,28 @@ func _draw_hud(font: Font) -> void:
 			_label(font, Vector2(436, 52 + 34 * j), lines[j], HORIZONTAL_ALIGNMENT_LEFT, -1, 22, Color(0.85, 0.92, 1.0))
 
 
-## One enamel badge, centred at `c`: an icon and a value; it bounces when the value goes up.
-func _badge(c: Vector2, icon: String, text: String, id: String, value: float) -> void:
+## One enamel badge, centred at `c` (or with its right edge at `right`): an icon, the
+## multiplier's name and its value; it bounces when the value goes up.
+func _badge(c: Vector2, icon: String, text: String, id: String, value: float, label := "", right := -1.0) -> void:
 	if value > float(_badge_val.get(id, value)) + 0.001:
 		_badge_bump[id] = 1.0
 	_badge_val[id] = value
 	var k := 1.0 + 0.12 * sin(float(_badge_bump.get(id, 0.0)) * PI)
-	var w := 170.0 if icon != "" else 200.0
+	var font := ThemeDB.fallback_font
+	var lw := font.get_string_size(label, HORIZONTAL_ALIGNMENT_LEFT, -1, 22).x + 8.0 if label != "" else 0.0
+	var w := 44.0 + (44.0 if icon != "" else 0.0) + lw + _dfont.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, 28).x
+	w = maxf(w, 120.0)
+	if right > 0.0:
+		c.x = right - w * 0.5
 	var r := Rect2(c - Vector2(w, 58) * 0.5 * k, Vector2(w, 58) * k)
 	_piece("ui_badge", r)
 	var x := r.position.x + 22 * k
 	if icon != "":
 		_icon(icon, Vector2(x + 18 * k, c.y), 38 * k)
 		x += 44 * k
+	if label != "":
+		_write(font, Vector2(x, c.y + 9 * k), label, int(22 * k), INK, Color(0, 0, 0, 0))
+		x += lw * k
 	_write(_dfont, Vector2(x, c.y + 11 * k), text, int(28 * k), ENAMEL, Color(0, 0, 0, 0))
 
 

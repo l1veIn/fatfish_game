@@ -1,0 +1,381 @@
+<meta charset="utf-8">
+<title>关门结账演示</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=ZCOOL+KuaiLe&family=Noto+Sans+SC:wght@400;500;700&display=swap">
+<style>
+/* Layout: a 16:9 game stage (the checkout plays on it), the switches under it, then one note row per step */
+:root {
+  --bg: #f3ecdf;          /* kraft paper page */
+  --sheet: #fffaf0;
+  --ink: #3a2414;
+  --muted: #84705c;
+  --line: #dccbb0;
+  --red: #c8372d;         /* ticket red / stamps */
+  --enamel: #2f5d9e;
+  --gold: #e0a92e;
+  --ok: #3f8f4f; --change: #c98a1c; --cut: #b83a3a;
+  --paper: #fff4de;       /* receipt paper (in the stage, same in both themes) */
+  --paper-ink: #4a2a14;
+  --f-display: "ZCOOL KuaiLe", "Noto Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif;
+  --f-body: "Noto Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #1c1712; --sheet: #26201a; --ink: #f1e6d4; --muted: #ab977f; --line: #463a2e;
+  --red: #e0604f; --enamel: #6f9be0; --gold: #f2c14e; --ok: #5cb86c; --change: #e0a83a; --cut: #e05a5a; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #1c1712; --sheet: #26201a; --ink: #f1e6d4; --muted: #ab977f; --line: #463a2e;
+  --red: #e0604f; --enamel: #6f9be0; --gold: #f2c14e; --ok: #5cb86c; --change: #e0a83a; --cut: #e05a5a; color-scheme: dark }
+* { box-sizing: border-box }
+body { background: var(--bg); color: var(--ink); font-family: var(--f-body); font-size: 15px; line-height: 1.6;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 20px 60px }
+.wrap { max-width: 1120px; margin: 0 auto; display: flex; flex-direction: column; gap: 18px }
+h1 { font-family: var(--f-display); font-weight: 400; font-size: 38px; margin: 0; color: var(--red); text-wrap: balance }
+h2 { font-family: var(--f-display); font-weight: 400; font-size: 24px; margin: 0; text-wrap: balance }
+.lead { margin: 4px 0 0; color: var(--muted); max-width: 70ch }
+
+/* ---- stage ---- */
+.stage-box { position: relative; width: 100%; aspect-ratio: 16 / 9; border-radius: 10px; overflow: hidden; background: #2a1d14; cursor: pointer; max-width: 100% }
+.stage { position: absolute; left: 0; top: 0; width: 1280px; height: 720px; transform-origin: 0 0; font-family: var(--f-body); color: var(--paper-ink) }
+.bg { position: absolute; inset: 0; background: url(bg.jpg) center / cover; filter: brightness(.55) saturate(.9) }
+.table { position: absolute; left: 860px; top: 560px; width: 400px }
+.lie { position: absolute; left: 880px; top: 380px; width: 360px; transition: transform .3s }
+.lie.chew { animation: chew .4s ease-in-out 2 }
+@keyframes chew { 50% { transform: translateY(6px) scale(1.01, .99) } }
+.zzz { position: absolute; left: 990px; top: 340px; font-family: var(--f-display); font-size: 34px; color: #cfe3ff; opacity: 0; text-shadow: 0 2px 0 #1b2a44 }
+.zzz.on { animation: zz 1.6s ease-out infinite }
+@keyframes zz { 0% { opacity: 0; transform: translate(0, 10px) } 30% { opacity: 1 } 100% { opacity: 0; transform: translate(30px, -40px) } }
+.box-fly { position: absolute; width: 64px; height: 44px; border-radius: 6px; background: linear-gradient(#d9dde2, #9aa2ab); border: 2px solid #5b636c; box-shadow: inset 0 0 0 4px rgba(255,255,255,.35); transition: transform .45s cubic-bezier(.5, -0.3, .6, 1.2), opacity .2s }
+.box-fly.grey { filter: grayscale(1) brightness(.6) }
+.shutter { position: absolute; left: 0; right: 0; top: 0; height: 0; background: repeating-linear-gradient(#6c6f74 0 14px, #55585d 14px 18px); transition: height .5s ease-in; opacity: .9 }
+.banner { position: absolute; left: 50%; top: 40px; transform: translate(-50%, 0) scale(.6); opacity: 0; background: var(--red); color: #fff7e8; font-family: var(--f-display); font-size: 40px; padding: 6px 40px; border-radius: 8px; border: 4px double #fff2d8; transition: transform .2s, opacity .2s }
+.banner.on { opacity: 1; transform: translate(-50%, 0) scale(1) }
+
+.receipt { position: absolute; left: 300px; top: 34px; width: 470px; background: var(--paper); padding: 22px 26px 18px; border-radius: 4px;
+  box-shadow: 0 10px 30px rgba(0,0,0,.45); clip-path: inset(0 0 100% 0); transition: clip-path .5s ease-out;
+  -webkit-mask: radial-gradient(circle 7px at 50% 0, transparent 98%, #000) 0 0 / 22px 100% repeat-x; }
+.receipt.on { clip-path: inset(0 0 0 0) }
+.rhead { text-align: center; font-family: var(--f-display); font-size: 26px; color: var(--red); line-height: 1.2 }
+.rsub { text-align: center; font-size: 13px; color: #8a6a4c; border-bottom: 2px dashed #cdb48f; padding-bottom: 8px; margin-bottom: 6px }
+.lines { display: flex; flex-direction: column; gap: 2px; min-height: 40px }
+.ln { display: grid; grid-template-columns: 28px 1fr auto; align-items: center; gap: 8px; font-size: 16px; opacity: 0; transform: translateY(-6px); transition: opacity .2s, transform .2s }
+.ln.on { opacity: 1; transform: none }
+.ln img { width: 26px; height: 26px; object-fit: contain }
+.ln .v { font-family: var(--f-display); font-size: 22px; color: #9b5a10; font-variant-numeric: tabular-nums }
+.ln.grey { color: #a4937f } .ln.grey .v { color: #a4937f; text-decoration: line-through }
+.ln.sub { font-size: 13px; color: #8a6a4c; padding-left: 36px; grid-template-columns: 1fr auto } .ln.sub .v { font-size: 16px }
+.ln .mk { display: inline-block; font-family: var(--f-display); color: #fff; background: var(--red); border-radius: 4px; padding: 0 6px; margin-left: 6px; font-size: 15px; transform: rotate(-6deg) }
+.subtotal { display: flex; justify-content: space-between; align-items: baseline; border-top: 2px dashed #cdb48f; margin-top: 6px; padding-top: 6px; font-size: 16px; opacity: 0; transition: opacity .2s }
+.subtotal.on { opacity: 1 }
+.subtotal b { font-family: var(--f-display); font-weight: 400; font-size: 30px; color: var(--paper-ink); font-variant-numeric: tabular-nums }
+.slots { display: flex; justify-content: space-between; margin-top: 10px; opacity: 0; transition: opacity .2s }
+.slots.on { opacity: 1 }
+.slot { width: 76px; height: 76px; border-radius: 50%; border: 2px dashed #c9ad86; display: grid; place-items: center; text-align: center; font-size: 12px; color: #b49a78; position: relative }
+.slot .q { font-family: var(--f-display); font-size: 28px; color: #c9ad86 }
+.slot .stamp { position: absolute; inset: -4px; border-radius: 50%; border: 4px solid var(--red); color: var(--red); background: rgba(255, 244, 222, .85);
+  display: grid; place-items: center; align-content: center; gap: 0; font-family: var(--f-display); transform: scale(2.2) rotate(-18deg); opacity: 0; transition: transform .14s cubic-bezier(.3, 1.6, .5, 1), opacity .08s; line-height: 1.05 }
+.slot .stamp.on { transform: scale(1) rotate(-12deg); opacity: 1 }
+.slot .stamp small { font-family: var(--f-body); font-size: 12px; font-weight: 700 }
+.slot .stamp span { font-size: 20px }
+.fuse { margin-top: 10px; font-size: 13px; color: #8a6a4c; display: none }
+.fuse.on { display: block }
+.fbar { height: 12px; border-radius: 6px; background: #ead8bb; overflow: hidden; margin-top: 2px; position: relative }
+.fbar i { position: absolute; left: 0; top: 0; bottom: 0; width: 0; background: linear-gradient(90deg, #5f8fd6, #2f5d9e); transition: width .7s ease-in }
+.fbar i.over { background: linear-gradient(90deg, #5f8fd6, #2f5d9e 80%, #9aa 80%) }
+.total { display: flex; justify-content: space-between; align-items: center; margin-top: 10px; border-top: 3px double #cdb48f; padding-top: 6px }
+.total span { font-size: 16px }
+.total b { font-family: var(--f-display); font-weight: 400; font-size: 46px; color: var(--red); font-variant-numeric: tabular-nums; display: inline-block; transition: transform .12s }
+.total b.pop { transform: scale(1.18) }
+.big-stamps { position: absolute; left: 800px; top: 110px; display: flex; gap: 10px; flex-direction: column; align-items: flex-start }
+.bstamp { font-family: var(--f-display); color: var(--red); border: 5px solid var(--red); border-radius: 10px; padding: 0 14px; font-size: 34px; background: rgba(255, 244, 222, .9);
+  transform: scale(2.4) rotate(-14deg); opacity: 0; transition: transform .16s cubic-bezier(.3, 1.6, .5, 1), opacity .08s }
+.bstamp.on { transform: scale(1) rotate(-10deg); opacity: 1 }
+.bstamp.blue { color: var(--enamel); border-color: var(--enamel) }
+.chalk { position: absolute; left: 30px; top: 30px; width: 230px; padding: 12px 16px; background: #23392e; border: 8px solid #7a5230; border-radius: 6px; color: #eaf2e6; font-size: 15px; opacity: 0; transition: opacity .3s }
+.chalk.on { opacity: 1 }
+.chalk b { display: block; font-family: var(--f-display); font-weight: 400; font-size: 28px }
+.spot { position: absolute; left: 520px; top: 200px; width: 240px; height: 240px; display: grid; place-items: center; opacity: 0; transform: scale(.4); transition: transform .3s cubic-bezier(.3, 1.5, .5, 1), opacity .2s; pointer-events: none }
+.spot.on { opacity: 1; transform: scale(1) }
+.spot::before { content: ""; position: absolute; inset: -60px; border-radius: 50%; background: radial-gradient(circle, rgba(255, 220, 120, .75), rgba(255, 200, 80, 0) 65%) }
+.spot img { width: 210px; position: relative }
+.spot .lbl { position: absolute; bottom: -28px; left: 50%; transform: translateX(-50%); white-space: nowrap; font-family: var(--f-display); font-size: 26px; color: #fff3cf; text-shadow: 0 2px 0 #4a2a14 }
+.spot .stamp2 { position: absolute; right: -20px; top: -10px; font-family: var(--f-display); font-size: 40px; color: var(--red); border: 5px solid var(--red); border-radius: 50%; width: 92px; height: 92px; display: grid; place-items: center; background: rgba(255, 244, 222, .9);
+  transform: scale(2.4) rotate(-16deg); opacity: 0; transition: transform .14s cubic-bezier(.3, 1.6, .5, 1), opacity .08s }
+.spot .stamp2.on { transform: scale(1) rotate(-12deg); opacity: 1 }
+.warm { position: absolute; left: 820px; top: 470px; width: 90px; height: 64px; border-radius: 10px; background: linear-gradient(#e9b064, #b8742e); border: 3px solid #6b3f17; opacity: 0; transition: opacity .2s }
+.warm.on { opacity: 1 }
+.warm .lid { position: absolute; left: -6px; right: -6px; top: -14px; height: 18px; border-radius: 10px 10px 4px 4px; background: #c98a3c; border: 3px solid #6b3f17; transition: transform .35s }
+.warm.open .lid { transform: translate(30px, -40px) rotate(28deg) }
+.steam { position: absolute; left: 50%; top: -30px; width: 18px; height: 18px; border-radius: 50%; background: rgba(255,255,255,.6); filter: blur(4px); opacity: 0 }
+.warm.open .steam { animation: steam 1.2s ease-out infinite }
+@keyframes steam { 0% { opacity: .9; transform: translate(-50%, 0) scale(.6) } 100% { opacity: 0; transform: translate(-30%, -50px) scale(1.8) } }
+.skip { position: absolute; right: 16px; top: 14px; font-size: 13px; color: #f4e6cf; background: rgba(0,0,0,.4); padding: 3px 12px; border-radius: 999px }
+.hint { position: absolute; inset: 0; display: grid; place-items: center; color: #fff1d6; font-family: var(--f-display); font-size: 34px; text-shadow: 0 3px 0 #4a2a14; background: rgba(0,0,0,.25) }
+.hint[hidden] { display: none }
+
+/* ---- switches ---- */
+.panel { display: flex; flex-wrap: wrap; gap: 8px 18px; align-items: center; background: var(--sheet); border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px }
+.panel label { display: inline-flex; gap: 6px; align-items: center; font-size: 14px; cursor: pointer }
+.panel select { font: inherit; font-size: 13px; background: var(--bg); color: var(--ink); border: 1px solid var(--line); border-radius: 6px; padding: 1px 4px }
+.btn { font: inherit; font-size: 14px; padding: 5px 16px; border-radius: 6px; border: 0; background: var(--red); color: #fff; cursor: pointer }
+.btn.ghost { background: transparent; color: var(--ink); border: 1px solid var(--line) }
+.panel .sep { flex-basis: 100%; height: 0 }
+
+/* ---- notes ---- */
+section { display: flex; flex-direction: column; gap: 8px }
+.row { display: grid; grid-template-columns: 52px minmax(0, 1.3fr) minmax(0, 1fr); gap: 10px 16px; align-items: start; background: var(--sheet); border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px }
+.row[data-s="ok"] { border-left: 5px solid var(--ok) } .row[data-s="change"] { border-left: 5px solid var(--change) } .row[data-s="cut"] { border-left: 5px solid var(--cut) }
+.num { font-family: var(--f-display); font-size: 22px; color: var(--enamel); border: 2px solid var(--enamel); border-radius: 8px; text-align: center; line-height: 36px }
+.moment { font-weight: 700 }
+.like { font-size: 14px; color: var(--ink); margin-top: 2px }
+.like p { margin: 0 0 4px }
+.note { display: flex; flex-direction: column; gap: 6px; min-width: 0 }
+.status { display: flex; gap: 6px; flex-wrap: wrap }
+.status button { font: inherit; font-size: 12px; padding: 2px 10px; border-radius: 999px; border: 1px solid var(--line); background: transparent; color: var(--ink); cursor: pointer }
+.status button[aria-pressed="true"][data-s="ok"] { background: var(--ok); color: #fff; border-color: var(--ok) }
+.status button[aria-pressed="true"][data-s="change"] { background: var(--change); color: #fff; border-color: var(--change) }
+.status button[aria-pressed="true"][data-s="cut"] { background: var(--cut); color: #fff; border-color: var(--cut) }
+textarea { width: 100%; min-height: 44px; resize: vertical; font: inherit; font-size: 13px; padding: 6px 8px; border-radius: 6px; border: 1px solid var(--line); background: var(--bg); color: var(--ink) }
+.save { display: flex; gap: 8px; align-items: center; font-size: 12px; color: var(--muted) }
+.save button { font: inherit; font-size: 12px; padding: 3px 12px; border-radius: 6px; border: 0; background: var(--red); color: #fff; cursor: pointer }
+.save button:disabled { opacity: .45; cursor: default }
+.reply { font-size: 13px; color: var(--ok); border-top: 1px dashed var(--line); padding-top: 6px }
+.notice { font-size: 13px; color: var(--muted); margin: 0 }
+button:focus-visible, textarea:focus-visible, select:focus-visible, input:focus-visible { outline: 2px solid var(--red); outline-offset: 2px }
+@media (max-width: 760px) { .row { grid-template-columns: 44px minmax(0, 1fr) } .note { grid-column: 2 } }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important } }
+</style>
+
+<div class="wrap">
+  <header>
+    <h1>关门结账演示</h1>
+    <p class="lead">关门以后不再弹一张表，而是打出一张饭票小票：先把这一顿的钱一行行加上去，再把乘区一个个「啪」地盖上去，每盖一个总数当场翻一次，音调一个比一个高。点画面开始，播放中点一下加速。下面的开关模拟「点没点某个技能」，可以换着看。</p>
+  </header>
+
+  <div class="stage-box" id="stageBox" role="button" tabindex="0" aria-label="播放结算演示">
+    <div class="stage" id="stage">
+      <div class="bg"></div>
+      <img class="table" src="table.png" alt="">
+      <div class="warm" id="warm"><div class="lid"></div><div class="steam"></div></div>
+      <img class="lie" id="lie" src="lie.png" alt="躺平的大肥鱼">
+      <div class="zzz" id="zzz">Z z z</div>
+      <div class="chalk" id="chalk">评测目标<b id="chalkT">2,000</b>R1：春节前夜</div>
+      <div class="receipt" id="receipt">
+        <div class="rhead">第 14 顿 · 结账</div>
+        <div class="rsub">大肥鱼 V3 · 12:30 食堂关门</div>
+        <div class="lines" id="lines"></div>
+        <div class="subtotal" id="subtotal"><span>小计</span><b id="subV">0</b></div>
+        <div class="slots" id="slots"></div>
+        <div class="fuse" id="fuse">上下文窗口 <span id="fuseT"></span><div class="fbar"><i id="fbar"></i></div></div>
+        <div class="total"><span>合计 token</span><b id="totalV">0</b></div>
+      </div>
+      <div class="spot" id="spot"><img src="dish_full.png" alt=""><div class="lbl">最后一口：满血版</div><div class="stamp2" id="spotStamp">×5</div></div>
+      <div class="big-stamps" id="bigStamps"></div>
+      <div class="shutter" id="shutter"></div>
+      <div class="banner" id="banner">食堂关门了</div>
+      <div class="skip">点一下加速</div>
+      <div class="hint" id="hint">▶ 点这里看结算</div>
+    </div>
+  </div>
+
+  <div class="panel" role="group" aria-label="模拟点了哪些技能">
+    <label><input type="checkbox" id="o-sleep" checked> 我去睡了（梦里吃剩下的）</label>
+    <label><input type="checkbox" id="o-warm" checked> 保温箱</label>
+    <label>Final Answer <select id="o-final"><option value="2">×2</option><option value="3" selected>×3</option><option value="5">×5</option></select></label>
+    <label><input type="checkbox" id="o-eos" checked> 新：最后一口（EOS）</label>
+    <select id="o-eosx" aria-label="最后一口倍率"><option value="3">×3</option><option value="5" selected>×5</option><option value="8">×8</option></select>
+    <label><input type="checkbox" id="o-clip" checked> 梯度裁剪</label>
+    <div class="sep"></div>
+    <label><input type="checkbox" id="o-bal" checked> 均衡 ×1.23</label>
+    <label><input type="checkbox" id="o-crit" checked> 美食评鉴 ×1.12</label>
+    <label><input type="checkbox" id="o-fuse"> 吃太多，超过上下文窗口</label>
+    <label><input type="checkbox" id="o-trial"> 这是一场评测</label>
+    <label><input type="checkbox" id="o-sound" checked> 声音</label>
+    <button class="btn" id="play" type="button">重新播放</button>
+    <button class="btn ghost" id="skipBtn" type="button">直接看结果</button>
+  </div>
+
+  <p class="notice" id="notice">正在连接批注存储……</p>
+  <section>
+    <h2>逐步批注</h2>
+    <div id="notes" style="display:flex;flex-direction:column;gap:8px"></div>
+  </section>
+</div>
+
+<script>
+// ---------- the demo ----------
+const $ = id => document.getElementById(id);
+const stage = $("stage"), box = $("stageBox");
+function fit() { const k = box.clientWidth / 1280; stage.style.transform = `scale(${k})`; }
+addEventListener("resize", fit); fit();
+
+const SND = {};
+for (const n of ["token", "ticket", "version_up", "shift_closed", "catch_gold", "deny", "trial_pass", "result", "box_return", "combo", "fish_savor_v1", "fish_full_v1"]) SND[n] = n + ".mp3";
+function play(n, rate = 1, vol = 0.7) {
+  if (!$("o-sound").checked) return;
+  try { const a = new Audio(SND[n]); a.preservesPitch = false; a.mozPreservesPitch = false; a.playbackRate = rate; a.volume = vol; a.play().catch(() => {}); } catch (e) {}
+}
+const fmt = n => Math.round(n).toLocaleString("en-US");
+
+let speed = 1, run = 0, skipping = false;
+const wait = ms => new Promise(r => setTimeout(r, skipping ? 0 : ms / speed));
+box.addEventListener("click", () => { if ($("hint").hidden) speed = 4; else start(); });
+box.addEventListener("keydown", e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); box.click(); } });
+$("play").addEventListener("click", start);
+$("skipBtn").addEventListener("click", () => { if ($("hint").hidden) skipping = true; else { skipping = true; start(true); } });
+
+function line(icon, label, value, cls = "", mark = "") {
+  const d = document.createElement("div");
+  d.className = "ln " + cls;
+  d.innerHTML = (cls.includes("sub") ? "" : `<img src="${icon}" alt="">`) + `<span>${label}${mark ? `<span class="mk">${mark}</span>` : ""}</span><span class="v">${value}</span>`;
+  $("lines").append(d);
+  requestAnimationFrame(() => d.classList.add("on"));
+  return d;
+}
+async function roll(el, from, to, ms = 500, tick = true) {
+  const steps = Math.max(1, Math.round(ms / 40 / (skipping ? 99 : speed)));
+  for (let i = 1; i <= steps; i++) { el.textContent = fmt(from + (to - from) * i / steps); if (tick && i % 2 === 0) play("token", 1.6, 0.18); await wait(40); }
+  el.textContent = fmt(to);
+}
+function reset() {
+  $("lines").innerHTML = ""; $("slots").innerHTML = ""; $("bigStamps").innerHTML = "";
+  for (const id of ["receipt", "subtotal", "slots", "fuse", "spot", "spotStamp", "banner", "chalk", "warm", "zzz"]) $(id).classList.remove("on", "open");
+  $("warm").classList.remove("open"); $("shutter").style.height = "0"; $("subV").textContent = "0"; $("totalV").textContent = "0"; $("fbar").style.width = "0"; $("fbar").classList.remove("over");
+  document.querySelectorAll(".box-fly").forEach(b => b.remove());
+}
+async function start(fast = false) {
+  const me = ++run; speed = 1; skipping = fast === true;
+  $("hint").hidden = true; reset();
+  const o = id => $(id).checked, v = id => +$(id).value;
+  const alive = () => me === run;
+  // the numbers (an example shift)
+  const base = 1240, sig = 180, left = 620, warmRaw = 287, dish = 80, clipV = 90;
+  // 1 closing
+  $("shutter").style.height = "130px"; play("shift_closed"); $("banner").classList.add("on");
+  if (o("o-trial")) $("chalk").classList.add("on");
+  await wait(900); if (!alive()) return;
+  $("shutter").style.height = "0"; $("banner").classList.remove("on");
+  $("receipt").classList.add("on"); await wait(500);
+  // 2 this meal
+  let sum = 0;
+  line("icon_token.png", "这顿吃的：37 份", "+" + fmt(base)); play("token"); sum += base; await wait(380);
+  line("", "其中招牌菜", fmt(sig), "sub"); await wait(380); if (!alive()) return;
+  // 3 clearing the table: 4 boxes slide to her
+  const boxes = [];
+  for (let i = 0; i < 4; i++) {
+    const b = document.createElement("div"); b.className = "box-fly" + (o("o-sleep") ? "" : " grey");
+    b.style.left = (700 + i * 40) + "px"; b.style.top = (600 - i * 30) + "px"; stage.append(b); boxes.push(b);
+  }
+  await wait(200);
+  if (o("o-sleep")) $("zzz").classList.add("on");
+  for (const b of boxes) {
+    b.style.transform = "translate(" + (1040 - parseFloat(b.style.left)) + "px," + (440 - parseFloat(b.style.top)) + "px) scale(.4)";
+    play(o("o-sleep") ? "box_return" : "deny", 1, 0.45);
+    if (o("o-sleep")) { $("lie").classList.remove("chew"); void $("lie").offsetWidth; $("lie").classList.add("chew"); }
+    await wait(260); b.style.opacity = "0";
+  }
+  if (o("o-sleep")) { line("icon_box.png", "梦里吃掉 4 盒（手里、桌上、小助手的）", "+" + fmt(left / 2)); play("token"); sum += left / 2; }
+  else line("icon_box.png", "没吃完 4 盒：浪费了约", fmt(left), "grey");
+  await wait(500); $("zzz").classList.remove("on"); if (!alive()) return;
+  // 4 the warm box, 5 the last bite
+  if (o("o-warm")) {
+    $("warm").classList.add("on"); await wait(250); $("warm").classList.add("open"); play("version_up", 1, 0.6);
+    const fx = v("o-final"), got = warmRaw * fx;
+    line("icon_clock.png", "揭开保温箱", "+" + fmt(got), "", "×" + fx); sum += got; await wait(700); if (!alive()) return;
+    if (o("o-eos")) {
+      const ex = v("o-eosx"); $("spotStamp").textContent = "×" + ex;
+      $("spot").classList.add("on"); play("fish_savor_v1", 1, 0.8); await wait(700);
+      $("spotStamp").classList.add("on"); play("ticket"); play("catch_gold", 1, 0.6); await wait(600);
+      const got2 = dish * fx * (ex - 1);
+      line("icon_crown.png", "最后一口：满血版", "+" + fmt(got2), "", "×" + ex); play("token"); sum += got2;
+      await wait(700); $("spot").classList.remove("on"); $("spotStamp").classList.remove("on");
+    }
+  }
+  if (o("o-clip")) { line("icon_shield.png", "最差的几盒按平均算", "+" + fmt(clipV)); play("token"); sum += clipV; await wait(450); }
+  if (!alive()) return;
+  // 7 subtotal
+  $("subtotal").classList.add("on"); await roll($("subV"), 0, sum, 600); $("totalV").textContent = fmt(sum);
+  await wait(300);
+  // 8 the multiplier stamps
+  const mults = [];
+  if (o("o-bal")) mults.push(["均衡", 1.23]);
+  if (o("o-crit")) mults.push(["评鉴", 1.12]);
+  for (let i = 0; i < 5; i++) {
+    const s = document.createElement("div"); s.className = "slot";
+    s.innerHTML = i < mults.length ? `<div class="stamp"><small>${mults[i][0]}</small><span>×${mults[i][1]}</span></div>` : `<div><div class="q">?</div>还没解锁</div>`;
+    $("slots").append(s);
+  }
+  $("slots").classList.add("on"); await wait(400);
+  let total = sum;
+  for (let i = 0; i < mults.length; i++) {
+    if (!alive()) return;
+    $("slots").children[i].querySelector(".stamp").classList.add("on");
+    play("ticket", 1, 0.8); play("catch_gold", Math.pow(2, i * 4 / 12), 0.7);   // each stamp higher: do, mi, so...
+    const t = $("totalV"); t.classList.add("pop");
+    const to = total * mults[i][1]; await roll(t, total, to, 450, false); total = to;
+    t.classList.remove("pop"); await wait(350);
+  }
+  // 9 the context window
+  if (o("o-fuse")) {
+    $("fuseT").textContent = "上限 4,000"; $("fuse").classList.add("on"); await wait(200);
+    $("fbar").style.width = "100%"; $("fbar").classList.add("over"); await wait(800);
+    const cap = 4000, capped = total > cap ? Math.sqrt(cap * total) : total;
+    line("icon_bolt.png", "上下文满了，后面的记不太清", "−" + fmt(total - capped), "grey"); play("deny");
+    await roll($("totalV"), total, capped, 500, false); total = capped; await wait(300);
+  }
+  if (!alive()) return;
+  // 10 result
+  const add = txt => { const d = document.createElement("div"); d.className = "bstamp" + (txt.blue ? " blue" : ""); d.textContent = txt.t; $("bigStamps").append(d); requestAnimationFrame(() => d.classList.add("on")); play("ticket"); };
+  if (o("o-trial")) { if (total >= 2000) { add({t: "评测通过"}); play("trial_pass", 1, 0.7); } else add({t: "还差 " + fmt(2000 - total), blue: true}); await wait(450); }
+  add({t: "新纪录"}); play(o("o-trial") ? "result" : "version_up", 1, 0.6);
+  play("fish_full_v1", 1, 0.8);
+  skipping = false;
+}
+
+// ---------- notes ----------
+const STEPS = [
+  {id: "s1", moment: "整体：结账小票", like: ["关门以后，画面暗下来，左边打出一张饭票小票，右边是躺平的她。钱一行行加上去，最后盖乘区。", "6–10 秒，点一下加速，可以直接跳到结果。"]},
+  {id: "s2", moment: "收桌：梦里吃掉剩下的", like: ["没送出去的饭盒（你手里的、桌上的、她吃了一半的、小助手的）一盒一盒滑到她身边。", "有「我去睡了」：头顶冒 Zzz，梦里吃掉一半价值。没有这个技能：饭盒变灰、一声闷响，小票上一行灰字「浪费了约多少」，提醒技能树里有办法。（把开关「我去睡了」关掉看看）"]},
+  {id: "s3", moment: "保温箱 + 新天赋「最后一口」", like: ["保温箱揭盖冒热气，红章盖上「×3」。", "新天赋「<EOS> 最后一个 token」：她会把保温箱里最好吃的那一口留到最后，这一口单独再 ×3 → ×5 → ×8。美食家只要往保温箱里塞一份大套餐，就能稳稳控住最后一口，一盒定胜负。"]},
+  {id: "s4", moment: "乘区：一个个盖章翻倍", like: ["小计下面一排 5 个盖章位。有的乘区一个一个「啪」地盖上去，总数当场乘上去翻滚，音调一个比一个高。", "没解锁的位置画成虚线圈加「?」，一眼看到「还有乘区没拿到」。以后的乘区（招牌菜全齐、版本加成、吃菜邪修……）都往这里放，满 5 个再长第二排。"]},
+  {id: "s5", moment: "上下文窗口（吃太多时）", like: ["只在这一顿多到超过上限时出现：一条「上下文窗口」进度条冲满，多出来的部分压扁变灰，「上下文满了，后面的记不太清」。（打开开关「吃太多」看看）"]},
+  {id: "s6", moment: "结果和评测", like: ["大号合计。评测时左上小黑板写目标，盖「评测通过」或「还差多少」。破纪录盖「新纪录」，比最好成绩多一倍盖「吃撑了」。"]},
+  {id: "s7", moment: "字体：要不要自己设计", like: ["我的判断：不做完整的中文字体（常用字就要几千个，做不精还不如现成的）。", "要做的两样：①「饭票数字」，就是 0–9、×、+、−、%、万、亿这二十来个字形，专门给金额、倍率、盖章用，叮叮当当的爽感一大半靠数字好看；② 标题 logo「吃白饭的大肥鱼」做成一张专门设计的字图，商店页也要用。正文和小字继续用现在的思源黑体和站酷快乐体。详细见 docs/font_plan.md。"]},
+];
+let notes = {}, db = null;
+function el(tag, attrs = {}, ...kids) { const e = document.createElement(tag); for (const k in attrs) { if (k === "class") e.className = attrs[k]; else e.setAttribute(k, attrs[k]); } for (const c of kids) e.append(c); return e; }
+function noteRow(s, i) {
+  const n = notes[s.id] || {}; let cur = n.status || "";
+  const r = el("div", {class: "row"}); if (cur) r.dataset.s = cur;
+  const like = el("div", {class: "like"}); for (const p of s.like) like.append(el("p", {}, p));
+  const st = el("div", {class: "status", role: "group", "aria-label": s.moment + " 的结论"});
+  const ta = el("textarea", {id: "note-" + s.id, placeholder: "玩起来感觉怎么样？哪里怪？"}); ta.value = n.text || "";
+  const saved = el("span", {}, n.text || n.status ? "已保存" : ""); const sb = el("button", {type: "button"}, "保存"); sb.disabled = !db;
+  for (const [k, t] of [["ok", "好"], ["change", "要改"], ["cut", "不要"]]) {
+    const b = el("button", {type: "button", "data-s": k, "aria-pressed": String(cur === k)}, t);
+    b.addEventListener("click", () => { cur = cur === k ? "" : k; st.querySelectorAll("button").forEach(x => x.setAttribute("aria-pressed", String(x.dataset.s === cur))); r.dataset.s = cur; saved.textContent = "没保存"; });
+    st.append(b);
+  }
+  ta.addEventListener("input", () => saved.textContent = "没保存");
+  sb.addEventListener("click", async () => {
+    if (!db) return; sb.disabled = true;
+    try { const doc = {status: cur, text: ta.value.trim(), reply: (notes[s.id] || {}).reply || "", id: s.id, moment: s.moment, updatedAt: new Date().toISOString()}; await db.doc("notes/" + s.id).set(doc); notes[s.id] = doc; saved.textContent = "已保存"; }
+    catch (e) { saved.textContent = "没存上，再点一次"; }
+    sb.disabled = false;
+  });
+  r.append(el("div", {class: "num"}, String(i + 1)), el("div", {}, el("div", {class: "moment"}, s.moment), like),
+    el("div", {class: "note"}, st, ta, el("div", {class: "save"}, sb, saved), n.reply ? el("div", {class: "reply"}, "已改：" + n.reply) : ""));
+  return r;
+}
+function renderNotes() { const box = $("notes"); box.innerHTML = ""; STEPS.forEach((s, i) => box.append(noteRow(s, i))); }
+renderNotes();
+(async () => {
+  db = window.claude ? await window.claude.use("db") : null;
+  const notice = $("notice");
+  if (!db) { notice.textContent = "演示随时能看；批注要在 claude.ai 里打开这页才能保存。"; return; }
+  notice.hidden = true;
+  let first = true;
+  db.collection("notes").onSnapshot(snap => { notes = {}; for (const d of snap.docs) notes[d.id] = d.data(); if (first) { first = false; renderNotes(); } },
+    () => { notice.hidden = false; notice.textContent = "批注存储暂时连不上，刷新页面再试。"; });
+  renderNotes();
+})();
+</script>

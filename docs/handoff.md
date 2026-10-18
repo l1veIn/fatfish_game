@@ -27,6 +27,7 @@
   - 技能树设计页：https://claude.ai/artifact/HzHWGDhgTkuUKWzAWkvFjL
   - 声音清单页：https://claude.ai/artifact/V3A5j8PbbBJSfzvsRPzCfw
   - 声音收尾试听页（接菜声、音乐层、混音）：https://claude.ai/artifact/3A5BxfgCmpDdTUzrqyBZVu
+  - 关门结账演示页（新结算流程、最后一口天赋、字体建议）：https://claude.ai/artifact/QHGeAJBy6BASwyw8FH7jqH ，设计见 `docs/settlement_design.md`、`docs/font_plan.md`，等用户批注后再实现。
 
   改完要在批注里写一条 `reply`（「已改：……」）。
 - **花钱前先问**：生成图片、声音前先报数量和大概费用。下载东西也要先问。

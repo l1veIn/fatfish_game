@@ -4,8 +4,26 @@
     {
       "name": "web-build",
       "runtimeExecutable": "python",
-      "runtimeArgs": ["-m", "http.server", "8765", "--directory", "build/web"],
+      "runtimeArgs": [
+        "-m",
+        "http.server",
+        "8765",
+        "--directory",
+        "build/web"
+      ],
       "port": 8765
+    },
+    {
+      "name": "settle-mock",
+      "runtimeExecutable": "python",
+      "runtimeArgs": [
+        "-m",
+        "http.server",
+        "8766",
+        "--directory",
+        "art_src/settle_mock"
+      ],
+      "port": 8766
     }
   ]
 }
