@@ -69,7 +69,7 @@ func _ready() -> void:
 	add_child(_bar)
 	_build_bar()
 	Game.changed.connect(_build_bar)
-	for n in ["cork_bg", "ticket", "ticket_gold", "stamp", "pin"]:
+	for n in ["cork_bg", "ticket", "ticket_gold", "stamp", "pin", "icon_lock", "fx_burst", "fx_star", "ui_chalkboard"]:
 		var f := "res://assets/canteen/%s.png" % n
 		if ResourceLoader.exists(f):
 			_tex[n] = load(f)
@@ -484,10 +484,14 @@ func _draw() -> void:
 			tint = Color(1.0, 0.62, 0.55)   # a release ticket: pink paper
 		if not Game.can_buy(id) and lv == 0:
 			tint = tint * Color(0.8, 0.76, 0.7)   # can't buy yet: a little faded
+		if n.get("locked", false):
+			tint = tint * Color(0.72, 0.7, 0.68)   # locked: greyer still, and a padlock (below)
 		if id == _hover:
 			r = r.grow(4.0 * z)
-		if Game.can_buy(id):
-			draw_rect(r.grow((6.0 + sin(Time.get_ticks_msec() / 250.0) * 2.0) * z), Color(1.0, 0.9, 0.5, 0.25))   # affordable: a soft glow
+		if Game.can_buy(id):   # affordable: a warm glow behind the ticket
+			var pulse := 0.5 + 0.5 * sin(Time.get_ticks_msec() / 250.0)
+			var gs := r.size * (1.45 + 0.05 * pulse)
+			draw_texture_rect(UiKit.glow(), Rect2(r.get_center() - gs * 0.5, gs), false, Color(1.0, 0.85, 0.4, 0.45 + 0.2 * pulse))
 		if tex != null:
 			draw_texture_rect(tex, r, false, tint)
 		else:
@@ -513,12 +517,23 @@ func _draw() -> void:
 		if _tex.has("pin"):
 			var ps := 30.0 * z
 			draw_texture_rect(_tex.pin, Rect2(Vector2(c.x - ps * 0.5, r.position.y - ps * 0.55), Vector2(ps, ps)), false)
-		if n.get("locked", false):
-			draw_rect(r, Color(0.2, 0.2, 0.2, 0.5))
-	if _flash_time > 0.0:
-		draw_arc(_flash_at, NODE_R + (0.3 - _flash_time) * 120.0, 0, TAU, 48, Color(1, 1, 0.8, _flash_time / 0.3), 6.0, true)
-	# header, on a dark strip so it reads on the cork
-	draw_rect(Rect2(30, 20, 560, 270), Color(0.12, 0.07, 0.04, 0.72))
+		if n.get("locked", false):   # not yet: a padlock hung on the ticket
+			var ls2 := sz.y * 0.62
+			if _tex.has("icon_lock"):
+				draw_texture_rect(_tex.icon_lock, Rect2(r.get_center() + Vector2(sz.x * 0.28, -sz.y * 0.05) - Vector2(ls2, ls2) * 0.5, Vector2(ls2, ls2)), false)
+	if _flash_time > 0.0 and _tex.has("fx_burst"):   # bought: a burst and stars
+		var q := 1.0 - _flash_time / 0.3
+		var bs := NODE_R * 2.0 * (1.0 + 1.2 * q) * _zoom
+		draw_set_transform(_flash_at, q * 0.6, Vector2.ONE)
+		draw_texture_rect(_tex.fx_burst, Rect2(-Vector2(bs, bs) * 0.5, Vector2(bs, bs)), false, Color(1, 1, 1, 1.0 - q * q))
+		draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+		if _tex.has("fx_star"):
+			for j in 5:
+				var at := _flash_at + Vector2.from_angle(j * TAU / 5.0 + 0.3) * bs * (0.35 + 0.3 * q)
+				var ss := 34.0 * (1.0 - 0.5 * q)
+				draw_texture_rect(_tex.fx_star, Rect2(at - Vector2(ss, ss) * 0.5, Vector2(ss, ss)), false, Color(1, 1, 1, 1.0 - q))
+	# header, on a small chalkboard so it reads on the cork
+	UiKit.nine(self, _tex.get("ui_chalkboard", null), Rect2(24, 14, 580, 290 if Game.open_trial() == "" else 350), 60.0, 0.7)
 	draw_string_outline(font, Vector2(60, 80), "token %s" % Game.fmt(Game.tokens), HORIZONTAL_ALIGNMENT_LEFT, -1, 52, 10, Color(0.1, 0.05, 0.02))
 	draw_string(font, Vector2(60, 80), "token %s" % Game.fmt(Game.tokens), HORIZONTAL_ALIGNMENT_LEFT, -1, 52, Color(1.0, 0.93, 0.72))
 	draw_string(font, Vector2(60, 125), tr("第 %d 顿饭 · 累计吐出 %s token") % [Game.runs + 1, Game.fmt(Game.total_tokens)], HORIZONTAL_ALIGNMENT_LEFT, -1, 26, Color(0.95, 0.85, 0.7))
@@ -591,8 +606,7 @@ func _draw_tooltip(font: Font, n: Dictionary) -> void:
 	var pos := _at(n) + Vector2(TICKET.x * _zoom * 0.5 + 16, -60)
 	pos.x = minf(pos.x, size.x - w - 60)
 	pos.y = clampf(pos.y, 10.0, size.y - h - 10.0)
-	draw_rect(Rect2(pos, Vector2(w + 40, h)), Color(0.1, 0.06, 0.04, 0.95))
-	draw_rect(Rect2(pos, Vector2(w + 40, h)), Color(1.0, 0.8, 0.42, 0.8), false, 2.0)
+	UiKit.nine(self, _tex.get("ui_chalkboard", null), Rect2(pos, Vector2(w + 40, h)).grow(10.0), 60.0, 0.6)
 	var y := pos.y + 20
 	for l in lines:
 		draw_multiline_string(font, Vector2(pos.x + 20, y + l[1]), l[0], HORIZONTAL_ALIGNMENT_LEFT, WRAP, l[1], -1, l[2])

@@ -210,3 +210,24 @@ if [ "$stage" = hud ]; then
   gen ui_tray 3:1 transparent "$ST" "$UI an empty light-colored cafeteria food tray seen from straight above, divided into three equal compartments side by side." &
   wait
 fi
+
+# 2026-10-18 polish pass (user: replace the demo-era "cheap" effects): effect sprites, table trays,
+# a hand-drawn arrow and a padlock for the skill tree. Plain props: no scene reference (it pulls
+# characters in); the table art keeps the style.
+#   bash pipeline/gen_assets.sh polish
+if [ "$stage" = polish ]; then
+  T="--image art_src/assets/table_0.png"
+  FX="Single game visual-effect sprite for a cute 2D anime canteen game, centred, transparent background, soft glowing edges that fade out, no objects, no characters, no text:"
+  gen fx_silver 1:1 transparent "" "$FX a delicate silvery-white shimmer halo: a soft ring of pale silver light with three or four small crisp four-pointed star glints around it, empty in the middle." &
+  gen fx_gold 1:1 transparent "" "$FX a warm golden glow halo: a soft round aura of golden light with sparkling gold four-pointed stars and tiny glitter dots around it, empty in the middle." &
+  gen fx_burst 1:1 transparent "" "$FX a cheerful cartoon celebration burst: a ring of chunky cream-white and golden comic action rays radiating out, with a few round puffs of white steam between them, empty in the middle." &
+  wait
+  gen fx_steam 1:1 transparent "" "$FX a single cute cartoon puff of white steam rising from hot food, soft round curly cloud shape with a gentle wavy tail at the bottom, a light outline." &
+  gen fx_star 1:1 transparent "" "$FX a single bright four-pointed sparkle star, golden yellow with a white hot centre and a thin dark outline, crisp, like a twinkle in an anime." &
+  gen tray_empty 3:2 transparent "$T" "$SPRITE A low wooden serving tray (a plain shallow box tray with short sides) seen from the front and a little above, empty, made to hold a stack of lunch boxes, matching the table's wood and art style, no text." &
+  wait
+  gen tray_full 3:2 transparent "$T" "$SPRITE A red plastic canteen serving tray seen from the front and a little above, empty, slightly glossy, with a small cream ticket clip on its front edge (blank), matching the art style of the reference, no text." &
+  gen ui_arrow 3:2 transparent "" "$SPRITE A short chunky hand-drawn arrow pointing to the right, cream white with a thick dark brown outline, slightly wobbly like chalk on a menu board, no text." &
+  gen icon_lock 1:1 transparent "" "$SPRITE A small cute brass padlock, chunky and rounded, with a keyhole, thick dark outline, soft cel shading, game UI icon, no text." &
+  wait
+fi

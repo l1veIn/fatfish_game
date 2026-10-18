@@ -64,6 +64,11 @@
 - 标题、按钮、横幅：站酷快乐体。
 - 中文文本变了以后照旧重跑 `pipeline/subset_font.py`。
 
+## 进度（2026-10-18）
+
+- 饭票数字已做：`pipeline/make_numerals.py` → `game/assets/ui/numerals.fnt`，`UiKit.numerals()`；用在收银台、倒计时、飘字、徽章、数量小牌、结账小票。
+- logo 还没做。
+
 ## 下一步
 
 用户点头以后：

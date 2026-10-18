@@ -1,0 +1,17 @@
+[remap]
+
+importer="font_data_bmfont"
+type="FontFile"
+uid="uid://irw30tptnaka"
+path="res://.godot/imported/numerals.fnt-ff4d33ce734b096c04ef7e4b5fc02630.fontdata"
+
+[deps]
+
+source_file="res://assets/ui/numerals.fnt"
+dest_files=["res://.godot/imported/numerals.fnt-ff4d33ce734b096c04ef7e4b5fc02630.fontdata"]
+
+[params]
+
+fallbacks=[]
+compress=true
+scaling_mode=2

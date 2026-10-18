@@ -1337,6 +1337,7 @@ func _process(delta: float) -> void:
 ## last FINAL_SECONDS add a ticking clock and push the tempo up a little, 深度思考 slows and
 ## muffles it (Audio, layers from pipeline/make_music_layers.py).
 const FINAL_SECONDS := 10.0
+const EOS_X := [1.0, 3.0, 5.0, 8.0]      # <EOS> 最后一个 token, by level
 func _update_music() -> void:
 	Audio.music_layer("peak", _peak_on or (legacy == "hybrid" and not _hard))
 	var left := meal_time - _t
@@ -2250,36 +2251,75 @@ func _end(reason: String, card_too := true) -> void:
 	_end_reason = reason
 	_thinking = false
 	Audio.settle()
-	# closing time (docs/tree_model.md §2.2): the 保温箱 box, then 我去睡了, 梯度裁剪, then the
-	# meal multipliers 均衡 and 美食评鉴 on everything, and the 上下文溢出 fuse last
+	# closing time (docs/tree_model.md §2.2, docs/settlement_design.md): everything is counted
+	# here at once (so nothing is lost if the player skips or quits); the checkout receipt then
+	# plays it back step by step from `_steps`. Order: the 保温箱 box (and its <EOS> last bite),
+	# 我去睡了, 梯度裁剪, then the meal multipliers 均衡 and 美食评鉴, and the 上下文溢出 fuse last.
 	_score = {"base": _base}
+	var meal := earned   # what she ate during the shift
+	var warm_step := {}
+	var eos_step := {}
 	if _warm != null:
 		var wb: Dictionary = _warm
 		_warm = null
 		var mult := (1.0 + box_bonus + (fill_bonus if wb.get("full", false) else 0.0) + cot * mini(int(wb.get("chains", 0)), 3))
 		mult *= _crave_x(INF) * (1.0 + combo * mini(_combo_n, _combo_cap())) * warm_x
+		# <EOS>: she keeps the best bite of the box for last, and it counts again
+		var best := -1
+		for i in wb.items.size():
+			var it: int = wb.items[i]
+			if (K(it) != I.VEG or _grokked) and (best < 0 or _item_value(it) > _item_value(wb.items[best])):
+				best = i
 		var got := 0.0
-		for it in wb.items:
+		var best_got := 0.0
+		for i in wb.items.size():
+			var it: int = wb.items[i]
 			if K(it) == I.VEG and not _grokked:
 				continue
-			got += _bite(it, mult, false) * _stream_mult()
+			var b := _bite(it, mult, false) * _stream_mult()
+			got += b
+			if i == best:
+				best_got = b
 		_credit(got)
 		_score["warm"] = got
-		_banner("揭开保温箱！", "+%s token" % Game.fmt(got), "token")
-		Audio.vo("fish_bliss", 3)
-		Audio.sfx("version_up", -2.0)
-	if sleep_eat:
+		warm_step = {"icon": "clock", "text": tr("揭开保温箱"), "mark": "×%.0f" % warm_x, "add": got, "sfx": "version_up"}
+		var ex: float = EOS_X[clampi(int(Game.stat("eos")), 0, EOS_X.size() - 1)]
+		if best >= 0 and ex > 1.0:
+			var extra := best_got * (ex - 1.0)
+			_credit(extra)
+			_score["eos"] = extra
+			var k := K(wb.items[best])
+			eos_step = {"icon": "crown", "text": tr("最后一口：%s") % tr(NAMES[k]), "mark": "×%.0f" % ex, "add": extra,
+				"dish": _food_tex[k], "dish_name": tr(NAMES[k])}
+	# what was left on the table, in her box, in the player's hands and the helpers' boxes
+	var boxes: Array = _queue.duplicate()
+	for bx in [_eating, _hand]:
+		if bx != null:
+			boxes.append(bx)
+	for c in _crew:
+		if c.box != null:
+			boxes.append(c.box)
+	boxes = boxes.filter(func(bx): return not bx.items.is_empty())
+	var left_step := {}
+	if not boxes.is_empty():
 		var left := 0.0
-		var boxes: Array = _queue.duplicate()
-		if _eating != null:
-			boxes.append(_eating)
+		var worth := 0.0
 		for bx in boxes:
 			for it in bx.items:
 				if K(it) != I.VEG or _grokked:
-					left += _bite(it, 0.5, false)
-		if left > 0.0:
+					worth += _item_value(it)
+					if sleep_eat:
+						left += _bite(it, 0.5, false)
+		if sleep_eat:   # eaten in her dreams: the boxes are empty now, the one in hand is put down
+			for bx in boxes:
+				bx.items.clear()
+			_hand = null
+		if sleep_eat and left > 0.0:
 			_credit(left)
 			_score["sleep"] = left
+			left_step = {"icon": "box", "text": tr("梦里吃掉 %d 盒") % boxes.size(), "add": left, "sleep": true}
+		elif worth > 0.0:
+			left_step = {"icon": "box", "text": tr("没吃完 %d 盒：浪费了约") % boxes.size(), "lost": worth}
 	if clip and _box_vals.size() >= 5:
 		var vals: Array = _box_vals.duplicate()
 		vals.sort()
@@ -2293,6 +2333,15 @@ func _end(reason: String, card_too := true) -> void:
 		if lift > 0.0:
 			_credit(lift)
 			_score["clip"] = lift
+	var steps: Array = [{"icon": "token", "text": tr("这顿吃的：%d 份") % eaten, "add": meal}]
+	if _sig_bonus > 0.0:
+		steps.append({"note": tr("其中招牌菜"), "add": _sig_bonus})
+	for st in [left_step, warm_step, eos_step]:
+		if not st.is_empty():
+			steps.append(st)
+	if _score.has("clip"):
+		steps.append({"icon": "shield", "text": tr("最差的几盒按平均算"), "add": _score.clip})
+	var subtotal := earned
 	var bm := balance_mult()
 	var jm := review_mult()
 	var bonus := earned * (bm * jm - 1.0)
@@ -2301,10 +2350,15 @@ func _end(reason: String, card_too := true) -> void:
 		Game.add_tokens(bonus)
 	_score["balance"] = bm
 	_score["review"] = jm
+	var mults: Array = [[tr("均衡"), bm]]
+	if critic > 0.0:
+		mults.append([tr("评鉴"), jm])
+	var fuse := {}
 	var cap := FUSE * Game.next_target()
 	if cap > 0.0 and earned > cap:
 		var capped := sqrt(cap * earned)
 		_score["fuse"] = earned - capped
+		fuse = {"cap": cap, "cut": earned - capped}
 		Game.add_tokens(capped - earned)
 		earned = capped
 	var extra := ""
@@ -2333,32 +2387,29 @@ func _end(reason: String, card_too := true) -> void:
 	Game.save_game()
 	if not card_too:
 		return
-	await get_tree().create_timer(1.2).timeout
-	var card := ResultCard.new()
+	await get_tree().create_timer(1.0).timeout
+	var card := CheckoutReceipt.new()
+	_checkout = true
 	card.title = reason
-	card.full = full
-	card.earned = earned
-	card.eaten = eaten
-	card.base = _base
-	card.sig_bonus = _sig_bonus
-	card.score = _score
-	card.kinds = _kinds_eaten.size()
-	card.balance = balance_score()
-	card.balance_mult = bm
-	card.cats = _cat.duplicate()
+	card.heading = tr("第 %d 顿 · 结账") % Game.runs
+	card.sub = "%s · %s %s" % [tr(Game.plate()), _clock_text(), tr(reason)]
+	card.steps = steps
+	card.subtotal = subtotal
+	card.mults = mults
+	card.fuse = fuse
+	card.total = earned
 	card.target = target
-	card.catch_rate = catch_rate()
+	card.passed = passed
 	card.record = record
 	card.stuffed = stuffed
-	card.clock = _clock_text()
 	card.extra = extra
-	card.plate = Game.plate()
-	card.passed = passed
+	card.sleeping = full and _score.has("sleep")
+	card.fast = autotest
 	card.closed.connect(func(): finished.emit(earned))
 	add_child(card)
 	card_shown.emit()
-	if autotest:   # leave the card up briefly, then carry on
-		await get_tree().create_timer(3.0).timeout
+	if autotest:   # leave the receipt up briefly, then carry on
+		await get_tree().create_timer(2.0).timeout
 		if is_instance_valid(card):
 			card.closed.emit()
 
@@ -2506,7 +2557,7 @@ func _draw_front() -> void:
 			if not faded:   # steam
 				for p in 2:
 					var ph := fmod(_t * 0.5 + j * 0.37 + p * 0.5 + id.length() * 0.13, 1.0)
-					_front.draw_circle(Vector2(x + sin(ph * 6.0 + j) * 8.0, PAN_Y - 20.0 - ph * 60.0), 6.0 + ph * 10.0, Color(1, 1, 1, 0.16 * (1.0 - ph)))
+					_sprite(_front, "fx_steam", Vector2(x + sin(ph * 6.0 + j) * 8.0, PAN_Y - 24.0 - ph * 60.0), 24.0 + ph * 26.0, sin(ph * 4.0 + j) * 0.2, Color(1, 1, 1, 0.42 * (1.0 - ph) * minf(ph * 5.0, 1.0)))
 	# each tentacle's cooking bar on the counter front, right under where its food will fly from
 	for a in _arms:
 		var x: float = a.x
@@ -2515,9 +2566,10 @@ func _draw_front() -> void:
 		var col := Color(1.0, 0.35, 0.25) if _peak_on else Color(0.95, 0.6, 0.2)
 		if a.raise > 0.0:
 			col = col.lerp(Color.WHITE, 0.5 + 0.5 * sin(_t * 40.0))
-		_front.draw_rect(r, Color(0.2, 0.12, 0.08, 0.8))
-		_front.draw_rect(Rect2(r.position, Vector2(r.size.x * done, r.size.y)), col)
-		_front.draw_rect(r, Color(0.35, 0.2, 0.1), false, 2.0)
+		_front.draw_style_box(_bar_bg, r.grow(2.0))
+		if done > 0.05:
+			_bar_fill.bg_color = col
+			_front.draw_style_box(_bar_fill, Rect2(r.position, Vector2(r.size.x * done, r.size.y)))
 
 
 ## 梁阿姨's face for the moment.
@@ -2541,42 +2593,42 @@ func _draw() -> void:
 	draw_rect(Rect2(0, FLOOR_Y, 1920, 1080 - FLOOR_Y), Color(0.06, 0.04, 0.03, 0.6))
 	# the table in front of 大肥鱼
 	draw_texture_rect(_table, Rect2(TABLE_AT, _table.get_size() * TABLE_SCALE), false)
-	for z in [[STACK_AT.x, tr("空饭盒")], [FULL_AT.x, tr("满饭盒")]]:
-		var zw := font.get_string_size(z[1], HORIZONTAL_ALIGNMENT_LEFT, -1, 20).x
-		_label(font, Vector2(z[0] - zw * 0.5, TABLE.end.y + 10), z[1], HORIZONTAL_ALIGNMENT_LEFT, -1, 20, Color(1, 0.92, 0.8, 0.8))
+	# a wooden tray for the empty boxes (left), a red serving tray for the full ones (right)
+	_sprite(self, "tray_empty", STACK_AT + Vector2(0, 30), 170.0)
+	_sprite(self, "tray_full", FULL_AT + Vector2(0, 30), 170.0)
 	# the stack of empty boxes, then the queue of full ones
 	for i in _empty:
 		_draw_basin(STACK_AT + Vector2(0, -11.0 * i), _new_basin(Vector2.ZERO), 0.0, 0.48, font, false)
 	if _empty > 1:
-		_label(font, STACK_AT + Vector2(56, 10), "×%d" % _empty, HORIZONTAL_ALIGNMENT_LEFT, -1, 22, Color(1, 0.95, 0.85))
+		_count_tag(STACK_AT + Vector2(70, 18), _empty)
 	if _hand == null and _empty > 0 and not _ended:
-		# empty hands and a box to take: the stack pulses
-		var pulse := 0.5 + 0.5 * sin(_t * 9.0)
+		# empty hands and a box to take: a warm glow under the stack, a hand bobbing over it
+		var pulse := 0.5 + 0.5 * sin(_t * 6.0)
 		var top := STACK_AT + Vector2(0, -11.0 * (_empty - 1))
-		var r := Rect2(top - Vector2(74, 46), Vector2(148, 92))
-		draw_rect(r.grow(4.0 * pulse), Color(1.0, 0.85, 0.35, 0.35 + 0.5 * pulse), false, 4.0)
-		var hint := tr("拿饭盒！")
-		var hw := font.get_string_size(hint, HORIZONTAL_ALIGNMENT_LEFT, -1, 24).x
-		_label(font, Vector2(top.x - hw * 0.5, r.position.y - 12.0 - 6.0 * pulse), hint, HORIZONTAL_ALIGNMENT_LEFT, -1, 24, Color(1.0, 0.9, 0.5, 0.6 + 0.4 * pulse))
+		_glow(self, top + Vector2(0, 6), 230.0, Color(1.0, 0.85, 0.4, 0.35 + 0.3 * pulse), 0.55)
+		_sprite(self, "hand", top + Vector2(8, -78 - 12.0 * pulse), 96.0, 0.55)   # fingers pointing down at the stack
+		_write(_dfont, top + Vector2(0, -136 - 12.0 * pulse), tr("拿饭盒！"), 30, Color(1.0, 0.92, 0.6), Color(0.3, 0.15, 0.04), true)
 	for i in _queue.size():
 		_draw_basin(_table_slot(i), _queue[i], 0.0, 0.48, font, false)
 	if warm:   # KV Cache 保温箱: a lidded warmer left of the table
 		var wr := WARM_RECT
-		var wt := _maybe(ART + "warm_box.png")
+		var wt: Texture2D = _ui.get("warm_box", null)
 		if wt != null:
 			var wh := wr.size.x * wt.get_height() / wt.get_width()
 			draw_texture_rect(wt, Rect2(wr.position.x, wr.end.y - wh, wr.size.x, wh), false)
-		else:
-			draw_rect(wr, Color(0.55, 0.32, 0.18, 0.85))
-			draw_rect(wr, Color(1.0, 0.8, 0.45), false, 3.0)
-		_label(font, wr.position + Vector2(10, 30), tr("保温箱"), HORIZONTAL_ALIGNMENT_LEFT, -1, 24, Color(1.0, 0.9, 0.65))
+		var plate := Rect2(wr.position.x + 18, wr.end.y - 4, wr.size.x - 36, 30)   # its name plate under it
+		UiKit.nine(self, _ui.get("sign_plate", null), plate, 18.0)
+		_write(font, Vector2(plate.get_center().x, plate.end.y - 8), tr("保温箱"), 18, INK, Color(0, 0, 0, 0), true)
 		if _warm != null:
 			_draw_basin(WARM_AT + Vector2(0, 12), _warm, 0.0, 0.42, font, false)
-			_label(font, wr.position + Vector2(10, wr.size.y - 10), "×%.0f · %s" % [warm_x, Game.fmt(_box_worth(_warm))], HORIZONTAL_ALIGNMENT_LEFT, -1, 20, Color(1.0, 0.85, 0.5))
-		elif _hand != null and not _hand.items.is_empty():
-			_label(font, wr.position + Vector2(10, 64), tr("放进来，留到最后"), HORIZONTAL_ALIGNMENT_LEFT, -1, 20, Color(1.0, 0.85, 0.6, 0.7))
+			for j in 2:   # it keeps warm
+				var ph := fmod(_t * 0.6 + j * 0.5, 1.0)
+				_sprite(self, "fx_steam", WARM_AT + Vector2(-20 + 40 * j, -70 - ph * 50.0), 22.0 + ph * 18.0, 0.0, Color(1, 1, 1, 0.5 * (1.0 - ph)))
+			_badge(Vector2(wr.get_center().x, wr.position.y - 34), "", "×%.0f · %s" % [warm_x, Game.fmt(_box_worth(_warm))], "warm", warm_x)
+		elif _hand != null and not _hand.items.is_empty() and not _ended:
+			_write(font, Vector2(wr.get_center().x, wr.position.y - 20), tr("放进来，留到最后"), 20, Color(1.0, 0.9, 0.65, 0.85), Color(0.25, 0.12, 0.04, 0.85), true)
 	if _queue.size() > 1:
-		_label(font, FULL_AT + Vector2(56, 10), "×%d" % _queue.size(), HORIZONTAL_ALIGNMENT_LEFT, -1, 22, Color(1, 0.95, 0.85))
+		_count_tag(FULL_AT + Vector2(-70, 18), _queue.size())
 	_crew_layer.queue_redraw()
 	if _eating != null:
 		_draw_basin(EAT_AT, _eating, 0.0, 0.55, font, false)   # she scoops from it
@@ -2599,8 +2651,11 @@ func _draw() -> void:
 				continue
 			var t := _time_to(i, hy)
 			if t < 2.0:
-				var mark := Color(0.75, 0.7, 1.0, 0.8) if _thinking else Color(1.0, 0.85, 0.45, 0.65)
-				draw_arc(Vector2(p.x + v.x * t, hy), 18 if k == I.Q else 14, 0, TAU, 16, mark, 3.0, true)
+				var mark := Color(0.7, 0.6, 1.0, 0.75) if _thinking else Color(1.0, 0.82, 0.4, 0.7)
+				var land := Vector2(p.x + v.x * t, hy)
+				_glow(self, land, 64.0 * (1.2 - 0.4 * t / 2.0), mark, 0.4)   # where it will land, firmer as it nears
+				if _is_good(k) or grade(_fk[i]) > 0:
+					_sprite(self, "fx_star", land + Vector2(0, -2), 20.0, _t * 2.0, Color(1, 1, 1, 0.9))
 	if _busy_t > 0.0:
 		draw_rect(Rect2(TABLE.position + Vector2(20, -70), Vector2(330, 54)), Color(0.85, 0.2, 0.2, 0.9))
 		_label(font, TABLE.position + Vector2(36, -32), tr("服务器繁忙，请稍后重试"), HORIZONTAL_ALIGNMENT_LEFT, -1, 26, Color.WHITE)
@@ -2611,10 +2666,11 @@ func _draw() -> void:
 			_label(font, _aim + Vector2(-120, 0), tr("没空饭盒了！等她吃完……"), HORIZONTAL_ALIGNMENT_LEFT, -1, 26, Color(1, 0.7, 0.6))
 	_draw_floaters(font)
 	if _thinking:
-		draw_rect(Rect2(0, 0, 1920, 1080), Color(0.35, 0.25, 0.6, 0.18))
+		draw_texture_rect(UiKit.vignette(), Rect2(0, 0, 1920, 1080), false, Color(0.22, 0.12, 0.42, 0.75))
 		if _hand != null:
 			_label(font, _hand.pos + Vector2(-90, -110), tr("嗯，用户想要") + "……".repeat(1 + int(_t * 3.0) % 3), HORIZONTAL_ALIGNMENT_LEFT, -1, 26, Color(0.9, 0.85, 1.0))
-	_draw_hud(font)
+	if not _checkout:   # the receipt tells the numbers now (the register would give the total away)
+		_draw_hud(font)
 
 
 ## Text with a dark outline, readable on the busy canteen art.
@@ -2628,17 +2684,23 @@ func _draw_food(kind: int, at: Vector2, rot: float, scale_k: float) -> void:
 	_draw_food_on(self, kind, at, rot, scale_k)
 
 
-## An item: the dish, a ring for its grade (优质 silver, 金牌 gold) and a flame mark if 高温.
+## An item: the dish, a slowly turning silver shimmer (优质) or golden glow with a twinkle
+## (金牌) around it, and a little flame if 高温 touched it.
 func _draw_item(it: int, at: Vector2, rot: float, scale_k: float) -> void:
 	var k := K(it)
 	var r: float = SIZE_PX[k] * scale_k * 0.55
-	if grade(it) > 0:
-		draw_circle(at, r, Color(0.85, 0.9, 1.0, 0.35) if grade(it) == 1 else Color(1.0, 0.8, 0.25, 0.5))
+	var g := grade(it)
+	if g > 0:
+		var spin := float(it % 97)
+		_sprite(self, "fx_gold" if g == 2 else "fx_silver", at, r * 2.7, _t * (0.7 if g == 2 else -0.5) + spin,
+			Color(1, 1, 1, 0.95 if g == 2 else 0.8))
 	_draw_food_on(self, k, at, rot, scale_k)
-	if grade(it) > 0:
-		draw_arc(at, r, 0, TAU, 24, Color(0.9, 0.95, 1.0) if grade(it) == 1 else Color(1.0, 0.82, 0.3), maxf(2.0, 3.0 * scale_k), true)
+	if g == 2:   # now and then a star twinkles on its rim
+		var ph := fmod(_t * 0.9 + float(it % 97) * 0.13, 1.0)
+		if ph < 0.3:
+			_sprite(self, "fx_star", at + Vector2(r * 0.8, -r * 0.7), r * 1.1 * sin(ph / 0.3 * PI), ph * 2.0)
 	if is_hot(it):
-		draw_circle(at + Vector2(r * 0.7, -r * 0.7), maxf(4.0, 6.0 * scale_k), Color(1.0, 0.45, 0.2))
+		_sprite(self, "icon_flame", at + Vector2(r * 0.75, -r * 0.75), maxf(18.0, 30.0 * scale_k), sin(_t * 9.0) * 0.12)
 
 
 func _draw_food_tinted(ci: CanvasItem, kind: int, at: Vector2, rot: float, scale_k: float, col: Color) -> void:
@@ -2729,10 +2791,14 @@ func _draw_basin(at: Vector2, b: Dictionary, slosh: float, scale_k: float, font:
 		_draw_item(items[i], centre, 0.0, want / SIZE_PX[K(items[i])])
 	if ghosts > 0:   # 幻觉 / 投机解码: bites that take no cell
 		_label(font, Vector2(gx0 + gw - 10, gy0 + 4), "+%d" % ghosts, HORIZONTAL_ALIGNMENT_LEFT, -1, int(26 * scale_k) + 10, Color(0.85, 0.75, 1.0))
-	for f in _flash:   # 合成: a burst of light over the box
+	for f in _flash:   # 合成: a cartoon burst, stars flying out
 		if f.pos.distance_to(at) < 4.0 or in_hand:
-			var a: float = 1.0 - f.t / 0.5
-			draw_circle(at, gw * (0.4 + f.t), Color(1.0, 0.95, 0.7, 0.45 * a))
+			var q: float = f.t / 0.5
+			var a := 1.0 - q * q
+			_sprite(self, "fx_burst", at, gw * (1.35 + 0.7 * q), q * 0.5, Color(1, 1, 1, 0.9 * a))   # a ring round the box, food stays visible
+			for j in 6:
+				var dir := Vector2.from_angle(j * TAU / 6.0 + 0.4)
+				_sprite(self, "fx_star", at + dir * gw * (0.55 + 0.75 * q), 30.0 * (1.0 - 0.5 * q), q * 4.0, Color(1, 1, 1, a))
 	if in_hand:
 		_draw_hand_tag(Vector2(at.x, art.end.y + 16), b)
 		var tiers := 0
@@ -2757,7 +2823,12 @@ const ENAMEL := Color(0.18, 0.36, 0.62)
 const GOLD_C := Color(0.95, 0.76, 0.31)
 const CAT_COL := {"主": Color(0.95, 0.76, 0.29), "荤": Color(0.85, 0.34, 0.23), "素": Color(0.36, 0.64, 0.27)}
 const BANNER_T := [0.15, 1.35, 0.3]   # stamp in, hold, fade
-var _dfont: Font                       # 站酷快乐体: numbers and titles
+var _dfont: Font                       # 站酷快乐体: titles and big words
+var _nfont: Font                       # 饭票数字 (pipeline/make_numerals.py): money, multipliers, counts
+var _checkout := false                 # the closing receipt is up
+var _bar_bg: StyleBoxFlat              # the cooking bars on the counter
+var _bar_fill: StyleBoxFlat
+var _pip: StyleBoxFlat                 # the box's capacity pips
 var _ui := {}                          # HUD art by name (icon_* / ui_*)
 var _banners: Array = []               # {title, sub, icon, t}
 var _chips: Array = []                 # {pos, icon, t}
@@ -2770,9 +2841,32 @@ var _badge_bump := {}
 
 func _load_hud() -> void:
 	_dfont = load("res://assets/ui/ZCOOLKuaiLe.ttf") if ResourceLoader.exists("res://assets/ui/ZCOOLKuaiLe.ttf") else ThemeDB.fallback_font
+	_nfont = UiKit.numerals()
 	for n in ["icon_token", "icon_flame", "icon_drool", "icon_chain", "icon_leaf", "icon_crown", "icon_clock", "icon_box",
-			"icon_dice", "icon_shield", "icon_bolt", "icon_bell", "ui_badge", "ui_bubble", "ui_chalkboard", "ui_paper", "ui_banner", "ui_tray"]:
+			"icon_dice", "icon_shield", "icon_bolt", "icon_bell", "ui_badge", "ui_bubble", "ui_chalkboard", "ui_paper", "ui_banner", "ui_tray",
+			"fx_silver", "fx_gold", "fx_burst", "fx_steam", "fx_star", "tray_empty", "tray_full", "ui_arrow", "sign_plate", "warm_box"]:
 		_ui[n] = _maybe(ART + n + ".png")
+	_ui["hand"] = _maybe("res://assets/ui/cursor_hand.png")
+	_bar_bg = UiKit.box(Color(0.2, 0.12, 0.07, 0.85), Color(0.55, 0.36, 0.2), 2, 6)
+	_bar_fill = UiKit.box(Color.WHITE, Color.TRANSPARENT, 0, 4)
+	_pip = UiKit.box(Color.WHITE, Color(0.25, 0.14, 0.07, 0.8), 2, 4)
+
+
+## A sprite from the art kit centred at `c`, its long side `size`, turned `rot`.
+func _sprite(ci: CanvasItem, name: String, c: Vector2, size: float, rot := 0.0, col := Color.WHITE) -> void:
+	var t: Texture2D = _ui.get(name, null)
+	if t == null:
+		return
+	var k := size / maxf(t.get_width(), t.get_height())
+	ci.draw_set_transform(c, rot, Vector2(k, k))
+	ci.draw_texture(t, -t.get_size() * 0.5, col)
+	ci.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+
+
+## A soft glow (or shadow, tinted dark) of `size` x `size` * `squash` at `c`.
+func _glow(ci: CanvasItem, c: Vector2, size: float, col: Color, squash := 1.0) -> void:
+	var sz := Vector2(size, size * squash)
+	ci.draw_texture_rect(UiKit.glow(), Rect2(c - sz * 0.5, sz), false, col)
 
 
 ## A big moment for the banner (queued: one at a time).
@@ -2846,7 +2940,7 @@ func _draw_hud(font: Font) -> void:
 	var pulse := 1.0 + (0.08 * sin(_t * 12.0) if urgent else 0.0)
 	_write(font, a.position + Vector2(40, 58), tr("食堂关门还剩"), 22, Color(0.92, 0.95, 0.9), Color(0, 0, 0, 0))
 	var num := "%d" % int(ceil(left))
-	_write(_dfont, a.position + Vector2(196, 74), num, int(54 * pulse), Color(1.0, 0.45, 0.4) if urgent else Color(0.98, 0.98, 0.92), Color(0, 0, 0, 0))
+	_write(_nfont, a.position + Vector2(196, 74), num, int(54 * pulse), Color(1.0, 0.45, 0.4) if urgent else Color(0.98, 0.98, 0.92), Color(0, 0, 0, 0))
 	_write(font, a.position + Vector2(206 + _dfont.get_string_size(num, HORIZONTAL_ALIGNMENT_LEFT, -1, 54).x, 70), tr("秒"), 22, Color(0.92, 0.95, 0.9), Color(0, 0, 0, 0))
 	var line2 := tr(Game.plate())
 	if trial != "":
@@ -2867,7 +2961,7 @@ func _draw_hud(font: Font) -> void:
 	var b := Rect2(1530, 14, 370, 92)
 	_piece("ui_paper", b)
 	_icon("token", b.position + Vector2(46, 46), 52)
-	_write(_dfont, b.position + Vector2(84, 62), Game.fmt(_shown), 46, Color(0.86, 0.6, 0.12), Color(1, 1, 1, 0.9))
+	_write(_nfont, b.position + Vector2(84, 62), Game.fmt(_shown), 46, Color(0.86, 0.6, 0.12), Color(1, 1, 1, 0.9))
 	_write(font, b.position + Vector2(268, 62), tr("token"), 20, INK, Color(0, 0, 0, 0))
 	var tray := Rect2(1545, 112, 340, 101)
 	_piece("ui_tray", tray)
@@ -2954,7 +3048,14 @@ func _badge(c: Vector2, icon: String, text: String, id: String, value: float, la
 	if label != "":
 		_write(font, Vector2(x, c.y + 9 * k), label, int(22 * k), INK, Color(0, 0, 0, 0))
 		x += lw * k
-	_write(_dfont, Vector2(x, c.y + 11 * k), text, int(28 * k), ENAMEL, Color(0, 0, 0, 0))
+	_write(_nfont, Vector2(x, c.y + 11 * k), text, int(28 * k), ENAMEL, Color(0, 0, 0, 0))
+
+
+## How many boxes are in a stack: a small enamel tag with the number (not a bare "×2").
+func _count_tag(c: Vector2, n: int) -> void:
+	var r := Rect2(c - Vector2(26, 19), Vector2(52, 38))
+	UiKit.nine(self, _ui.get("ui_badge", null), r, 30.0, 0.55)
+	_write(_nfont, Vector2(c.x, c.y + 10), str(n), 26, ENAMEL, Color(0, 0, 0, 0), true)
 
 
 ## Floaters, chips and the two speech bubbles (drawn over the play field).
@@ -2966,17 +3067,17 @@ func _draw_floaters(font: Font) -> void:
 		var p: Vector2 = x.pos + Vector2(0, -50.0 * t)
 		match x.get("kind", "info"):
 			"money":
-				_write(_dfont, p, x.text, int(34 * k), Color(GOLD_C, a), Color(0.3, 0.15, 0.02, a))
+				_write(_nfont, p, x.text, int(34 * k), Color(GOLD_C, a), Color(0.3, 0.15, 0.02, a))
 			"crit":
-				_write(_dfont, p, x.text, int(42 * k), Color(1.0, 0.36, 0.28, a), Color(0.25, 0.02, 0.02, a))
+				_write(_nfont, p, x.text, int(42 * k), Color(1.0, 0.36, 0.28, a), Color(0.25, 0.02, 0.02, a))
 			"mult":
-				_write(_dfont, p, x.text, int(32 * k), Color(0.55, 0.75, 1.0, a), Color(0.05, 0.1, 0.25, a))
+				_write(_nfont, p, x.text, int(32 * k), Color(0.55, 0.75, 1.0, a), Color(0.05, 0.1, 0.25, a))
 			"set":
 				_write(_dfont, p, x.text, int(30 * k), Color(1.0, 0.93, 0.7, a), Color(0.3, 0.15, 0.02, a))
 			_:
 				var w := font.get_string_size(x.text, HORIZONTAL_ALIGNMENT_LEFT, -1, 22).x
-				draw_rect(Rect2(p + Vector2(-10, -24), Vector2(w + 20, 32)), Color(0.12, 0.07, 0.04, 0.7 * a))
-				_write(font, p, x.text, 22, Color(1.0, 0.94, 0.82, a), Color(0, 0, 0, 0))
+				UiKit.nine(self, _ui.get("ui_paper", null), Rect2(p + Vector2(-16, -30), Vector2(w + 32, 42)), 26.0, 0.5, Color(1, 1, 1, a))
+				_write(font, p, x.text, 22, Color(INK, a), Color(0, 0, 0, 0))
 	for c in _chips:
 		var t: float = c.t
 		var k := 1.0 + 0.5 * maxf(0.0, 1.0 - t / 0.15)
@@ -3009,8 +3110,8 @@ func _draw_hand_tag(at: Vector2, b: Dictionary) -> void:
 	var x0 := at.x - cap * 9.0
 	for i in cap:
 		var c := Vector2(x0 + i * 18.0 + 9.0, at.y)
-		draw_circle(c, 7.0, Color(0.1, 0.06, 0.04, 0.6))
-		draw_circle(c, 5.5, (Color(1.0, 0.5, 0.4) if used >= cap else GOLD_C) if i < used else Color(1, 1, 1, 0.25))
+		_pip.bg_color = (Color(1.0, 0.5, 0.4) if used >= cap else GOLD_C) if i < used else Color(1, 0.97, 0.9, 0.3)
+		draw_style_box(_pip, Rect2(c - Vector2(7, 7), Vector2(14, 14)))
 	var close := _closest_recipe(b.items)
 	if not close.is_empty():
 		var r: Dictionary = close[0]
@@ -3023,7 +3124,7 @@ func _draw_hand_tag(at: Vector2, b: Dictionary) -> void:
 			_draw_food_tinted(self, need, Vector2(xs, at.y + 34), 0.0, 36.0 / SIZE_PX[need], Color.WHITE if have else Color(0.3, 0.3, 0.3, 0.6))
 			xs += 44.0
 		var ax := xs - 2.0   # an arrow to the 套餐 it makes
-		draw_colored_polygon(PackedVector2Array([Vector2(ax, at.y + 24), Vector2(ax + 16, at.y + 34), Vector2(ax, at.y + 44)]), Color(1, 0.92, 0.7))
+		_sprite(self, "ui_arrow", Vector2(ax + 8, at.y + 34), 30.0)
 		_draw_food_tinted(self, r.result, Vector2(xs + 30, at.y + 34), 0.0, 44.0 / SIZE_PX[r.result], Color.WHITE)
 
 

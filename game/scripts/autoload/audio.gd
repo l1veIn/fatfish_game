@@ -237,7 +237,8 @@ func slowmo(on: bool) -> void:
 	_slow = on and not _settled
 
 
-func sfx(sound: String, volume_db := 0.0, pitch_variance := 0.08) -> void:
+## `pitch`: 1 = as recorded (the checkout's stamps climb a scale with it).
+func sfx(sound: String, volume_db := 0.0, pitch_variance := 0.08, pitch := 1.0) -> void:
 	var variants: Array = _sfx.get(sound, [])
 	if variants.is_empty():
 		return
@@ -266,7 +267,7 @@ func sfx(sound: String, volume_db := 0.0, pitch_variance := 0.08) -> void:
 	_last_played[sound] = now
 	p.stream = stream
 	p.volume_db = volume_db
-	p.pitch_scale = 1.0 + randf_range(-pitch_variance, pitch_variance)
+	p.pitch_scale = pitch * (1.0 + randf_range(-pitch_variance, pitch_variance))
 	p.play()
 
 

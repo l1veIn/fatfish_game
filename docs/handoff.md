@@ -18,6 +18,11 @@
 - **人设（用户 2026-10-18 定）**：前期的大肥鱼木讷、情感迟钝，不笑；表情随版本解锁（`Game.emotion()`：V3.1 以前 0 木讷、V3.2 偶尔闭眼小笑、V4 起完整表情，标题页换成站着微笑的立绘）。上班画面基本不变，只在吃到好东西时流露一下。
   - 标题页和技能树（V4 以前）：站着抱铁盆的全身像（`rig_basin`，`gen_rig.sh stand_basin` + `prep_rig.build_basin`，对齐在原立绘的画布上），鼠标移到头上变小手，摸头会慢慢不耐烦，最后把盆扣头上，鼠标变勺子，点击是敲盆声；放着不管盆会拿下来。
   - 吃饱关门：她滑到桌子后面，躺平图落到桌上（`fatfish/lie_full.png`，结算卡也用）。截图测试：`game/tests/deadpan_test.tscn`（要加 `-- --autotest`，用测试存档）。
+- **特效和结账（2026-10-18 打磨）**：
+  - Demo 时期的画圈、画方块特效都换成了 `gen_assets.sh polish` 生成的图：品级光晕、合成爆光、热气、星星、托盘、箭头、铜锁。
+  - 九宫格和光晕工具在 `UiKit.nine()` / `glow()` / `vignette()`。
+  - 关门结账是饭票小票，见 `docs/settlement_design.md`。
+  - 截图测试：`polish_test`、`checkout_test`、`crew_spread_test`（都在 `game/tests/`，加 `-- --autotest --out=<dir>`）。
 - **节奏（机器人实测）**：第 13 顿发布 R1，21 顿 V3.1，25 顿 V3.2，31 顿 V4，35 顿 AGI。
 
 ## 和用户合作的方式（重要）

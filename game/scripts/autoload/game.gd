@@ -87,6 +87,7 @@ const BASE := {
 	"warm": 0.0,           # KV Cache 保温箱
 	"final": 0.0,          # Final Answer: the 保温箱 box x(2 + final)
 	"bon": 0.0,            # Best-of-N
+	"eos": 0.0,            # <EOS>: the best bite of the 保温箱 box, eaten last, x3 / x5 / x8 (levels)
 	"constit": 0.0,        # 宪法 AI: a softer balance curve
 	"grok": 0.0,           # 顿悟
 	"grok_need": 30.0,     # greens to force down before she gets it (学习率预热)

@@ -141,6 +141,75 @@ static func _circle(d: int, fill: Color, edge: Color) -> ImageTexture:
 	return ImageTexture.create_from_image(img)
 
 
+## Draws `t` into `r` as a nine-slice: the corners keep their size (`m` texture px, drawn at
+## `m * k`), the edges and middle stretch. For the paper / chalkboard / badge art at any size.
+static func nine(ci: CanvasItem, t: Texture2D, r: Rect2, m: float, k := 1.0, col := Color.WHITE) -> void:
+	if t == null:
+		return
+	var ts := t.get_size()
+	var d := minf(m * k, minf(r.size.x, r.size.y) * 0.5)
+	var sx := [0.0, m, ts.x - m, ts.x]
+	var sy := [0.0, m, ts.y - m, ts.y]
+	var dx := [r.position.x, r.position.x + d, r.end.x - d, r.end.x]
+	var dy := [r.position.y, r.position.y + d, r.end.y - d, r.end.y]
+	for i in 3:
+		for j in 3:
+			ci.draw_texture_rect_region(t, Rect2(dx[i], dy[j], dx[i + 1] - dx[i], dy[j + 1] - dy[j]),
+				Rect2(sx[i], sy[j], sx[i + 1] - sx[i], sy[j + 1] - sy[j]), col)
+
+
+static var _numerals: Font
+## 「饭票数字」(docs/font_plan.md, pipeline/make_numerals.py): the number font, a bitmap font
+## drawn white with a dark ink edge, so the colour asked for when drawing tints it. What it has
+## no glyph for falls back to 站酷快乐体.
+static func numerals() -> Font:
+	if _numerals == null:
+		var d: Font = load("res://assets/ui/ZCOOLKuaiLe.ttf") if ResourceLoader.exists("res://assets/ui/ZCOOLKuaiLe.ttf") else ThemeDB.fallback_font
+		if ResourceLoader.exists("res://assets/ui/numerals.fnt"):
+			var f: FontFile = load("res://assets/ui/numerals.fnt")
+			f.fallbacks = [d]
+			_numerals = f
+		else:
+			_numerals = d
+	return _numerals
+
+
+static var _glow: GradientTexture2D
+## A soft round glow (white in the middle, fading out), tinted when drawn: halos, shadows.
+static func glow() -> GradientTexture2D:
+	if _glow == null:
+		var g := Gradient.new()
+		g.set_color(0, Color(1, 1, 1, 1))
+		g.set_color(1, Color(1, 1, 1, 0))
+		g.add_point(0.45, Color(1, 1, 1, 0.55))
+		_glow = GradientTexture2D.new()
+		_glow.gradient = g
+		_glow.fill = GradientTexture2D.FILL_RADIAL
+		_glow.fill_from = Vector2(0.5, 0.5)
+		_glow.fill_to = Vector2(1.0, 0.5)
+		_glow.width = 128
+		_glow.height = 128
+	return _glow
+
+
+static var _vignette: GradientTexture2D
+## Clear in the middle, dark at the edges: drawn over the whole screen, tinted.
+static func vignette() -> GradientTexture2D:
+	if _vignette == null:
+		var g := Gradient.new()
+		g.set_color(0, Color(1, 1, 1, 0))
+		g.set_color(1, Color(1, 1, 1, 1))
+		g.add_point(0.55, Color(1, 1, 1, 0))
+		_vignette = GradientTexture2D.new()
+		_vignette.gradient = g
+		_vignette.fill = GradientTexture2D.FILL_RADIAL
+		_vignette.fill_from = Vector2(0.5, 0.5)
+		_vignette.fill_to = Vector2(1.05, 0.5)
+		_vignette.width = 256
+		_vignette.height = 144
+	return _vignette
+
+
 ## Hover / click sounds and a small bounce for one button (called for every button by main.gd).
 static func hook(b: BaseButton) -> void:
 	if b.has_meta("ui_hooked"):

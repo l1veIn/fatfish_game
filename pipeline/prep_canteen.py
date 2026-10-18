@@ -30,6 +30,10 @@ SPRITES = {
 
 ROUND3 = {"sign_plate": ("width", 240), "warm_box": ("width", 190), "ticket": ("width", 200),
           "ticket_gold": ("width", 200), "stamp": ("width", 110), "pin": ("width", 40)}
+# polish pass (gen_assets.sh polish): effect sprites, the two table trays, an arrow
+POLISH = {"fx_silver": ("long", 256), "fx_gold": ("long", 256), "fx_burst": ("long", 320),
+          "fx_steam": ("long", 128), "fx_star": ("long", 96), "tray_empty": ("width", 300),
+          "tray_full": ("width", 300), "ui_arrow": ("width", 96)}
 # the HUD kit's blank pieces (docs/hud_design.md)
 HUD_UI = {"ui_badge": ("width", 240), "ui_bubble": ("width", 380), "ui_chalkboard": ("width", 440),
           "ui_paper": ("width", 320), "ui_banner": ("width", 820), "ui_tray": ("width", 340)}
@@ -120,6 +124,8 @@ def main() -> None:
                 SPRITES[n] = ("width", 320)
             elif n in ROUND3:
                 SPRITES[n] = ROUND3[n]
+            elif n in POLISH:
+                SPRITES[n] = POLISH[n]
             elif n.startswith("icon_"):
                 SPRITES[n] = ("long", 96)   # HUD icons (gen_assets.sh hud)
             elif n in HUD_UI:
@@ -213,5 +219,22 @@ def main() -> None:
         print("grid check -> art_src/assets/_box_grid_check.png")
 
 
+def stamp_ring() -> None:
+    """stamp_ring.png: the red stamp's outer rings only (the rice bowl in the middle cut away),
+    a blank stamp the checkout writes multipliers into."""
+    import numpy as np
+    a = np.asarray(Image.open(os.path.join(SRC, "stamp_0.png")).convert("RGBA")).astype(np.float32).copy()
+    ys, xs = np.mgrid[0:a.shape[0], 0:a.shape[1]]
+    pts = np.argwhere(a[..., 3] > 40)
+    cy, cx = pts.mean(0)
+    r = np.hypot(ys - cy, xs - cx) / (max(np.ptp(pts[:, 0]), np.ptp(pts[:, 1])) / 2)
+    a[..., 3] *= np.clip((r - 0.74) / 0.04, 0, 1)
+    im = Image.fromarray(a.astype(np.uint8))
+    im = crop(im)
+    im.thumbnail((256, 256), Image.LANCZOS)
+    im.save(os.path.join(OUT, "stamp_ring.png"))
+
+
 if __name__ == "__main__":
     main()
+    stamp_ring()
