@@ -39,14 +39,11 @@ func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_STOP
 	_fish = FishRig.new()
 	_fish.emote = Game.emotion()
-	if _fish.emote < 2:   # before V4: waist up behind the screen edge, holding her basin, deadpan
-		_fish.seated = true
+	_fish.basin = _fish.emote < 2   # before V4: deadpan, holding her basin
+	if _fish.basin:
 		_fish.idle_clip = "title_basin"
-		_fish.position = Vector2(215, 1085)
-		_fish.height = 470.0
-	else:
-		_fish.position = Vector2(190, 1040)
-		_fish.height = 420.0
+	_fish.position = Vector2(190, 1040)
+	_fish.height = 420.0
 	add_child(_fish)
 	_start = Button.new()
 	_start.text = tr("去打饭")

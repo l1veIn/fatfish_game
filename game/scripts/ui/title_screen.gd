@@ -2,7 +2,7 @@ class_name TitleScreen
 extends Control
 ## The title screen: the canteen at night with food drifting down, 大肥鱼 on the right, the logo
 ## and the menu on the left. Signals go to main.gd.
-## Before V4 she is the early, 木讷 大肥鱼 (Game.emotion()): waist up, holding her iron basin,
+## Before V4 she is the early, 木讷 大肥鱼 (Game.emotion()): standing, holding her iron basin,
 ## deadpan. Pat her head (the cursor turns into a hand): the first pats she just takes, then she
 ## side-eyes you, pouts, and at last puts the basin on her head; now the cursor is a spoon and a
 ## click knocks on the basin. Leave her alone and the basin comes off again.
@@ -21,12 +21,12 @@ var _logo: Control
 var _t := 0.0
 var _menu: VBoxContainer
 var _poke_cd := 0.0
-var _seated := false
+var _early := false
 var _pats := 0.0          # how fed up she is: +1 a pat, slowly forgiven
 var _helmet_t := 0.0      # > 0: the basin is on her head (seconds left unless knocked)
 var _knocks := 0
 var _cursor := ""         # "", "hand", "spoon"
-const HEAD := Rect2(230, 30, 570, 530)   # her head (and the basin on it) in the seated drawing, texture px
+const HEAD := Rect2(250, 10, 530, 460)   # her head (and the basin on it) in the standing drawing, texture px
 const ANNOYED_AT := 4.0
 const POUT_AT := 7.0
 const HELMET_AT := 9.0
@@ -49,16 +49,11 @@ func _ready() -> void:
 
 	_fish = FishRig.new()
 	_fish.emote = Game.emotion()
-	_seated = _fish.emote < 2
-	if _seated:
-		_fish.seated = true
-		_fish.idle_clip = "title_basin"
-		_fish.height = 780.0                 # her head the same size as the standing drawing's (height 1000)
-		_fish.position = Vector2(1400, 1050)
-	else:
-		_fish.idle_clip = "title_idle"
-		_fish.height = 1000.0
-		_fish.position = Vector2(1390, 1048)
+	_early = _fish.emote < 2
+	_fish.basin = _early
+	_fish.idle_clip = "title_basin" if _early else "title_idle"
+	_fish.height = 1000.0
+	_fish.position = Vector2(1390, 1048)
 	add_child(_fish)
 
 	_logo = Control.new()
@@ -140,7 +135,7 @@ func _process(delta: float) -> void:
 		if f.pos.y > 1180:
 			f.pos = Vector2(randf_range(0, 1920), -100)
 	_logo.rotation = sin(_t * 1.3) * 0.012
-	if _seated:
+	if _early:
 		_update_mood(delta)
 	queue_redraw()
 
@@ -195,7 +190,7 @@ func _draw() -> void:
 func _gui_input(event: InputEvent) -> void:
 	if not (event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT):
 		return
-	if _seated:
+	if _early:
 		if _fish.tex_rect(HEAD).has_point(event.position):
 			_pat()
 		return

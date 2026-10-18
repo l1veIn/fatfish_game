@@ -48,14 +48,19 @@ def load(name: str) -> Image.Image:
     return Image.open(os.path.join(SRC, name)).convert("RGBA")
 
 
-def align(variant: Image.Image, ref: Image.Image, exclude=None) -> tuple:
+def align(variant: Image.Image, ref: Image.Image, exclude=None, keep=None) -> tuple:
     """Scale and offset that put `variant` (any size) onto `ref`'s canvas. Matches on the
-    region outside the face (hair, headdress, fins), which should be identical."""
+    region outside the face (hair, headdress, fins), which should be identical; `keep` (ref
+    pixels) limits the match to that box."""
     ref_small = np.asarray(ref.resize((290, 290), Image.LANCZOS)).astype(np.float32) / 255.0
     ex = exclude or (FACE[0] - HEAD_CROP[0], FACE[1] - HEAD_CROP[1], FACE[2] - HEAD_CROP[0], FACE[3] - HEAD_CROP[1])
     fx0, fy0, fx1, fy1 = ex[0] / ref.width, ex[1] / ref.height, ex[2] / ref.width, ex[3] / ref.height
     weight = (ref_small[..., 3] > 0.5).astype(np.float32)
     weight[int(fy0 * 290):int(fy1 * 290), int(fx0 * 290):int(fx1 * 290)] = 0.0   # ignore the face
+    if keep is not None:
+        box = np.zeros_like(weight)
+        box[int(keep[1] / ref.height * 290):int(keep[3] / ref.height * 290), int(keep[0] / ref.width * 290):int(keep[2] / ref.width * 290)] = 1.0
+        weight *= box
 
     variant = variant.resize((580, 580), Image.BILINEAR)   # align at low resolution: fast
 
@@ -298,6 +303,57 @@ def main() -> None:
         print("preview -> art_src/rig/_faces.png")
 
 
+## The third rig, "basin" (title screen before V4: standing, deadpan, holding her iron basin):
+## gen_rig.sh stand_basin redraws of the standing master. Each is moved onto the master's canvas
+## (the body on its head, the basin helmet on face, fins and shoulders) so the standing rig's
+## shader regions and face patches fit -> game/assets/fatfish/rig_basin/ + fish_rig_basin.json.
+BASIN_OUT = os.path.join(ROOT, "game", "assets", "fatfish", "rig_basin")
+BASIN_DATA = os.path.join(ROOT, "game", "data", "fish_rig_basin.json")
+BASIN_BODY = "stand_basin_a_0.png"
+BASIN_POSES = {"sulk": ("stand_helmet_a_0.png", (460, 600, 1620, 1160))}   # pose: (drawing, match box: eyes and fins)
+BASIN_FACES = ["blank", "jitome"]            # new ex_*; pout and blink come from the standing rig
+
+
+def on_canvas(var: Image.Image, ref: Image.Image, p: tuple) -> Image.Image:
+    s, dx, dy = p
+    w = var.width
+    m = (1.0 / s, 0.0, -dx * w / s, 0.0, 1.0 / s, -dy * w / s)
+    return var.transform(var.size, Image.AFFINE, m, Image.BICUBIC).resize(ref.size, Image.LANCZOS)
+
+
+def build_basin() -> None:
+    if not os.path.exists(os.path.join(SRC, BASIN_BODY)):
+        return
+    os.makedirs(BASIN_OUT, exist_ok=True)
+    master = load("master_fixed.png")
+    k = BODY_PX / master.width
+    var = load(BASIN_BODY)
+    p, err, _ = align(var, master, keep=(0, 0, master.width, HEAD_CROP[3]))
+    print(f"basin body err {err:.4f} scale {p[0]:.3f} offset {p[1]:+.3f} {p[2]:+.3f}")
+    on_canvas(var, master, p).resize((BODY_PX, BODY_PX), Image.LANCZOS).save(os.path.join(BASIN_OUT, "body.png"))
+    poses = {}
+    for name, (f, box) in BASIN_POSES.items():
+        var = load(f)
+        p, err, _ = align(var, master, exclude=(0, 0, 1, 1), keep=box)   # the eyes are what must not jump
+        print(f"basin pose {name} err {err:.4f} scale {p[0]:.3f} offset {p[1]:+.3f} {p[2]:+.3f}")
+        on_canvas(var, master, p).resize((BODY_PX, BODY_PX), Image.LANCZOS).save(os.path.join(BASIN_OUT, f"pose_{name}.png"))
+        poses[name] = {"err": round(err, 4)}
+    ref = load("ref_head.png")
+    face_px = (round((FACE[2] - FACE[0]) * k), round((FACE[3] - FACE[1]) * k))
+    faces = {}
+    for name in BASIN_FACES:
+        var = load(f"ex_{name}_0.png")
+        p, err, _ = align(var, ref)
+        face_patch(var, ref, p).resize(face_px, Image.LANCZOS).save(os.path.join(BASIN_OUT, f"face_{name}.png"))
+        faces[name] = {"err": round(err, 4)}
+        print(f"basin face {name} err {err:.4f}")
+    for name in ("pout", "blink"):
+        Image.open(os.path.join(OUT, f"face_{name}.png")).save(os.path.join(BASIN_OUT, f"face_{name}.png"))
+        faces[name] = {}
+    json.dump({"body_px": BODY_PX, "face_rect": [round(FACE[0] * k), round(FACE[1] * k), face_px[0], face_px[1]],
+               "faces": faces, "poses": poses}, open(BASIN_DATA, "w", encoding="utf-8", newline="\n"), indent=1)
+
+
 ## Single sprites around the rig (gen_rig.sh lie): trimmed to their pixels, scaled to fit `px`.
 ##   fatfish/lie_full.png  吃饱躺平, on the table at closing time and on the result card
 ##   ui/cursor_*.png       title-screen cursors (patting hand, spoon for the basin helmet)
@@ -305,24 +361,25 @@ PROPS = {"lie_a_0.png": ("fatfish/lie_full.png", 900), "cursor_hand_0.png": ("ui
          "cursor_spoon_0.png": ("ui/cursor_spoon.png", 64)}
 
 
-def blink_flat() -> None:
-    """Seated face "blink_flat": the closed eyes of face_blink over the flat mouth of face_blank,
-    so the deadpan face can blink without flashing a smile."""
-    d = os.path.join(ROOT, "game", "assets", "fatfish", "rig_seat")
+def blink_flat(rig: str, data: str, split: float) -> None:
+    """Face "blink_flat": the closed eyes of face_blink over the flat mouth of face_blank (rows
+    below `split` of the patch), so the deadpan face can blink without flashing a smile."""
+    d = os.path.join(ROOT, "game", "assets", "fatfish", rig)
     bl = np.asarray(Image.open(os.path.join(d, "face_blink.png")).convert("RGBA")).astype(np.float32)
     bk = np.asarray(Image.open(os.path.join(d, "face_blank.png")).convert("RGBA")).astype(np.float32)
-    w = np.clip((np.arange(bl.shape[0]) - 122.0) / 12.0, 0.0, 1.0)[:, None, None]   # eyes above ~row 122, mouth below 134
+    w = np.clip((np.arange(bl.shape[0]) - split) / 10.0, 0.0, 1.0)[:, None, None]
     Image.fromarray((bl * (1 - w) + bk * w).round().astype(np.uint8)).save(os.path.join(d, "face_blink_flat.png"))
-    path = os.path.join(ROOT, "game", "data", "fish_rig_seat.json")
+    path = os.path.join(ROOT, "game", "data", data)
     info = json.load(open(path, encoding="utf-8"))
     if "blink_flat" not in info["faces"]:
         info["faces"]["blink_flat"] = {}
         json.dump(info, open(path, "w", encoding="utf-8", newline="\n"), indent=1)
-    print("face_blink_flat.png")
+    print(rig, "face_blink_flat.png")
 
 
 def build_props() -> None:
-    blink_flat()
+    blink_flat("rig_seat", "fish_rig_seat.json", 122.0)   # eyes above row ~122 of the patch, mouth below
+    blink_flat("rig_basin", "fish_rig_basin.json", 102.0)
     for src, (dst, px) in PROPS.items():
         path = os.path.join(SRC, src)
         if not os.path.exists(path):
@@ -337,10 +394,12 @@ def build_props() -> None:
 
 if __name__ == "__main__":
     if "--props" in sys.argv:
+        build_basin()
         build_props()
         sys.exit()
     if "--seat" not in sys.argv:
         main()
     build_seat("--preview" in sys.argv)
     build_crew()
+    build_basin()
     build_props()

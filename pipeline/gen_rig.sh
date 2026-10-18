@@ -208,3 +208,21 @@ if [ "${1:-}" = lie ]; then
   gen cursor_spoon "--image $OUT/master_0.png" "Single small game UI icon, centred, transparent background, no text, no shadow: a cute cartoon stainless-steel soup spoon held diagonally, bowl of the spoon at the top-left and handle to the bottom-right, thick dark outline, simple and readable at 64 pixels, matching the art style of the reference." &
   wait
 fi
+# 2026-10-18 full-body deadpan for the title (user: wants the whole figure, not waist up): the
+# standing master holding her basin, and with the basin on her head, plus two deadpan faces for
+# the standing head. Same framing as master_fixed.png so the standing rig's regions still fit.
+#   bash pipeline/gen_rig.sh stand_basin
+if [ "${1:-}" = stand_basin ]; then
+  M="--image $OUT/master_fixed.png"
+  POSE="Redraw exactly this character from the reference image, identical full-body framing, size, position on the canvas, head position and angle, hair, outfit, whale tail and art style, transparent background, no text; only her arms, hands, a big plain round stainless-steel basin (iron wash-basin style bowl, no pattern, no logo) and her expression change:"
+  gen stand_basin_a "$M" "$POSE she holds the big empty basin with both hands in front of her tummy, elbows bent, the basin rim at chest height so her whole face and neck bow stay visible; $DEADPAN, looking straight at the viewer." &
+  gen stand_basin_b "$M" "$POSE she hugs the big empty basin against her tummy with both arms, slightly tilted toward the viewer, her face fully visible; $DEADPAN, looking straight at the viewer." &
+  gen stand_helmet_a "$M" "$POSE the big basin is worn upside down on her head like an oversized helmet: it sits deep, its rim resting just above her eyebrows and covering her headdress and the top of her hair, the basin much wider than her head; her arms hang straight down at her sides; $DEADPAN, staring straight ahead, quietly sulking. Keep the whole basin inside the picture." &
+  wait
+  gen stand_helmet_b "$M" "$POSE the big basin is worn upside down on her head like a helmet, rim just above her eyebrows, much wider than her head; her arms hang down at her sides with small fists; $DEADPAN, a tiny pout, staring straight ahead. Keep the whole basin inside the picture." &
+  H="--image $OUT/ref_head.png"
+  SAME="Redraw exactly this character's head from the reference image, identical framing, size, position, angle, hair, fins and headdress, same art style; only the facial expression changes, transparent background."
+  gen ex_blank "$H" "$SAME $DEADPAN, looking straight at the viewer." &
+  gen ex_jitome "$H" "$SAME Unimpressed half-lidded flat stare (jitome), eyelids lowered halfway, tiny flat mouth, totally deadpan." &
+  wait
+fi

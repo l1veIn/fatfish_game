@@ -1,0 +1,25 @@
+{
+ "body_px": 1024,
+ "face_rect": [
+  390,
+  260,
+  245,
+  160
+ ],
+ "faces": {
+  "blank": {
+   "err": 0.0349
+  },
+  "jitome": {
+   "err": 0.0403
+  },
+  "pout": {},
+  "blink": {},
+  "blink_flat": {}
+ },
+ "poses": {
+  "sulk": {
+   "err": 0.1141
+  }
+ }
+}

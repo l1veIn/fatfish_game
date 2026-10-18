@@ -4,7 +4,9 @@ extends Node2D
 ## head tilt, hair / tail / fin / ahoge sway), with expression patches on the face that follow
 ## the head. Everything moves every frame from smooth functions of time, so there are no frames
 ## to jitter. Two drawings (pipeline/prep_rig.py):
-##   seated = false   standing (title, skill tree, result card): game/assets/fatfish/rig/
+##   seated = false   standing (title from V4, result card): game/assets/fatfish/rig/
+##   basin = true     standing, deadpan, holding her iron basin (title before V4), with the
+##                    basin worn as a helmet as its one pose: game/assets/fatfish/rig_basin/
 ##   seated = true    from the waist up, holding her iron basin (the shift, behind the table):
 ##                    game/assets/fatfish/rig_seat/, plus POSE layers (arms, basin, props) for
 ##                    eating, banging the basin, sulking with it on her head, cheering, ...
@@ -51,9 +53,9 @@ const FACE_FALLBACK := {"blank": "", "jitome": "pout", "o": "surprised", "tear":
 ## Per drawing: folder, rig data, feet (texture px), her height (px), neck (px) and the shader
 ## regions (uv) that differ from the standing defaults in rig.gdshader.
 const RIGS := {
-	false: {"dir": "res://assets/fatfish/rig/", "data": "res://data/fish_rig.json",
+	"stand": {"dir": "res://assets/fatfish/rig/", "data": "res://data/fish_rig.json",
 		"feet": Vector2(517, 1011), "char": 998.0, "neck": Vector2(510, 440), "regions": {}},
-	true: {"dir": "res://assets/fatfish/rig_seat/", "data": "res://data/fish_rig_seat.json",
+	"seat": {"dir": "res://assets/fatfish/rig_seat/", "data": "res://data/fish_rig_seat.json",
 		"feet": Vector2(512, 1024), "char": 1014.0, "neck": Vector2(512, 566), "regions": {
 			"neck": Vector2(0.5, 0.553), "head_y": Vector2(0.53, 0.62),
 			"ahoge_box": Vector4(0.25, 0.44, 0.08, 0.115), "ahoge_root": Vector2(0.455, 0.09),
@@ -62,9 +64,15 @@ const RIGS := {
 			"arm_l": Vector4(-1, -1, 0.01, 0.01), "arm_r": Vector4(-1, -1, 0.01, 0.01),
 			"belly_e": Vector4(0.5, 0.78, 0.2, 0.12), "breath_y": Vector2(0.72, 1.0),
 			"hair_band": Vector4(0.29, 0.38, 0.45, 0.95), "tail_box": Vector4(2, 3, 2, 3)}},
+	# redrawn on the standing master's canvas (prep_rig.build_basin): the standing regions, but
+	# the arms hold the basin and don't sway
+	"basin": {"dir": "res://assets/fatfish/rig_basin/", "data": "res://data/fish_rig_basin.json",
+		"feet": Vector2(517, 1011), "char": 998.0, "neck": Vector2(510, 440), "regions": {
+			"arm_l": Vector4(-1, -1, 0.01, 0.01), "arm_r": Vector4(-1, -1, 0.01, 0.01)}},
 }
 
 var seated := false
+var basin := false                     # standing with the basin (rig_basin); ignored when seated
 var idle_clip := "idle"
 var height := 256.0
 var clip := ""
@@ -95,7 +103,7 @@ var _lean := 0.0
 
 
 func _ready() -> void:
-	_cfg = RIGS[seated]
+	_cfg = RIGS["seat" if seated else ("basin" if basin else "stand")]
 	texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 	_root = Node2D.new()
 	add_child(_root)
@@ -195,7 +203,7 @@ func _process(delta: float) -> void:
 func _apply(delta: float) -> void:
 	var s := height * (200.0 / 256.0) / float(_cfg.char)
 	var face: String = CLIPS[clip][0]
-	var pose: String = CLIPS[clip][2] if seated else ""
+	var pose: String = CLIPS[clip][2] if not _poses.is_empty() else ""
 	var head := sin(_t * 0.7) * 0.025          # idle: a slow, slight tilt
 	var hop := 0.0
 	var lean := 0.0
@@ -321,7 +329,7 @@ func _apply(delta: float) -> void:
 	if pose_tex != null and not pose.begins_with("bang"):   # banging keeps the deadpan face on top
 		face = ""
 	# blink now and then, only with the calm faces (other faces have their own eyes); the
-	# deadpan one blinks without the smile (blink_flat, seated only)
+	# deadpan one blinks without the smile (blink_flat: seated and basin)
 	if (face == "" or face == "blank") and pose_tex == null:
 		_blink_in -= delta
 		if _blink_in <= 0.0:
@@ -341,9 +349,9 @@ func _apply(delta: float) -> void:
 	_mat.set_shader_parameter("breath", breath)
 	_mat.set_shader_parameter("hair_amp", hair)
 	_mat.set_shader_parameter("fin_angle", fin)
-	_mat.set_shader_parameter("ahoge_angle", sin(_t * 3.1) * 0.09 + _head * 1.5)
+	_mat.set_shader_parameter("ahoge_angle", 0.0 if pose == "sulk" else sin(_t * 3.1) * 0.09 + _head * 1.5)   # (under the basin)
 	_mat.set_shader_parameter("tail_angle", 0.0 if seated else tail)
-	_mat.set_shader_parameter("arm_angle", 0.0 if seated else arm)
+	_mat.set_shader_parameter("arm_angle", 0.0 if seated or basin else arm)
 	_mat.set_shader_parameter("belly", belly)
 	_pivot.position = -_cfg.feet + _cfg.neck + head_shift * 1024.0 - Vector2(0.0, breath * 1024.0)
 	_pivot.rotation = _head
