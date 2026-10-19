@@ -55,6 +55,7 @@ def main() -> None:
         ("mechanics", "mechanic_synergy_test", "mechanic_synergy", "MECHANIC_SYNERGY_TEST:"),
         ("helper-strategy", "helper_strategy_test", "helper_strategy", "HELPER_STRATEGY_TEST:"),
         ("helper-shift", "helper_shift_test", "helper_shift", "HELPER_SHIFT_TEST PASS failures=0"),
+        ("random-shift", "random_shift_test", "random_shift", "RANDOM_SHIFT_TEST PASS failures=0"),
         ("crew-planner", "crew_planner_test", "crew_planner", "CREW_PLANNER_TEST PASS failures=0"),
         ("planner", "meal_planner_test", "meal_planner_release", "MEAL_PLANNER_TEST PASS failures=0"),
         ("service-ui", "canteen_presentation_test", "canteen_presentation_release", '"failures":[]'),
@@ -94,6 +95,9 @@ def main() -> None:
         execute(name, [str(ENGINE), "--headless", "--path", str(ROOT / "game"),
                        f"res://tests/{scene}.tscn", "--", f"--test-profile={profile}", "--lang=zh_CN"], marker)
     if args.visual:
+        execute("random-shift-visual", [str(ENGINE), "--path", str(ROOT / "game"),
+                "res://tests/random_shift_test.tscn", "--", "--test-profile=random_shift",
+                f"--out={out / 'random-shift-visual'}"], "RANDOM_SHIFT_TEST PASS failures=0", 180)
         for small in [False, True]:
             size = "960x540" if small else "1280x720"
             execute(f"collections-{size}", [str(ENGINE), "--path", str(ROOT / "game"),

@@ -519,7 +519,7 @@
  "带小火苗的菜（被变过的、幻觉出来的、暴击的那口）每级再值钱 +0.25 倍。": "Flame-marked food (transformed, hallucinated, or a critical bite) gains +0.25 to its value multiplier per level.",
  "幻觉": "Hallucination",
  "菜掉进饭盒时，有几率凭空多出一口同窗口的菜，不占格子（饭盒角上显示 +1）。每级几率 +8%。": "Catching food may create an extra bite from the same stall. It uses no space (shown as +1 on the box). Chance +8% per level.",
- "亲手送上桌的饭盒有几率整盒「重抽」：散菜换成更高级的菜，每级几率 +10%。可在「助手分工」暂停，下顿生效，保留你想要的装盒搭配。": "A box you deliver may reroll its loose dishes into higher-level food. Chance +10% per level. Pause in Crew Assignments for the next meal to preserve your planned box.",
+ "亲手送上桌的饭盒有几率整盒「重抽」：散菜换成更高级的菜，放不下时原菜升品质并加热；每级几率 +10%。可在「助手分工」暂停，下顿生效。": "A delivered box may reroll loose dishes into higher-level food. If it cannot fit, the original gains quality and heat. Chance +10% per level. Pause in Crew Assignments for the next meal.",
  "涌现能力": "Emergent Ability",
  "一盒里凑够 3 样带小火苗的菜时，有 25% 几率合成「涌现乱炖」：神级套餐，非常值钱。": "Collect 3 flame-marked dishes in a box for a 25% chance to make Emergent Stew: a valuable Legendary combo.",
  "过拟合：看什么都像青菜": "Overfitting: Everything Is Greens",

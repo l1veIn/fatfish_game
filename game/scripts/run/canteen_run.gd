@@ -32,6 +32,10 @@ signal finished(earned: float)
 signal card_shown
 signal to_title
 
+const MEAL_JOURNAL := preload("res://scripts/run/meal_journal.gd")
+var _journal = null
+var _journal_bite_phase := "live"
+
 # --- tuning that is not on the skill tree -----------------------------------------------------
 const GRAVITY := 900.0
 const FLOOR_Y := 1010.0
@@ -541,6 +545,8 @@ func _ready() -> void:
 	_read_stats()
 	if trial != "":
 		_setup_trial()
+	_journal = MEAL_JOURNAL.new()
+	_journal.begin(self)
 	_think = think_time
 	_setup_arms()
 	_peak_t = OFF_PEAK
@@ -874,6 +880,8 @@ func apply_stall_order(order: Array) -> bool:
 	if not Game.set_stall_order(order):
 		return false
 	stall_order = Game.active_stall_order()
+	if _journal != null:
+		_journal.event("stall_layout", _meal_elapsed(), {"order": stall_order.duplicate()})
 	var per := {}
 	for a in _arms:
 		per[a.stall] = int(per.get(a.stall, 0)) + 1
@@ -1129,6 +1137,8 @@ func _merge(b: Dictionary, show: bool) -> void:
 ## it into a better dish (never an ingredient the box is collecting), 过拟合 may turn it green,
 ## 幻觉 may add a ghost bite, 模型融合 fuses three alike, the 套餐 merge, then 涌现 and 大杂烩.
 func _catch(b: Dictionary, it: int, show: bool) -> void:
+	if _journal != null:
+		_journal.count("caught_input", it, self, MEAL_JOURNAL.source(b))
 	# 格格 inspects the first eligible ordinary dish in each of her own boxes.
 	# Already graded food keeps the inspection available for a later plain ingredient.
 	if b.get("crew", false) and b.get("crew_id", "") == "ge" and not b.get("crew_inspected", false) and grade(it) == 0 and not is_ghost(it) and not IS_SET[K(it)] and K(it) != I.JI:
@@ -1149,14 +1159,19 @@ func _catch(b: Dictionary, it: int, show: bool) -> void:
 			if close.is_empty() or not close[1].has(k):
 				var up := _upgrade(k)
 				var upgraded := with_hot(make(up, grade(it))) if up >= 0 else it
+				var original := it
 				# Admission used the falling dish's footprint. A larger replacement must
 				# still fit after recipes merge; otherwise improve the original dish.
-				if up >= 0 and not (k == I.VEG and _grokked) and _accepts(b, upgraded):
+				var keep_green := k == I.VEG and _grokked
+				var fits := up >= 0 and not keep_green and _accepts(b, upgraded)
+				if fits:
 					it = upgraded
 					if show:
 						_chip(b.pos, "dice")
 				else:
 					it = with_hot(with_grade(it, grade(it) + 1))
+				if _journal != null:
+					_journal.transform("temperature", original, it, up >= 0 and not keep_green and not fits, self)
 				k = K(it)
 		if not ordered and overfit and _grokked and k != I.VEG and randf() < 0.15:
 			it = with_hot(make(I.VEG))
@@ -1279,6 +1294,13 @@ func _magnet() -> float:
 # --- input --------------------------------------------------------------------------------------
 
 func _unhandled_input(event: InputEvent) -> void:
+	if _journal != null and not _ended:
+		if event is InputEventJoypadButton or (event is InputEventJoypadMotion and absf(event.axis_value) > 0.2):
+			_journal.data.input_devices["gamepad"] = true
+		elif event is InputEventKey and event.pressed:
+			_journal.data.input_devices["keyboard"] = true
+		elif event is InputEventMouseButton or event is InputEventMouseMotion:
+			_journal.data.input_devices["mouse"] = true
 	if (event is InputEventJoypadButton and event.pressed) or (event is InputEventJoypadMotion and absf(event.axis_value) > 0.3):
 		_hint_input_device = "gamepad"
 	elif (event is InputEventKey and event.pressed) or event is InputEventMouseButton or (event is InputEventMouseMotion and event.relative.length_squared() > 0.01):
@@ -1451,6 +1473,8 @@ func _serve(b: Dictionary) -> void:
 	if regen > 0.0 and not b.get("crew", false) and randf() < regen:
 		_reroll_box(b)
 		_chip(Vector2(1600, 860), "dice")
+	if _journal != null:
+		_journal.box("arrive", b, self)
 	if warm and best_of_n and (_warm == null or _box_worth(b) > _box_worth(_warm)):
 		_put_warm(b)
 		return
@@ -1473,6 +1497,8 @@ func _reroll_box(b: Dictionary) -> void:
 			b.items[i] = candidate[i]
 		else:
 			b.items[i] = with_hot(with_grade(it, grade(it) + 1))
+		if _journal != null:
+			_journal.transform("regenerate", it, b.items[i], b.items[i] != candidate[i], self)
 
 
 ## KV Cache 保温箱: this box waits until closing time (a box already in it goes to the queue).
@@ -1481,8 +1507,12 @@ func _put_warm(b: Dictionary) -> void:
 		b["full"] = _space(b) >= _cap()
 	_note_served(b)
 	if _warm != null:
+		if _journal != null:
+			_journal.box("warm_released", _warm, self)
 		_queue.append(_warm)
 	_warm = b
+	if _journal != null:
+		_journal.box("warm_stored", b, self)
 	_float(WARM_AT + Vector2(-80, -110), "留到最后吃", "set")
 	Audio.sfx("deliver", -4.0)
 
@@ -1497,6 +1527,8 @@ func _note_served(b: Dictionary) -> void:
 	_previous_mono_kind = int(rule.next_mono_kind)
 	_cache_ready = bool(rule.cache_ready)
 	_commit_delivery_chain(b, bool(rule.combo_eligible))
+	if _journal != null:
+		_journal.box("player_submit", b, self)
 	if rule.cache_primed:
 		_float(b.pos + Vector2(-70, -130), "缓存接力" if rule.get("cache_bridge", false) else "缓存已备好", "mult")
 	elif float(rule.add_bonus) > 0.0:
@@ -1582,6 +1614,8 @@ func _process(delta: float) -> void:
 		_aim = (_aim + stick * PAD_SPEED * delta).clamp(Vector2(40, BAND.x), Vector2(1880, BAND.y))
 	var wdt := delta * (think_slow if _thinking else 1.0)
 	_t += wdt
+	if _journal != null and not _learning():
+		_journal.data.active_seconds += delta
 	if _learning():
 		_learning_time += wdt
 	_busy_t = maxf(_busy_t - wdt, 0.0)
@@ -1602,6 +1636,8 @@ func _process(delta: float) -> void:
 	if _learning():
 		_coach.reconcile_hand(_hand != null, _hand != null and not _hand.items.is_empty())
 	_update_fish(wdt, delta if think_eat and _thinking else wdt)   # 边想边用工具: she eats in real time
+	if _journal != null:
+		_journal.sample(self)
 	if _ended:
 		return
 	_update_music()
@@ -1756,7 +1792,10 @@ func _throw(a: Dictionary, k: int) -> void:
 	var g := 0
 	if not IS_SET[k] and randf() < g_good:
 		g = 2 if randf() < g_gold else 1
+	var admitted := _fp.size() < MAX_ITEMS
 	_add_item(tray, Vector2(vx, -randf_range(150.0, 260.0)), make(k, g))
+	if _journal != null and admitted:
+		_journal.count("thrown", make(k, g), self)
 
 
 ## What a stall's window serves next (shown on its name plate).
@@ -2691,6 +2730,8 @@ func _update_fish(wdt: float, delta: float) -> void:
 		_eat_acc -= EAT[k]
 		if PICKY[k] and not _grokked:
 			if not grok:
+				if _journal != null:
+					_journal.count("rejected", it, self)
 				_chew_pause = 0.8
 				_fish.play("spit")
 				_say("挑食！不吃青菜！")
@@ -2700,12 +2741,16 @@ func _update_fish(wdt: float, delta: float) -> void:
 			# 顿悟: she forces it down (no tokens), and one day she gets it
 			_chew_pause = 0.5
 			_grok_n += 1
+			if _journal != null:
+				_journal.count("training_eaten", it, self)
 			_cat["素"] = float(_cat["素"]) + 1.0
 			_fish.play("grimace")
 			Audio.vo("fish_grimace", 1)
 			_say("……咽下去了")
 			if _grok_n >= grok_need:
 				_grokked = true
+				if _journal != null and float(_journal.data.first_grok_seconds) < 0.0:
+					_journal.data.first_grok_seconds = _meal_elapsed()
 				_fish.play("grok")
 				Audio.vo("fish_grok", 3)
 				_say("原来青菜这么好吃！")
@@ -2744,6 +2789,10 @@ func _update_fish(wdt: float, delta: float) -> void:
 ## bookkeeping of what she ate. `live` false: counted at closing time (no 越吃越香 for 我去睡了).
 func _bite(it: int, box_mult: float, live: bool) -> float:
 	var k := K(it)
+	if _journal != null:
+		var phase := "live" if live else _journal_bite_phase
+		_journal.count("paid_eaten", it, self, phase)
+		_journal.data.paid_bites[phase] += 1
 	eaten += FILL[k]
 	_bites += 1
 	var cats: Dictionary = CATS[k]
@@ -2799,6 +2848,8 @@ func _start_box(b: Dictionary) -> void:
 			_crave_t = 0.0
 	var c: float = b.get("chain_multiplier", 1.0)
 	b["mult"] = m * h * c
+	if _journal != null:
+		_journal.box("eat_start", b, self)
 	if h >= 1.3:
 		_float(FISH_POS + Vector2(-250, -330), "馋 ×%.1f" % h, "mult")
 
@@ -2930,6 +2981,9 @@ func _end(reason: String, card_too := true) -> void:
 	var settled: Array = []
 	if _warm != null:
 		var wb: Dictionary = _warm
+		if _journal != null:
+			_journal.box("warm_settled", wb, self)
+		_journal_bite_phase = "warm"
 		_warm = null
 		settled.append(wb)
 		var mult := (1.0 + box_bonus + (fill_bonus if wb.get("full", false) else 0.0) + cot * mini(int(wb.get("chains", 0)), 3) + _box_rule_bonus(wb))
@@ -2965,6 +3019,7 @@ func _end(reason: String, card_too := true) -> void:
 			eos_step = {"icon": "crown", "text": tr("最后一口：%s") % tr(NAMES[k]), "mark": "×%.0f" % ex, "add": extra,
 				"dish": _food_tex[k], "dish_name": tr(NAMES[k])}
 	var boxes := _leftover_boxes(settled)
+	_journal_bite_phase = "sleep"
 	var left_step := {}
 	if not boxes.is_empty():
 		var left := 0.0
@@ -3047,6 +3102,12 @@ func _end(reason: String, card_too := true) -> void:
 		"wasted": wasted, "recipes": _recipes_made, "balance": bm, "grokked": _grokked,
 		"trial": trial, "passed": passed, "full_boxes": _full_boxes})
 	Game.save_game()
+	if _journal != null:
+		_journal.finish(self, subtotal)
+		if not Game._save_read_only:
+			var journal_error: Error = _journal.save_record(Game.save_path.get_basename() + "_meals")
+			if journal_error != OK:
+				push_warning("Local meal record could not be saved: %s" % error_string(journal_error))
 	if not card_too:
 		return
 	await get_tree().create_timer(1.0).timeout
