@@ -43,6 +43,7 @@ def main() -> None:
     results = []
     scenarios = [
         ("state", "release_state_test", "release_state", "RELEASE_STATE_TEST:"),
+        ("audio-cooldown", "audio_cooldown_test", "audio_cooldown", '"failures":[]'),
         ("onboarding", "onboarding_test", "onboarding", '"ok":true'),
         ("settings", "settings_release_test", "settings-release", "SETTINGS_RELEASE_TEST failures=0"),
         ("ending", "ending_flow_test", "ending_release", "ENDING_FLOW_TEST PASS failures=0"),
@@ -50,6 +51,10 @@ def main() -> None:
         ("controls", "canteen_controls_test", "canteen_controls", '"ok":true'),
         ("mechanics", "mechanic_synergy_test", "mechanic_synergy", "MECHANIC_SYNERGY_TEST:"),
         ("planner", "meal_planner_test", "meal_planner_release", "MEAL_PLANNER_TEST PASS failures=0"),
+        ("service-ui", "canteen_presentation_test", "canteen_presentation_release", '"failures":[]'),
+        ("collections", "collection_presentation_test", "collection_presentation", "COLLECTION_PRESENTATION_TEST: 0 failures"),
+        ("shell", "presentation_shell_test", "presentation_shell_release", "PRESENTATION_SHELL_TEST PASS"),
+        ("tree-layout", "tree_presentation_test", "tree_presentation_release", '"failures":[]'),
     ]
 
     def execute(name: str, command: list[str], marker: str, timeout=120):
@@ -72,6 +77,23 @@ def main() -> None:
         execute(name, [str(ENGINE), "--headless", "--path", str(ROOT / "game"),
                        f"res://tests/{scene}.tscn", "--", f"--test-profile={profile}", "--lang=zh_CN"], marker)
     if args.visual:
+        for small in [False, True]:
+            size = "960x540" if small else "1280x720"
+            execute(f"collections-{size}", [str(ENGINE), "--path", str(ROOT / "game"),
+                    "res://tests/collection_presentation_test.tscn", "--", "--test-profile=collection_presentation",
+                    f"--render-size={size}", f"--out={out / ('collections-' + size)}"], "COLLECTION_PRESENTATION_TEST: 0 failures")
+            for locale in ["zh_CN", "en"]:
+                for name, scene, profile, marker in [
+                        ("service", "canteen_presentation_test", "canteen_presentation_release", '"failures":[]'),
+                        ("tree", "tree_presentation_test", "tree_presentation_release", '"failures":[]'),
+                        ("shell", "presentation_shell_test", "presentation_shell_release", "PRESENTATION_SHELL_TEST PASS")]:
+                    key = f"{name}-{locale}-{size}"
+                    command = [str(ENGINE), "--path", str(ROOT / "game"), "--resolution", size,
+                               f"res://tests/{scene}.tscn", "--", f"--test-profile={profile}",
+                               f"--lang={locale}", f"--out={out / key}", f"--render-size={size}"]
+                    if small and name in {"service", "tree"}:
+                        command.append("--small")
+                    execute(key, command, marker)
         for locale in ["zh_CN", "en"]:
             shots = out / f"visual-{locale}"
             execute(f"ending-{locale}", [str(ENGINE), "--path", str(ROOT / "game"), "--resolution", "1280x720",
