@@ -82,7 +82,7 @@ func _add(col: VBoxContainer, source: String, fn: Callable) -> Button:
 
 func _translate() -> void:
 	_title.text = tr("暂停一下")
-	_hint.text = tr("窗口失去焦点，已为你暂停。\n点击继续上班，饭菜不会凉。") if focus_pause else tr("饭菜不会凉的")
+	_hint.text = tr("窗口失去焦点，已为你暂停。\n选择继续上班，饭菜不会凉。") if focus_pause else tr("饭菜不会凉的")
 	for b in _buttons:
 		b.text = tr(str(b.get_meta("source")))
 

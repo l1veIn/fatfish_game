@@ -17,6 +17,7 @@ const PATH := "user://settings.cfg"
 const BUSES := ["Music", "SFX", "Voice"]
 const LANGUAGES := {"zh_CN": "简体中文", "en": "English"}
 const WINDOW_SIZES := [Vector2i(1280, 720), Vector2i(1600, 900), Vector2i(1920, 1080)]
+const BINDABLE_ACTIONS := {"move_left": "向左移动", "move_right": "向右移动", "move_up": "向上移动", "move_down": "向下移动", "deliver": "拿起 / 送出饭盒", "think": "思考", "start_shift": "开始下一顿", "refund": "退还技能等级"}
 
 var volume := {"Master": 0.8, "Music": 0.7, "SFX": 0.8, "Voice": 0.9}
 var fullscreen := false
@@ -33,6 +34,9 @@ var _focused := true
 var _testing := false      # test profiles / autotest / --lang never write player settings
 var _applied_window_size := Vector2i.ZERO
 var _was_fullscreen := false
+var _config_path := PATH
+var _bindings: Dictionary = {}
+var _default_events: Dictionary = {}
 
 
 func _ready() -> void:
@@ -45,16 +49,24 @@ func _ready() -> void:
 			AudioServer.set_bus_send(i, "Master")
 	_load_translations()
 	_add_actions()
-	load_settings()
+	var forced_language := ""
 	for arg in OS.get_cmdline_args():
 		if arg.begins_with("res://tests/") and arg.ends_with(".tscn"):
 			_testing = true
 	for a in OS.get_cmdline_user_args():
 		if a == "--autotest" or a.begins_with("--test-profile="):
 			_testing = true
+			if a.begins_with("--test-profile="):
+				var profile := a.trim_prefix("--test-profile=")
+				var valid := not profile.is_empty() and profile.length() <= 48
+				for ch in profile:
+					if not "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-".contains(ch): valid = false
+				_config_path = "user://qa_%s_settings.cfg" % (profile if valid else "invalid_profile")
 		elif a.begins_with("--lang="):
-			language = a.get_slice("=", 1)
+			forced_language = a.get_slice("=", 1)
 			_testing = true
+	load_settings()
+	if not forced_language.is_empty(): language = forced_language
 	if OS.has_feature("web"):
 		fullscreen = false   # the browser decides; the toggle still works on a click
 	apply()
@@ -62,7 +74,7 @@ func _ready() -> void:
 
 func load_settings() -> void:
 	var cfg := ConfigFile.new()
-	if cfg.load(PATH) == OK:
+	if (not _testing or _config_path != PATH) and cfg.load(_config_path) == OK:
 		_read_config(cfg)
 	if not LANGUAGES.has(language):
 		language = "zh_CN" if OS.get_locale_language() == "zh" else "en"
@@ -82,12 +94,13 @@ func _read_config(cfg: ConfigFile) -> void:
 	reduced_motion = bool(cfg.get_value("accessibility", "reduced_motion", reduced_motion))
 	screen_shake = bool(cfg.get_value("accessibility", "screen_shake", screen_shake))
 	hit_pause = bool(cfg.get_value("accessibility", "hit_pause", hit_pause))
+	_read_bindings(cfg.get_value("controls", "bindings", {}))
 
 
 func save_settings() -> void:
-	if _testing:
+	if _testing and _config_path == PATH:
 		return
-	_create_config().save(PATH)
+	_create_config().save(_config_path)
 
 
 func _create_config() -> ConfigFile:
@@ -103,6 +116,7 @@ func _create_config() -> ConfigFile:
 	cfg.set_value("accessibility", "reduced_motion", reduced_motion)
 	cfg.set_value("accessibility", "screen_shake", screen_shake)
 	cfg.set_value("accessibility", "hit_pause", hit_pause)
+	cfg.set_value("controls", "bindings", _bindings.duplicate(true))
 	return cfg
 
 
@@ -179,7 +193,7 @@ func _set_focused(focused: bool) -> void:
 
 
 func release_gameplay_inputs() -> void:
-	for action in ["move_left", "move_right", "move_up", "move_down", "think", "deliver", "start_shift", "pause", "ui_accept", "ui_cancel"]:
+	for action in ["move_left", "move_right", "move_up", "move_down", "think", "deliver", "start_shift", "refund", "pause", "ui_accept", "ui_cancel"]:
 		if InputMap.has_action(action):
 			Input.action_release(action)
 
@@ -213,11 +227,11 @@ func _add_actions() -> void:
 		"move_left": [KEY_A, KEY_LEFT], "move_right": [KEY_D, KEY_RIGHT],
 		"move_up": [KEY_W, KEY_UP], "move_down": [KEY_S, KEY_DOWN],
 		"deliver": [KEY_E, KEY_ENTER], "think": [KEY_SPACE, KEY_SHIFT], "pause": [KEY_ESCAPE, KEY_P],
-		"toggle_fullscreen": [KEY_F11], "start_shift": [KEY_G],
+		"toggle_fullscreen": [KEY_F11], "start_shift": [KEY_G], "refund": [KEY_BACKSPACE],
 	}
 	var pads := {
 		"deliver": [JOY_BUTTON_A], "think": [JOY_BUTTON_B, JOY_BUTTON_RIGHT_SHOULDER],
-		"pause": [JOY_BUTTON_START], "start_shift": [JOY_BUTTON_Y],
+		"pause": [JOY_BUTTON_START], "start_shift": [JOY_BUTTON_Y], "refund": [JOY_BUTTON_X],
 		"ui_accept": [JOY_BUTTON_A], "ui_cancel": [JOY_BUTTON_B],
 	}
 	var axes := {"move_left": [JOY_AXIS_LEFT_X, -1.0], "move_right": [JOY_AXIS_LEFT_X, 1.0],
@@ -236,16 +250,169 @@ func _add_actions() -> void:
 	for a in pads:
 		for b in pads[a]:
 			var e := InputEventJoypadButton.new()
+			e.device = -1
 			e.button_index = b
 			if not InputMap.action_has_event(a, e):
 				InputMap.action_add_event(a, e)
 	for a in axes:
 		var e := InputEventJoypadMotion.new()
+		e.device = -1
 		e.axis = axes[a][0]
 		e.axis_value = axes[a][1]
 		InputMap.action_add_event(a, e)
 	# the right trigger also thinks
 	var rt := InputEventJoypadMotion.new()
+	rt.device = -1
 	rt.axis = JOY_AXIS_TRIGGER_RIGHT
 	rt.axis_value = 1.0
 	InputMap.action_add_event("think", rt)
+	for action in BINDABLE_ACTIONS:
+		_default_events[action] = InputMap.action_get_events(action).duplicate()
+
+
+## Gameplay bindings only; built-in menu navigation/confirm/cancel remain independent.
+func binding_label(action: String, device := "keyboard") -> String:
+	var names: Array[String] = []
+	if not InputMap.has_action(action): return ""
+	for event in InputMap.action_get_events(action):
+		if _event_device(event) != device: continue
+		if event is InputEventKey:
+			var code: int = event.physical_keycode if event.physical_keycode != 0 else event.keycode
+			names.append(OS.get_keycode_string(code))
+		elif event is InputEventJoypadButton:
+			var labels := {JOY_BUTTON_A: "A", JOY_BUTTON_B: "B", JOY_BUTTON_X: "X", JOY_BUTTON_Y: "Y", JOY_BUTTON_LEFT_SHOULDER: "LB", JOY_BUTTON_RIGHT_SHOULDER: "RB", JOY_BUTTON_LEFT_STICK: "L3", JOY_BUTTON_RIGHT_STICK: "R3", JOY_BUTTON_DPAD_UP: "D-pad ↑", JOY_BUTTON_DPAD_DOWN: "D-pad ↓", JOY_BUTTON_DPAD_LEFT: "D-pad ←", JOY_BUTTON_DPAD_RIGHT: "D-pad →"}
+			names.append(labels.get(event.button_index, tr("按钮 %d") % event.button_index))
+		elif event is InputEventJoypadMotion:
+			if event.axis == JOY_AXIS_TRIGGER_LEFT: names.append("LT")
+			elif event.axis == JOY_AXIS_TRIGGER_RIGHT: names.append("RT")
+			else:
+				var stick := "LS" if event.axis <= JOY_AXIS_LEFT_Y else "RS"
+				var horizontal: bool = event.axis in [JOY_AXIS_LEFT_X, JOY_AXIS_RIGHT_X]
+				names.append(stick + " " + (("←" if event.axis_value < 0 else "→") if horizontal else ("↑" if event.axis_value < 0 else "↓")))
+	return " / ".join(names)
+
+
+func _event_device(event: InputEvent) -> String:
+	if event is InputEventKey: return "keyboard"
+	if event is InputEventJoypadButton or event is InputEventJoypadMotion: return "gamepad"
+	return ""
+
+
+func _binding_data(event: InputEvent) -> Dictionary:
+	if event is InputEventKey:
+		var code: int = event.physical_keycode if event.physical_keycode != 0 else event.keycode
+		# A modifier alone is useful (the default Think uses Shift); chords are not.
+		if (event.alt_pressed and code != KEY_ALT) or (event.ctrl_pressed and code != KEY_CTRL) or (event.meta_pressed and code != KEY_META): return {}
+		if event.shift_pressed and code != KEY_SHIFT: return {}
+		return {"kind": "key", "code": code}
+	if event is InputEventJoypadButton:
+		return {"kind": "button", "code": event.button_index}
+	if event is InputEventJoypadMotion and absf(event.axis_value) >= 0.65:
+		return {"kind": "axis", "code": event.axis, "sign": -1 if event.axis_value < 0 else 1}
+	return {}
+
+
+func _binding_event(data: Dictionary) -> InputEvent:
+	if typeof(data.get("code")) != TYPE_INT: return null
+	var code: int = data.code
+	match data.get("kind", ""):
+		"key":
+			if code <= 0 or OS.find_keycode_from_string(OS.get_keycode_string(code)) != code: return null
+			var event := InputEventKey.new()
+			event.physical_keycode = code
+			return event
+		"button":
+			if code < 0 or code >= JOY_BUTTON_MAX: return null
+			var event := InputEventJoypadButton.new()
+			event.device = -1
+			event.button_index = code
+			return event
+		"axis":
+			if code < 0 or code > JOY_AXIS_TRIGGER_RIGHT or data.get("sign", 0) not in [-1, 1]: return null
+			if code >= JOY_AXIS_TRIGGER_LEFT and int(data.sign) < 0: return null
+			var event := InputEventJoypadMotion.new()
+			event.device = -1
+			event.axis = code
+			event.axis_value = int(data.sign)
+			return event
+	return null
+
+
+func _reserved_binding(data: Dictionary) -> bool:
+	# Fixed pause/fullscreen and tutorial escape controls must never become gameplay keys.
+	return (data.get("kind") == "key" and data.code in [KEY_ESCAPE, KEY_P, KEY_F11, KEY_T]) or (data.get("kind") == "button" and data.code in [JOY_BUTTON_START, JOY_BUTTON_BACK, JOY_BUTTON_GUIDE])
+
+
+func binding_error(action: String, device: String, event: InputEvent) -> String:
+	if not BINDABLE_ACTIONS.has(action) or device not in ["keyboard", "gamepad"]: return tr("无法修改这个操作。")
+	if _event_device(event) != device: return tr("请使用所选设备，按一个按键或推动摇杆。")
+	var data := _binding_data(event)
+	if data.is_empty() or _binding_event(data) == null: return tr("请选择单个按键、手柄按钮或摇杆方向，不使用组合键。")
+	if _reserved_binding(data): return tr("这个按键保留给暂停、全屏或教学，不能重新分配。")
+	if data.get("kind") == "axis" and action not in ["move_left", "move_right", "move_up", "move_down", "think"]:
+		return tr("摇杆和扳机仅用于移动或思考；这个操作请使用按键或手柄按钮。")
+	if action in ["start_shift", "refund"] and ((data.get("kind") == "key" and data.code in [KEY_ENTER, KEY_KP_ENTER, KEY_SPACE, KEY_TAB, KEY_LEFT, KEY_RIGHT, KEY_UP, KEY_DOWN]) or (data.get("kind") == "button" and data.code in [JOY_BUTTON_A, JOY_BUTTON_B, JOY_BUTTON_DPAD_LEFT, JOY_BUTTON_DPAD_RIGHT, JOY_BUTTON_DPAD_UP, JOY_BUTTON_DPAD_DOWN])):
+		return tr("这个输入用于固定菜单导航、确认或返回，不能分配给开饭或退款。")
+	for other in BINDABLE_ACTIONS:
+		if other == action: continue
+		for bound in InputMap.action_get_events(other):
+			if _event_device(bound) == device and _binding_data(bound) == data:
+				return tr("冲突：这个输入已用于「%s」。请换一个。") % tr(BINDABLE_ACTIONS[other])
+	return ""
+
+
+func set_binding(action: String, device: String, event: InputEvent) -> String:
+	var error := binding_error(action, device, event)
+	if not error.is_empty(): return error
+	if not _bindings.has(action): _bindings[action] = {}
+	_bindings[action][device] = _binding_data(event)
+	release_gameplay_inputs()
+	_apply_bindings()
+	save_settings()
+	changed.emit()
+	return ""
+
+
+func reset_bindings() -> void:
+	_bindings.clear()
+	release_gameplay_inputs()
+	_apply_bindings()
+	save_settings()
+	changed.emit()
+
+
+func _apply_bindings() -> void:
+	for action in BINDABLE_ACTIONS:
+		InputMap.action_erase_events(action)
+		for event in _default_events.get(action, []):
+			if not _bindings.get(action, {}).has(_event_device(event)):
+				InputMap.action_add_event(action, event)
+		for device in _bindings.get(action, {}):
+			var event := _binding_event(_bindings[action][device])
+			if event != null: InputMap.action_add_event(action, event)
+
+
+func _read_bindings(saved: Variant) -> void:
+	_bindings.clear()
+	_apply_bindings()
+	if not saved is Dictionary: return
+	# First validate the complete candidate, so legitimate swaps survive a reload.
+	for action in BINDABLE_ACTIONS:
+		var entry = saved.get(action, {})
+		if not entry is Dictionary: continue
+		for device in ["keyboard", "gamepad"]:
+			var data = entry.get(device, {})
+			if not data is Dictionary: continue
+			var event := _binding_event(data)
+			if event != null and _event_device(event) == device and not _reserved_binding(data):
+				if not _bindings.has(action): _bindings[action] = {}
+				_bindings[action][device] = _binding_data(event)
+	_apply_bindings()
+	# Corrupt/conflicting profiles fall back as a whole; no action is left unbound.
+	for action in _bindings:
+		for device in _bindings[action]:
+			var event := _binding_event(_bindings[action][device])
+			if not binding_error(action, device, event).is_empty():
+				_bindings.clear()
+				_apply_bindings()
+				return

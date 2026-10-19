@@ -86,6 +86,13 @@ func _ready() -> void:
 	_bar.resized.connect(func(): _bar.position = Vector2(1860 - _bar.size.x, 30))
 	add_child(_bar)
 	_build_bar()
+	var tools_hint := UiKit.label(tr("Tab / Back（Select）：切换工具区 · B：回技能树"), 22, Color("f2dfb7"))
+	tools_hint.name = "TreeToolsHint"
+	tools_hint.position = Vector2(630, 1024)
+	tools_hint.size = Vector2(850, 44)
+	tools_hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	tools_hint.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(tools_hint)
 	Game.changed.connect(_build_bar)
 	for n in ["cork_bg", "ticket", "ticket_gold", "stamp", "pin", "icon_lock", "fx_burst", "fx_star", "ui_chalkboard"]:
 		var f := "res://assets/canteen/%s.png" % n
@@ -108,6 +115,7 @@ func _update_trial_button() -> void:
 		while fs > 16 and ThemeDB.fallback_font.get_string_size(_trial.text, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x > _trial.size.x - 30:
 			fs -= 2
 		_trial.add_theme_font_size_override("font_size", fs)
+	_link_tool_focus()
 
 
 ## The top bar. 今日菜单 and 招牌菜 show up once a skill unlocks them; a button the player has
@@ -154,6 +162,41 @@ func _build_bar() -> void:
 				_feature_card.call_deferred(id, fn)
 	_bar.size = _bar.get_combined_minimum_size()
 	_bar.position = Vector2(1860 - _bar.size.x, 30)
+	_link_tool_focus()
+
+
+func _tool_targets() -> Array[Control]:
+	var targets: Array[Control] = []
+	if is_instance_valid(_bar):
+		for button in _bar.get_children():
+			if button is Button and button.visible and not button.disabled: targets.append(button)
+	for button in [_crew_button, _trial, _start]:
+		if is_instance_valid(button) and button.visible and not button.disabled: targets.append(button)
+	return targets
+
+
+func _link_tool_focus() -> void:
+	var tools := _tool_targets()
+	if tools.is_empty(): return
+	# Tab includes the map; tool directions cycle through every visible button.
+	focus_next = get_path_to(tools[0])
+	focus_previous = get_path_to(tools[-1])
+	for i in tools.size():
+		var button := tools[i]
+		button.focus_next = button.get_path_to(tools[i + 1] if i + 1 < tools.size() else self)
+		button.focus_previous = button.get_path_to(tools[i - 1] if i > 0 else self)
+		button.focus_neighbor_right = button.get_path_to(tools[(i + 1) % tools.size()])
+		button.focus_neighbor_bottom = button.focus_neighbor_right
+		button.focus_neighbor_left = button.get_path_to(tools[posmod(i - 1, tools.size())])
+		button.focus_neighbor_top = button.focus_neighbor_left
+
+
+func _tools_have_focus() -> bool:
+	return _tool_targets().has(get_viewport().gui_get_focus_owner())
+
+
+func _has_input_modal() -> bool:
+	return is_instance_valid(_planner) or is_instance_valid(_crew_planner) or is_instance_valid(_book) or get_children().any(func(c): return c is SettingsPanel or c is RecipeBook)
 
 
 const FEATURES := {
@@ -411,7 +454,7 @@ func _refund_node(id: String) -> void:
 
 
 func _is_refund_input(event: InputEvent) -> bool:
-	return (event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_BACKSPACE) or (event is InputEventJoypadButton and event.pressed and event.button_index == JOY_BUTTON_X)
+	return event.is_action_pressed("refund") and not event.is_echo()
 
 
 func _process(delta: float) -> void:
@@ -419,7 +462,7 @@ func _process(delta: float) -> void:
 	_flash_time = maxf(_flash_time - delta, 0.0)
 	if _hover != "" and not _is_displayed(_hover):
 		_hover = ""
-	if _hover != "" and not Game.node(_hover).is_empty():
+	if _hover != "" and not Game.node(_hover).is_empty() and not _tools_have_focus():
 		_tooltip_bounds = _tooltip_rect(Game.node(_hover), _tooltip_size(_tooltip_lines(Game.node(_hover))))
 	else:
 		_tooltip_bounds = Rect2()
@@ -429,10 +472,21 @@ func _process(delta: float) -> void:
 func _input(event: InputEvent) -> void:
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and not event.pressed:
 		_dragging = false
+	if _has_input_modal(): return
+	if event is InputEventJoypadButton and event.pressed:
+		if event.button_index == JOY_BUTTON_BACK:
+			get_viewport().set_input_as_handled()
+			if _tools_have_focus(): grab_focus()
+			else:
+				var tools := _tool_targets()
+				if not tools.is_empty(): tools[0].grab_focus()
+		elif event.button_index == JOY_BUTTON_B and _tools_have_focus():
+			get_viewport().set_input_as_handled()
+			grab_focus()
 
 
 func _unhandled_input(event: InputEvent) -> void:
-	if is_instance_valid(_planner) or is_instance_valid(_crew_planner) or get_children().any(func(c): return c is SettingsPanel or c is RecipeBook):
+	if _has_input_modal():
 		return
 	if event.is_action_pressed("pause"):
 		get_viewport().set_input_as_handled()
@@ -485,7 +539,7 @@ func _step(dir: Vector2) -> void:
 
 
 func _gui_input(event: InputEvent) -> void:
-	if is_instance_valid(_planner) or is_instance_valid(_crew_planner) or is_instance_valid(_book) or get_children().any(func(c): return c is SettingsPanel):
+	if _has_input_modal():
 		return
 	if has_focus():
 		if _hover != "" and _is_refund_input(event):
@@ -669,7 +723,7 @@ func _draw() -> void:
 	CanteenRun.load_menu()
 	draw_string(font, Vector2(60, 215), tr("菜谱图鉴 %d / %d") % [Game.recipes.size(), CanteenRun.RECIPES.size()], HORIZONTAL_ALIGNMENT_LEFT, -1, 26, Color(1.0, 0.88, 0.55))
 	draw_string(font, Vector2(60, 175), tr(Game.plate()), HORIZONTAL_ALIGNMENT_LEFT, -1, 40, Color(1.0, 0.8, 0.45))
-	if _hover != "" and not Game.node(_hover).is_empty() and not is_instance_valid(_planner) and not is_instance_valid(_crew_planner) and not is_instance_valid(_book):
+	if _hover != "" and not Game.node(_hover).is_empty() and not _has_input_modal() and not _tools_have_focus():
 		_draw_tooltip(font, Game.node(_hover))
 
 
@@ -743,7 +797,7 @@ func _tooltip_lines(n: Dictionary) -> Array:
 		var afford := Game.tokens >= Game.cost(id)
 		lines.append([tr("花费 %s token") % Game.fmt(Game.cost(id)), 26, Color(0.75, 1.0, 0.8) if afford else Color(1.0, 0.55, 0.5)])
 	if Game.level(id) > 0 and id != "start" and n.get("kind", "") != "ticket":
-		lines.append([tr("退款：右键 / Backspace / 手柄 X"), 22, Color(0.8, 0.75, 0.7)])
+		lines.append([tr("退款：右键 / %s / 手柄 %s") % [Settings.binding_label("refund"), Settings.binding_label("refund", "gamepad")], 22, Color(0.8, 0.75, 0.7)])
 		if Game.refund_floor(id) > 0:
 			lines.append([tr("已有下游技能：只能退多余等级，最低保留 1 级。"), 22, Color(1.0, 0.75, 0.5)])
 		else:

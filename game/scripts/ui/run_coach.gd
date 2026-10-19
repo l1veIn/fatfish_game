@@ -32,11 +32,11 @@ func _ready() -> void:
 	add_child(_title)
 	_instruction = UiKit.label("", 24, UiKit.INK)
 	_instruction.position = Vector2(30, 62)
-	_instruction.size = Vector2(1020, 58)
+	_instruction.size = Vector2(1020, 74)
 	_instruction.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	add_child(_instruction)
 	_footer = UiKit.label("", 20, Color(0.47, 0.29, 0.15))
-	_footer.position = Vector2(30, 132)
+	_footer.position = Vector2(30, 140)
 	_footer.size = Vector2(1020, 28)
 	add_child(_footer)
 	for label in [_title, _instruction, _footer]:
@@ -168,17 +168,22 @@ func _refresh() -> void:
 	_title.text = "%02d / 03   %s" % [step + 1, titles[step]]
 	var instructions: Array
 	match _device:
-		"keyboard":
-			instructions = [tr("方向键 / WASD 移到右下角餐桌，按 E / Enter 拿盒。"),
-				tr("方向键 / WASD 移动饭盒，接住一份落下的菜。"),
-				tr("把饭盒移回右下角餐桌，按 E / Enter 送给她。")]
-		"pad":
-			instructions = [tr("左摇杆移到右下角餐桌，按 A 拿盒。"),
-				tr("左摇杆移动饭盒，接住一份落下的菜。"),
-				tr("把饭盒移回右下角餐桌，按 A 送给她。")]
+		"keyboard", "pad":
+			var device := "gamepad" if _device == "pad" else "keyboard"
+			var deliver := Settings.binding_label("deliver", device)
+			var move := _movement_label(device)
+			instructions = [tr("移到右下角餐桌，按 %s 拿盒。\n移动：%s") % [deliver, move],
+				tr("移动饭盒，接住一份落下的菜。\n移动：%s") % move,
+				tr("移回右下角餐桌，按 %s 送给她。\n移动：%s") % [deliver, move]]
 		_:
 			instructions = [tr("把鼠标移到右下角餐桌，点击拿盒。"),
 				tr("移动鼠标，把饭盒放在落下的菜下面。"),
 				tr("把饭盒移回右下角餐桌，点击送给她。")]
 	_instruction.text = instructions[step]
 	_footer.text = tr("先完成一次送餐，再开始计时。不用装满也能送。")
+
+
+func _movement_label(device: String) -> String:
+	return "↑ %s  ↓ %s  ← %s  → %s" % [Settings.binding_label("move_up", device),
+		Settings.binding_label("move_down", device), Settings.binding_label("move_left", device),
+		Settings.binding_label("move_right", device)]

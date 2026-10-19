@@ -6,6 +6,7 @@ extends Control
 signal closed
 
 const TABS := ["声音", "画面", "辅助", "游戏"]
+const InputRemapPanel := preload("res://scripts/ui/input_remap_panel.gd")
 
 var _reset_armed := 0.0
 var _reset_btn: Button
@@ -21,6 +22,8 @@ var _closing := false
 var _language := ""
 var _fullscreen_toggle: CheckButton
 var _resolution: OptionButton
+var _remap: Control
+var _remap_focus: Array = []
 
 
 func _ready() -> void:
@@ -171,6 +174,10 @@ func _game_page() -> void:
 		Settings.apply())
 	row.add_child(lang)
 	_toggle(tr("切到后台时暂停上班"), Settings.pause_unfocused, "pause_unfocused", func(on): Settings.pause_unfocused = on)
+	var controls := UiKit.button(tr("键盘与手柄改键"), 28, Vector2(0, 66))
+	_register(controls, "input_remap")
+	controls.pressed.connect(_open_remap)
+	_content.add_child(controls)
 	var line := HSeparator.new()
 	_content.add_child(line)
 	_content.add_child(UiKit.label(tr("存档"), 30, UiKit.GOLD))
@@ -333,9 +340,33 @@ func _process(delta: float) -> void:
 
 
 func _unhandled_input(event: InputEvent) -> void:
+	if is_instance_valid(_remap): return
 	if event.is_action_pressed("pause") or event.is_action_pressed("ui_cancel"):
 		get_viewport().set_input_as_handled()
 		close()
+
+
+func _open_remap() -> void:
+	if is_instance_valid(_remap): return
+	var opener := get_viewport().gui_get_focus_owner()
+	var previous: WeakRef = weakref(opener) if opener != null else null
+	_remap_focus.clear()
+	for control in find_children("*", "Control", true, false):
+		_remap_focus.append({"node": weakref(control), "mode": control.focus_mode})
+		control.focus_mode = Control.FOCUS_NONE
+	var panel := InputRemapPanel.new()
+	_remap = panel
+	panel.closed.connect(func():
+		if panel.get_parent() == self: remove_child(panel)
+		_remap = null
+		for state in _remap_focus:
+			var control = state.node.get_ref()
+			if is_instance_valid(control): control.focus_mode = state.mode
+		_remap_focus.clear()
+		var target = previous.get_ref() if previous != null else null
+		if is_instance_valid(target): target.grab_focus.call_deferred()
+		else: _tabs[_active_tab].grab_focus.call_deferred())
+	add_child(panel)
 
 
 func close() -> void:

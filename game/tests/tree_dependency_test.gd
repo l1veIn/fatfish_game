@@ -84,7 +84,8 @@ func _ready() -> void:
 	_center("stall_wok")
 	await _frames()
 	var lines := _tree._tooltip_lines(Game.node("stall_wok"))
-	_check(lines.any(func(line): return line[0] == tr("退款：右键 / Backspace / 手柄 X")), "maxed skills expose mouse and keyboard refund controls")
+	var refund_hint := tr("退款：右键 / %s / 手柄 %s") % [Settings.binding_label("refund"), Settings.binding_label("refund", "gamepad")]
+	_check(lines.any(func(line): return line[0] == refund_hint), "maxed skills expose the current mouse, keyboard and gamepad refund controls")
 	_check(lines.any(func(line): return line[0] == tr("已有下游技能：只能退多余等级，最低保留 1 级。")), "protected skill tooltip explains its minimum level")
 	before = Game.tokens
 	var n := Game.node("stall_wok")

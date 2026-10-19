@@ -476,6 +476,7 @@ var _think_cooldown := 0.0
 var _think_input_held := false
 var _resume_input_guard := 0.0
 var _mouse_steering := true
+var _hint_input_device := "keyboard"
 var _think_transitions := 0           # state transitions, also useful for bounded audio QA
 var _pause: PauseMenu
 var _coach = null
@@ -570,7 +571,7 @@ func _ready() -> void:
 	Audio.vo("auntie_start", 1)
 	# the first shift with a new in-shift feature: say so once, on the banner
 	for f in [["warm", warm, "新：保温箱", "端着饭盒碰一下左边的保温箱，留到最后吃", "box"],
-			["think", can_think, "新：深度思考", "按住空格或右键，时间变慢", "clock"],
+			["think", can_think, "新：深度思考", tr("按住 %s，时间变慢") % Settings.binding_label("think").get_slice(" / ", 0), "clock"],
 			["grok", grok, "新：顿悟", "让她把青菜硬咽下去，咽够就开窍", "leaf"]]:
 		if f[1] and not Game.seen_buttons.has("intro_" + f[0]):
 			Game.seen_buttons["intro_" + f[0]] = true
@@ -1278,6 +1279,10 @@ func _magnet() -> float:
 # --- input --------------------------------------------------------------------------------------
 
 func _unhandled_input(event: InputEvent) -> void:
+	if (event is InputEventJoypadButton and event.pressed) or (event is InputEventJoypadMotion and absf(event.axis_value) > 0.3):
+		_hint_input_device = "gamepad"
+	elif (event is InputEventKey and event.pressed) or event is InputEventMouseButton or (event is InputEventMouseMotion and event.relative.length_squared() > 0.01):
+		_hint_input_device = "keyboard"
 	if event.is_action_pressed("pause") and not _ended:
 		get_viewport().set_input_as_handled()
 		pause()
@@ -1383,7 +1388,8 @@ func _think_hint() -> String:
 		return tr("松开后再按")
 	if _think < minf(THINK_MIN_CHARGE, think_time):
 		return tr("思考恢复中")
-	return tr("按住 空格 / 右键 / B")
+	var binding := Settings.binding_label("think", _hint_input_device).get_slice(" / ", 0)
+	return (tr("按住 %s") if _hint_input_device == "gamepad" else tr("按住 %s / 右键")) % binding
 
 
 ## Left click / A over the table: empty hand -> take a box off the stack; an empty box in hand ->

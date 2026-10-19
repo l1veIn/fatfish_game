@@ -29,6 +29,7 @@ var _position_label: Label
 var _closed := false
 var _return_focus: WeakRef
 var _language := ""
+var _control_labels := ""
 
 
 func _ready() -> void:
@@ -41,6 +42,7 @@ func _ready() -> void:
 		_return_focus = weakref(focused)
 	CanteenRun.load_menu()
 	_language = TranslationServer.get_locale()
+	_control_labels = _control_signature()
 	_picture(self, "res://assets/canteen/bg_wall.png", Rect2(Vector2.ZERO, size), false)
 	var backdrop := ColorRect.new()
 	backdrop.color = Color(0.16, 0.08, 0.03, 0.42)
@@ -85,12 +87,28 @@ func _ready() -> void:
 
 
 func _on_settings_changed() -> void:
-	if _language != TranslationServer.get_locale():
+	var controls := _control_signature()
+	if _language != TranslationServer.get_locale() or controls != _control_labels:
 		_language = TranslationServer.get_locale()
+		_control_labels = controls
 		var old_index := _index_buttons.find(get_viewport().gui_get_focus_owner())
 		_fill()
 		if old_index >= 0 and old_index < _index_buttons.size():
 			_index_buttons[old_index].grab_focus.call_deferred()
+
+
+func _control_signature() -> String:
+	var labels: Array[String] = []
+	for device in ["keyboard", "gamepad"]:
+		for action in ["move_up", "move_down", "move_left", "move_right", "deliver", "think"]:
+			labels.append(Settings.binding_label(action, device))
+	return "|".join(labels)
+
+
+func _movement_label(device: String) -> String:
+	return "↑ %s  ↓ %s  ← %s  → %s" % [Settings.binding_label("move_up", device),
+		Settings.binding_label("move_down", device), Settings.binding_label("move_left", device),
+		Settings.binding_label("move_right", device)]
 
 
 func _set_chapter(chapter: String) -> void:
@@ -400,16 +418,16 @@ func _style_button(b: Button, selected: bool, dark: bool) -> void:
 
 func _rules() -> Array:
 	return [
-		["01 · 拿盒、接菜、送饭", "移动鼠标直接控制饭盒；键盘 WASD / 方向键、手柄左摇杆也能移动。到右侧饭桌点击左键 / E / A 拿盒，再把装了菜的盒子送回来。食物吃下后才产生收益。", "icon_box"],
+		["01 · 拿盒、接菜、送饭", tr("鼠标直接移动；键盘：%s；手柄：%s。到右侧饭桌，用左键 / 键盘 %s / 手柄 %s 拿盒或送饭。吃下食物才有收益。") % [_movement_label("keyboard"), _movement_label("gamepad"), Settings.binding_label("deliver"), Settings.binding_label("deliver", "gamepad")], "icon_box"],
 		["02 · 看懂档口，也能调整位置", "每个圆圈对应一只备菜的勺子，填满就出菜；多个圆圈代表同时备菜，并非食物品质。升级档口会增加可出菜品。按 Esc → 档口指南，可将常接的档口摆在一起；换位立即保存，不会重置备菜进度。", "icon_clock"],
 		["03 · 拼套餐，腾空位", "同一饭盒凑齐菜谱原料会自动合成套餐，原料的品质收益会计入套餐价值。合成后的占格按菜谱决定；上下文压缩再少占一格，至少一格。图鉴会记录真正发现的套餐。", "icon_crown"],
 		["04 · 银边和金边是什么？", "银色为优质，散菜价值 ×2；金色为金牌，×4，FP32 解锁后 ×5。入盒后仍保留轮廓光。金饭盒提高整顿收入；思考中的吸附效果来自「发散思维」技能。", "fx_star"],
-		["05 · 深度思考", "解锁后按住空格 / 右键 / B，让食物放慢，饭盒保持正常移动。结束后冷却 1 秒；松开并攒够 0.5 秒能量，才能再次按下启动。利用这段时间调整接菜位置。", "icon_clock"],
+		["05 · 深度思考", tr("解锁后按住右键 / 键盘 %s / 手柄 %s，让食物放慢，饭盒保持正常移动。结束后冷却 1 秒；松开并攒够 0.5 秒能量，才能再次按下启动。利用这段时间调整接菜位置。") % [Settings.binding_label("think"), Settings.binding_label("think", "gamepad")], "icon_clock"],
 		["06 · 吃得均衡，收益更高", "已吃下的主食、荤菜、素菜越接近 4∶3∶3，均衡倍率越高。青菜单吃原本会被吐掉，可用套餐、提示词注入或顿悟处理。整顿收入按结账单中的倍率计算，没有隐藏扣款。", "icon_token"],
 		["07 · 单品拼盘与换菜连携", "解锁 Prompt 模板后，至少两份同一种散菜装满盒，也算单品拼盘，可触发多轮对话。上下文记忆让相邻两盒单品拼盘换菜获得额外奖励。幽灵食物不算；拼盘不冒充图鉴配方。", "icon_bolt"],
 		["08 · 留点空间，下盒加餐", "上下文压缩让含套餐、空至少两格的亲手送餐存一份缓存，下一亲手满盒 +15%。学会换菜后，单品 A → 存缓存的套餐盒 → 单品 B，可同时续连击、拿换菜和缓存奖励。重复存缓存的半盒不能续连。助手不替你存取。", "icon_box"],
 		["09 · 开饭前搭配菜单", "今日菜单划掉的菜不会再出，每个档口至少留一道。招牌菜的特别效果会作用于本顿饭；满名额后新选会替换最早一项。两种设置都在同一面板里，随时切换检查。", "icon_leaf"],
-		["10 · 暂停与恢复", "Esc / P / Start 暂停；切到其他窗口默认自动暂停。回来后点击继续上班。设置和图鉴关闭后仍保持暂停，不会突然消耗饭点时间。", "icon_shield"],
+		["10 · 暂停与恢复", "Esc / P / Start 暂停；切到其他窗口默认自动暂停。回来后选择「继续上班」。设置和图鉴关闭后仍保持暂停，不会突然消耗饭点时间。", "icon_shield"],
 		["11 · 助手有分工，接饭更从容", "开饭前在「助手分工」选择出场角色。补漏接好菜；点单后可指定一道套餐；营养师会算上还没吃到的饭，补主荤素缺口。编排让每种完成的职责存一份接力，最多三份；下一盒亲手送出的饭每份再 +15%／30%。", "icon_bolt"],
 		["12 · 自动技能，自己决定", "在「助手分工 → 自动操作」分别开关推空盒、满盒回收、融合和变菜。关闭满盒回收可以从容放保温箱；关闭融合可保留单品拼盘；青菜流可关闭随机变菜。已买等级与数值保留，设置下顿生效。", "icon_box"],
 	]
