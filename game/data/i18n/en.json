@@ -173,7 +173,6 @@
  "去看看": "Take a look",
  "再点一次「回滚」：所有技能全额退款，重新加点": "Click Rollback again: every skill is refunded in full",
  "回滚完成：退回 %s token": "Rolled back: %s tokens refunded",
- "退掉「%s」：返还 %s token": "Refund %s: get %s tokens back",
  "门票": "Ticket",
  "第 %d 顿饭 · 累计吐出 %s token": "Meal %d · %s tokens produced in total",
  "招牌菜：%s": "Signatures: %s",
@@ -185,7 +184,6 @@
  "已发布": "Released",
  "已满级": "Maxed",
  "新的赚钱方式": "A new way to earn",
- "右键退掉这个技能（全额退款）": "Right-click to refund this skill in full",
  "要先在这一环升满 %d 级（现在 %d 级）": "Needs %d levels in this ring first (now %d)",
  "花费 %s token": "Costs %s tokens",
  "成就达成": "Achievement unlocked",
@@ -699,5 +697,16 @@
  "食堂全家福": "Canteen Family Feast",
  "五个窗口各来一样，再配一碗饭": "One dish from each of the five stalls, plus a bowl of rice",
  "乱炖": "Mixed Stew",
- "涌现乱炖": "Emergent Stew"
+ "涌现乱炖": "Emergent Stew",
+ "空白便签": "Unrevealed note",
+ "满足前置技能与版本条件后，空白便签才会揭晓。": "Meet the prerequisite skills and release the required version to reveal this note.",
+ "这里只预告下一层，暂时不能购买。": "This previews only the next step. It cannot be purchased yet.",
+ "尚未购买，无需退款。": "Nothing to refund: this skill has not been purchased.",
+ "起点与版本门票不能单独退款。": "The starting node and version tickets cannot be refunded separately.",
+ "退回 %s token；下游仍依赖它，保留 1 级。": "Refunded %s tokens. Kept level 1 because a purchased skill depends on it.",
+ "已退回 %s token，这项技能已清空。": "Refunded %s tokens. All levels of this skill have been removed.",
+ "不能再退：已购买的下游技能需要保留这 1 级。": "No further refund: a purchased skill needs this remaining level.",
+ "退款：右键 / Backspace / 手柄 X": "Refund: right-click / Backspace / controller X",
+ "已有下游技能：只能退多余等级，最低保留 1 级。": "A purchased skill depends on this one. Extra levels can be refunded; level 1 must remain.",
+ "可全额退还这项技能的全部等级。": "All levels of this skill can be refunded in full."
 }

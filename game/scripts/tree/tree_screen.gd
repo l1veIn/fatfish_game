@@ -4,8 +4,8 @@ extends Control
 ## once its version ring is released and a parent is owned. Click a node to buy a level, drag
 ## empty space to pan, then press 去打饭 for the next shift. Once the next version's ticket is
 ## bought, a red 提交评测 button starts its trial.
-## Gamepad / keyboard: D-pad / stick / arrows move between nodes, A / Enter buys, Y / G goes to
-## lunch, Start / Esc opens the settings.
+## Gamepad / keyboard: D-pad / stick / arrows inspect tickets, A / Enter buys revealed skills,
+## X / Backspace refunds, Y / G goes to lunch, Start / Esc opens the settings.
 
 signal start_run
 signal start_trial(trial: String)
@@ -356,13 +356,21 @@ func node_at(p: Vector2) -> String:
 	if _header_rect().has_point(p) or _bar.get_rect().grow(10).has_point(p) or _crew_button.get_rect().grow(10).has_point(p):
 		return ""
 	for n in Game.nodes:
-		if Game.is_visible(n["id"]) and Rect2(_at(n) - TICKET * _zoom * 0.5, TICKET * _zoom).has_point(p):
+		if _is_displayed(n["id"]) and Rect2(_at(n) - TICKET * _zoom * 0.5, TICKET * _zoom).has_point(p):
 			return n["id"]
 	return ""
 
 
+func _is_displayed(id: String) -> bool:
+	return Game.is_visible(id) or Game.is_preview(id)
+
+
 ## Buys one level; returns true on success (also used by the autotest).
 func try_buy(id: String) -> bool:
+	if not Game.is_visible(id):
+		_flash_text = tr("满足前置技能与版本条件后，空白便签才会揭晓。")
+		Audio.sfx("ui_hover", -10.0)
+		return false
 	if Game.buy(id):
 		var p := _at(Game.node(id))
 		Audio.sfx("buy")
@@ -381,9 +389,36 @@ func try_buy(id: String) -> bool:
 	return false
 
 
+## Mouse and keyboard use the same explanation for a partial or refused refund.
+func _refund_node(id: String) -> void:
+	var n := Game.node(id)
+	if n.is_empty(): return
+	if not Game.is_visible(id):
+		_flash_text = tr("满足前置技能与版本条件后，空白便签才会揭晓。")
+	elif Game.level(id) <= 0:
+		_flash_text = tr("尚未购买，无需退款。")
+	elif id == "start" or n.get("kind", "") == "ticket":
+		_flash_text = tr("起点与版本门票不能单独退款。")
+	else:
+		var floor_level := Game.refund_floor(id)
+		var back := Game.refund(id)
+		if back > 0.0:
+			_flash_text = (tr("退回 %s token；下游仍依赖它，保留 1 级。") if floor_level > 0 else tr("已退回 %s token，这项技能已清空。")) % Game.fmt(back)
+			Audio.sfx("buy", -6.0)
+			return
+		_flash_text = tr("不能再退：已购买的下游技能需要保留这 1 级。") if floor_level > 0 else tr("尚未购买，无需退款。")
+	Audio.sfx("deny", -6.0)
+
+
+func _is_refund_input(event: InputEvent) -> bool:
+	return (event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_BACKSPACE) or (event is InputEventJoypadButton and event.pressed and event.button_index == JOY_BUTTON_X)
+
+
 func _process(delta: float) -> void:
 	_respec_armed = maxf(_respec_armed - delta, 0.0)
 	_flash_time = maxf(_flash_time - delta, 0.0)
+	if _hover != "" and not _is_displayed(_hover):
+		_hover = ""
 	if _hover != "" and not Game.node(_hover).is_empty():
 		_tooltip_bounds = _tooltip_rect(Game.node(_hover), _tooltip_size(_tooltip_lines(Game.node(_hover))))
 	else:
@@ -405,6 +440,9 @@ func _unhandled_input(event: InputEvent) -> void:
 	elif event.is_action_pressed("start_shift"):
 		get_viewport().set_input_as_handled()
 		start_run.emit()
+	elif has_focus() and _hover != "" and _is_refund_input(event):
+		get_viewport().set_input_as_handled()
+		_refund_node(_hover)
 	elif event.is_action_pressed("deliver") or (event is InputEventJoypadButton and event.pressed and event.button_index == JOY_BUTTON_A):
 		if has_focus() and _hover != "":
 			get_viewport().set_input_as_handled()
@@ -419,7 +457,7 @@ func _unhandled_input(event: InputEvent) -> void:
 				return
 
 
-## Gamepad cursor: the nearest visible node roughly in direction `dir` from the current one,
+## Gamepad cursor: the nearest revealed or preview ticket in direction `dir`,
 ## and pan so it stays on screen.
 func _step(dir: Vector2) -> void:
 	if _hover == "":
@@ -429,7 +467,7 @@ func _step(dir: Vector2) -> void:
 		var best := ""
 		var best_d := INF
 		for n in Game.nodes:
-			if not Game.is_visible(n["id"]) or n["id"] == _hover:
+			if not _is_displayed(n["id"]) or n["id"] == _hover:
 				continue
 			var v := _pos(n) - from
 			if v.normalized().dot(dir) < 0.5:
@@ -450,6 +488,10 @@ func _gui_input(event: InputEvent) -> void:
 	if is_instance_valid(_planner) or is_instance_valid(_crew_planner) or is_instance_valid(_book) or get_children().any(func(c): return c is SettingsPanel):
 		return
 	if has_focus():
+		if _hover != "" and _is_refund_input(event):
+			accept_event()
+			_refund_node(_hover)
+			return
 		for direction in [["ui_left", Vector2.LEFT], ["ui_right", Vector2.RIGHT], ["ui_up", Vector2.UP], ["ui_down", Vector2.DOWN]]:
 			if event.is_action_pressed(direction[0]):
 				accept_event()
@@ -471,11 +513,10 @@ func _gui_input(event: InputEvent) -> void:
 		return
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_RIGHT and event.pressed:
 		var rid := node_at(event.position)   # right click: refund this node
-		if rid != "" and Game.level(rid) > 0:
-			var back := Game.refund(rid)
-			if back > 0.0:
-				_flash_text = tr("退掉「%s」：返还 %s token") % [tr(Game.node(rid)["name"]), Game.fmt(back)]
-				Audio.sfx("buy", -6.0)
+		if rid != "":
+			grab_focus()
+			_hover = rid
+			_refund_node(rid)
 		return
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
 		if event.pressed:
@@ -517,13 +558,14 @@ func _draw() -> void:
 	var font := ThemeDB.fallback_font
 	var z := _zoom
 	for n in Game.nodes:
-		if not Game.is_visible(n["id"]):
+		if not _is_displayed(n["id"]):
 			continue
 		for p in n["parents"]:
 			if not Game.is_visible(p):
 				continue
 			var a := _at(Game.node(p))
 			var b := _at(n)
+			var preview := Game.is_preview(n["id"])
 			var owned := Game.level(n["id"]) > 0
 			# red yarn pinned at both tickets, hanging slack: it sags more the longer it runs
 			var sag := 14.0 * z + a.distance_to(b) * 0.18
@@ -532,16 +574,26 @@ func _draw() -> void:
 			for i in 17:
 				var t := i / 16.0
 				pts.append(a.lerp(mid, t).lerp(mid.lerp(b, t), t))
-			draw_polyline(pts, Color(0.78, 0.1, 0.1, 0.95) if owned else Color(0.6, 0.15, 0.12, 0.45), (4.0 if owned else 2.5) * z, true)
+			draw_polyline(pts, Color(0.6, 0.15, 0.12, 0.26) if preview else (Color(0.78, 0.1, 0.1, 0.95) if owned else Color(0.6, 0.15, 0.12, 0.45)), (1.5 if preview else (4.0 if owned else 2.5)) * z, true)
 	for n in Game.nodes:
 		var id: String = n["id"]
-		if not Game.is_visible(id):
+		if not _is_displayed(id):
 			continue
 		var c := _at(n)
 		var lv := Game.level(id)
 		var ticket: bool = n.get("kind", "") == "ticket"
 		var sz := TICKET * z
 		var r := Rect2(c - sz * 0.5, sz)
+		# An unrevealed successor uses only the ordinary paper and pin. No key colour,
+		# name, progress, price, stamp or lock art leaks the skill behind this preview.
+		if Game.is_preview(id):
+			if id == _hover: r = r.grow(4.0 * z)
+			if _tex.has("ticket"):
+				draw_texture_rect(_tex.ticket, r, false, Color(0.88, 0.83, 0.74, 0.8))
+			else:
+				draw_rect(r, Color(0.82, 0.76, 0.64, 0.8))
+			_draw_pin(c, r, z)
+			continue
 		var tex: Texture2D = _tex.get("ticket_gold" if n.get("key", false) else "ticket", null)
 		var tint := Color.WHITE
 		if ticket:
@@ -583,9 +635,7 @@ func _draw() -> void:
 			draw_set_transform(sc, -0.25, Vector2.ONE)
 			draw_texture_rect(_tex.stamp, Rect2(-Vector2(ss, ss) * 0.5, Vector2(ss, ss)), false, Color(1, 1, 1, 0.8))
 			draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
-		if _tex.has("pin"):
-			var ps := Vector2(16, 30) * z
-			draw_texture_rect(_tex.pin, Rect2(Vector2(c.x - ps.x * 0.5, r.position.y - ps.y * 0.55), ps), false)
+		_draw_pin(c, r, z)
 		if n.get("locked", false):   # not yet: a padlock hung on the ticket
 			var ls2 := sz.y * 0.62
 			if _tex.has("icon_lock"):
@@ -607,7 +657,7 @@ func _draw() -> void:
 	draw_string(font, Vector2(60, 80), "token %s" % Game.fmt(Game.tokens), HORIZONTAL_ALIGNMENT_LEFT, -1, 52, Color(1.0, 0.93, 0.72))
 	draw_string(font, Vector2(60, 125), _fit_line(tr("第 %d 顿饭 · 累计吐出 %s token") % [Game.runs + 1, Game.fmt(Game.total_tokens)], 26, 500), HORIZONTAL_ALIGNMENT_LEFT, -1, 26, Color(0.95, 0.85, 0.7))
 	if _flash_text != "":
-		draw_string(font, Vector2(60, 300), _fit_line(_flash_text, 26, 500), HORIZONTAL_ALIGNMENT_LEFT, -1, 26, Color(1.0, 0.85, 0.5))
+		draw_multiline_string(font, Vector2(60, 296), _flash_text, HORIZONTAL_ALIGNMENT_LEFT, 500, 22, -1, Color(1.0, 0.85, 0.5))
 	var sigs: Array = []
 	for id in Game.active_signatures():
 		sigs.append(tr(CanteenRun.NAMES[CanteenRun.KIND[id]]))
@@ -615,7 +665,7 @@ func _draw() -> void:
 		draw_string(font, Vector2(60, 255), _fit_line(tr("招牌菜：%s") % ("、".join(sigs) if not sigs.is_empty() else tr("（无）")), 24, 500), HORIZONTAL_ALIGNMENT_LEFT, -1, 24, Color(1.0, 0.9, 0.7))
 	var bt := Game.open_trial()
 	if bt != "":
-		draw_string(font, Vector2(60, 340), _fit_line(tr("最好的一顿 %s / 评测目标 %s") % [Game.fmt(Game.best_run), Game.fmt(Game.trial_target(bt))], 24, 500), HORIZONTAL_ALIGNMENT_LEFT, -1, 24, Color(1.0, 0.8, 0.6))
+		draw_string(font, Vector2(60, _trial_status_y()), _fit_line(tr("最好的一顿 %s / 评测目标 %s") % [Game.fmt(Game.best_run), Game.fmt(Game.trial_target(bt))], 24, 500), HORIZONTAL_ALIGNMENT_LEFT, -1, 24, Color(1.0, 0.8, 0.6))
 	CanteenRun.load_menu()
 	draw_string(font, Vector2(60, 215), tr("菜谱图鉴 %d / %d") % [Game.recipes.size(), CanteenRun.RECIPES.size()], HORIZONTAL_ALIGNMENT_LEFT, -1, 26, Color(1.0, 0.88, 0.55))
 	draw_string(font, Vector2(60, 175), tr(Game.plate()), HORIZONTAL_ALIGNMENT_LEFT, -1, 40, Color(1.0, 0.8, 0.45))
@@ -623,8 +673,25 @@ func _draw() -> void:
 		_draw_tooltip(font, Game.node(_hover))
 
 
+func _draw_pin(center_at: Vector2, paper: Rect2, zoom: float) -> void:
+	if _tex.has("pin"):
+		var ps := Vector2(16, 30) * zoom
+		draw_texture_rect(_tex.pin, Rect2(Vector2(center_at.x - ps.x * 0.5, paper.position.y - ps.y * 0.55), ps), false)
+
+
+func _feedback_height() -> float:
+	return 0.0 if _flash_text.is_empty() else ThemeDB.fallback_font.get_multiline_string_size(_flash_text, HORIZONTAL_ALIGNMENT_LEFT, 500, 22).y
+
+
+func _trial_status_y() -> float:
+	return maxf(340.0, 300.0 + _feedback_height() + 16.0) if not _flash_text.is_empty() else 340.0
+
+
 func _header_rect() -> Rect2:
-	return Rect2(24, 14, 580, 350 if Game.open_trial() != "" or _flash_text != "" else 290)
+	var bottom := 304.0
+	if not _flash_text.is_empty(): bottom = 300.0 + _feedback_height() + 12.0
+	if Game.open_trial() != "": bottom = _trial_status_y() + 24.0
+	return Rect2(24, 14, 580, bottom - 14.0)
 
 
 func _fit_line(text: String, fs: int, width: float) -> String:
@@ -657,6 +724,8 @@ func _name_lines(font: Font, text: String, fs: int, max_w: float) -> Array:
 
 func _tooltip_lines(n: Dictionary) -> Array:
 	var id: String = n["id"]
+	if not Game.is_visible(id):
+		return [[tr("空白便签"), 34, Color.WHITE], [tr("满足前置技能与版本条件后，空白便签才会揭晓。"), 24, Color(0.95, 0.88, 0.75)], [tr("这里只预告下一层，暂时不能购买。"), 22, Color(0.8, 0.75, 0.7)]]
 	var lines := [[tr(n["name"]), 34, Color.WHITE], [tr(n["desc"]), 24, Color(0.95, 0.88, 0.75)]]
 	var need := int(n.get("need_levels", 0))
 	var have := Game.ring_levels(int(n.get("ring", 0)))
@@ -669,12 +738,16 @@ func _tooltip_lines(n: Dictionary) -> Array:
 	else:
 		if n.get("key", false):
 			lines.append([tr("新的赚钱方式"), 24, Color(1.0, 0.75, 0.3)])
-		if Game.level(id) > 0:
-			lines.append([tr("右键退掉这个技能（全额退款）"), 22, Color(0.8, 0.75, 0.7)])
 		if need > have:
 			lines.append([tr("要先在这一环升满 %d 级（现在 %d 级）") % [need, have], 26, Color(1.0, 0.7, 0.5)])
 		var afford := Game.tokens >= Game.cost(id)
 		lines.append([tr("花费 %s token") % Game.fmt(Game.cost(id)), 26, Color(0.75, 1.0, 0.8) if afford else Color(1.0, 0.55, 0.5)])
+	if Game.level(id) > 0 and id != "start" and n.get("kind", "") != "ticket":
+		lines.append([tr("退款：右键 / Backspace / 手柄 X"), 22, Color(0.8, 0.75, 0.7)])
+		if Game.refund_floor(id) > 0:
+			lines.append([tr("已有下游技能：只能退多余等级，最低保留 1 级。"), 22, Color(1.0, 0.75, 0.5)])
+		else:
+			lines.append([tr("可全额退还这项技能的全部等级。"), 22, Color(0.8, 0.75, 0.7)])
 	return lines
 
 

@@ -248,6 +248,12 @@ func can_buy(id: String) -> bool:
 	return is_visible(id) and not is_maxed(id) and tokens >= cost(id)
 
 
+## Reveal only the existence of one next branch, never recurse through other previews.
+func is_preview(id: String) -> bool:
+	var n := node(id)
+	return not n.is_empty() and not is_visible(id) and n.get("parents", []).any(func(p): return is_visible(str(p)))
+
+
 ## Levels bought in one version ring (tickets and the root don't count).
 func ring_levels(ring: int) -> int:
 	var t := 0
@@ -378,15 +384,39 @@ func toggle_struck(id: String) -> bool:
 	return true
 
 
-## Right click on the tree: refund every level of one node (tickets and the root stay).
+## Bought outgoing branches keep an owned prerequisite alive, even with another parent.
+func refund_dependents(id: String) -> Array:
+	var out: Array = []
+	for n in nodes:
+		if level(str(n.id)) > 0 and n.get("parents", []).has(id):
+			out.append(str(n.id))
+	return out
+
+
+func refund_floor(id: String) -> int:
+	var n := node(id)
+	if n.is_empty() or level(id) <= 0:
+		return 0
+	if id == "start" or n.get("kind", "") == "ticket":
+		return level(id)
+	return 1 if not refund_dependents(id).is_empty() else 0
+
+
+## Refund unused levels; the last prerequisite point stays while a child is owned.
 func refund(id: String) -> float:
 	var n := node(id)
 	if n.is_empty() or id == "start" or n.get("kind", "") == "ticket" or level(id) == 0:
 		return 0.0
+	var keep := refund_floor(id)
+	if level(id) <= keep:
+		return 0.0
 	var back := 0.0
-	for i in level(id):
+	for i in range(keep, level(id)):
 		back += floor(float(n["cost"]) * pow(float(n.get("growth", 1.0)), i))
-	levels.erase(id)
+	if keep > 0:
+		levels[id] = keep
+	else:
+		levels.erase(id)
 	tokens += back
 	_recompute()
 	save_game()
