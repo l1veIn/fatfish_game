@@ -14,17 +14,17 @@ func _ready() -> void:
 		get_tree().quit(2)
 		return
 	process_mode = Node.PROCESS_MODE_ALWAYS
-	var engine_args := OS.get_cmdline_args()
-	for i in engine_args.size() - 1:
-		if engine_args[i] == "--resolution":
-			var dimensions := str(engine_args[i + 1]).split("x")
-			if dimensions.size() == 2:
-				_requested_size = Vector2i(int(dimensions[0]), int(dimensions[1]))
-	if DisplayServer.get_name() != "headless":
-		DisplayServer.window_set_size(_requested_size)
 	for arg in OS.get_cmdline_user_args():
+		if arg.begins_with("--render-size="):
+			var dimensions := arg.trim_prefix("--render-size=").split("x")
+			_requested_size = Vector2i(int(dimensions[0]), int(dimensions[1]))
 		if arg.begins_with("--out="):
 			_out = arg.trim_prefix("--out=")
+	Settings.window_size = _requested_size
+	Settings.fullscreen = false
+	Settings.apply()
+	if DisplayServer.get_name() != "headless":
+		DisplayServer.window_set_size(_requested_size)
 	if _out != "":
 		DirAccess.make_dir_recursive_absolute(_out)
 	_report = {"language": Settings.language, "source_sha256": {}, "scope": "Shell UI fixtures with GUI events; no full playthrough or physical gamepad"}
@@ -129,6 +129,8 @@ func _ready() -> void:
 			break
 		await _wait(0.025)
 	_check(receipt._done and not receipt._back.disabled, "reduced-motion receipt finishes and enables its action")
+	_check(receipt._need_h + receipt.PAPER.position.y < receipt._back.position.y, "dense receipt paper clears its return action")
+	_check(not receipt._extra_label.get_rect().intersects(receipt._back.get_rect()), "receipt explanation clears its return action")
 	await _shot("receipt_dense")
 	receipt._back.grab_focus()
 	await _pad(JOY_BUTTON_A)
@@ -219,4 +221,6 @@ func _shot(stem: String) -> void:
 	if _out == "" or DisplayServer.get_name() == "headless":
 		return
 	await RenderingServer.frame_post_draw
-	get_viewport().get_texture().get_image().save_png(_out.path_join(stem + ".png"))
+	var image := get_viewport().get_texture().get_image()
+	_check(image.get_size() == _requested_size, "native screenshot size: " + stem)
+	image.save_png(_out.path_join(stem + ".png"))

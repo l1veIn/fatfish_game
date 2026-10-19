@@ -5,7 +5,7 @@
   "assets": [
     {
       "id": "logo_zh",
-      "source": "C:\\Users\\A\\.codex\\generated_images\\01a15310-50d6-7221-be0a-49e0fa47b057\\exec-7b66e6b9-b568-40ca-bce8-52182b8d73bd.png",
+      "source": "C:\\Users\\A\\.codex\\generated_images\\01a15310-50d6-7221-be0a-49e0fa47b057\\exec-23fe6fab-0a3f-46df-b62f-772320d6d91c.png",
       "destination": "game/assets/ui/premium/logo_zh.png",
       "workflow": "OpenAI image generation; original output copied without raster resampling",
       "correction": true,
@@ -15,7 +15,7 @@
         887
       ],
       "mode": "RGBA",
-      "sha256": "fb8fdd0a6590efe7c5868c9009a9bbc51ba208a3c4981bfa8d1299e4ce503821",
+      "sha256": "a1392ce3e1f0c106d0a71a31f666a9f096f99b9ede5f3fb6a04cd14fc8c4d04a",
       "alpha_extrema": [
         0,
         255

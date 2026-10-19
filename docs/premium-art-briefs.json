@@ -1,0 +1,56 @@
+{
+  "badge_generation_prompts": [
+    {
+      "id": "badge_meal",
+      "prompt": "Use case: illustration-story. One premium hand-painted game achievement medallion designed SPECIFICALLY to be instantly readable at 96 pixels. Single dominant large central emblem, thick confident navy outlines, simple chunky shapes, only 4 main colors, clean cel-shaded highlights. Round deep-ocean-blue enamel disk with a modest brass rim, no intricate engraving, no tiny sparkles or micro-details. Center icon fills 78% of disk. Front view, balanced centered composition, transparent background outside disk, generous padding. NO text, letters, numbers, character body, ribbon, busy ornaments, multiple tiny objects. Cozy canteen game palette cream/navy/cyan/warm gold. Subject: a large warm ivory rice bowl with one blue whale-tail mark and two bold steam curls. A big dome of white rice, only a few broad strokes suggesting grains. Friendly satisfying first-meal reward."
+    },
+    {
+      "id": "badge_growth",
+      "prompt": "Use case: illustration-story. One premium hand-painted game achievement medallion designed SPECIFICALLY to be instantly readable at 96 pixels. Single dominant large central emblem, thick confident navy outlines, simple chunky shapes, only 4 main colors, clean cel-shaded highlights. Round deep-ocean-blue enamel disk with a modest brass rim, no intricate engraving, no tiny sparkles or micro-details. Center icon fills 78% of disk. Front view, balanced centered composition, transparent background outside disk, generous padding. NO text, letters, numbers, character body, ribbon, busy ornaments, multiple tiny objects. Cozy canteen game palette cream/navy/cyan/warm gold. Subject: one bright warm-gold lightbulb with a white heart-shaped gleam inside and three broad idea rays; its lower socket shaped like a subtle blue whale tail. Clear thoughtful-growth symbol, not a complex brain or character."
+    },
+    {
+      "id": "badge_recipe",
+      "prompt": "Use case: illustration-story. One premium hand-painted game achievement medallion designed SPECIFICALLY to be instantly readable at 96 pixels. Single dominant large central emblem, thick confident navy outlines, simple chunky shapes, only 4 main colors, clean cel-shaded highlights. Round deep-ocean-blue enamel disk with a modest brass rim, no intricate engraving, no tiny sparkles or micro-details. Center icon fills 78% of disk. Front view, balanced centered composition, transparent background outside disk, generous padding. NO text, letters, numbers, character body, ribbon, busy ornaments, multiple tiny objects. Cozy canteen game palette cream/navy/cyan/warm gold. Subject: one chunky open cream recipe book with a large coral red bookmark at the center and one simple golden spoon silhouette on its right page. Broad flat page planes and four restrained strokes, no text or rows of tiny ingredients."
+    },
+    {
+      "id": "badge_balance",
+      "prompt": "Use case: illustration-story. One premium hand-painted game achievement medallion designed SPECIFICALLY to be instantly readable at 96 pixels. Single dominant large central emblem, thick confident navy outlines, simple chunky shapes, only 4 main colors, clean cel-shaded highlights. Round deep-ocean-blue enamel disk with a modest brass rim, no intricate engraving, no tiny sparkles or micro-details. Center icon fills 78% of disk. Front view, balanced centered composition, transparent background outside disk, generous padding. NO text, letters, numbers, character body, ribbon, busy ornaments, multiple tiny objects. Cozy canteen game palette cream/navy/cyan/warm gold. Subject: one large simple cream three-compartment bento, filled with three broad shapes: white rice, orange chicken, vivid green bok choy. Front-top view showing the three equal sections clearly. No individual rice grain details. A compact balance-of-food emblem."
+    },
+    {
+      "id": "badge_kitchen",
+      "prompt": "Use case: illustration-story. One premium hand-painted game achievement medallion designed SPECIFICALLY to be instantly readable at 96 pixels. Single dominant large central emblem, thick confident navy outlines, simple chunky shapes, only 4 main colors, clean cel-shaded highlights. Round deep-ocean-blue enamel disk with a modest brass rim, no intricate engraving, no tiny sparkles or micro-details. Center icon fills 78% of disk. Front view, balanced centered composition, transparent background outside disk, generous padding. NO text, letters, numbers, character body, ribbon, busy ornaments, multiple tiny objects. Cozy canteen game palette cream/navy/cyan/warm gold. Subject: one cheerful pink octopus HEAD with two very large blue eyes and a plain white chef hat; TWO short chunky tentacle tips hold one gold ladle across the foreground. Face and ladle dominant. No full octopus body, no many tiny tentacles. Strong silhouette of a friendly canteen cook."
+    },
+    {
+      "id": "badge_gold",
+      "prompt": "Use case: illustration-story. One premium hand-painted game achievement medallion designed SPECIFICALLY to be instantly readable at 96 pixels. Single dominant large central emblem, thick confident navy outlines, simple chunky shapes, only 4 main colors, clean cel-shaded highlights. Round deep-ocean-blue enamel disk with a modest brass rim, no intricate engraving, no tiny sparkles or micro-details. Center icon fills 78% of disk. Front view, balanced centered composition, transparent background outside disk, generous padding. NO text, letters, numbers, character body, ribbon, busy ornaments, multiple tiny objects. Cozy canteen game palette cream/navy/cyan/warm gold. Subject: one gleaming closed golden bento lunchbox with a simple embossed blue whale-tail emblem on the lid. Three-quarter view, big simple rectangular object with rounded corners, one large ivory highlight, one bold star beside it. No food, no complex decorations."
+    }
+  ],
+  "correction_prompts": [
+    {
+      "id": "logo_zh",
+      "prompt": "Edit this exact existing game UI asset with a single targeted change. Remove ALL whale tail or whale emblems: replace the small decorative blue whale tail with a simple warm golden spoon with navy outline, preserving the original logo lettering EXACTLY, same wording and line breaks, same composition and proportions. No whale, no dolphin, no corporate logo. Preserve the transparent background and professional handpainted 2D canteen-game art. This is a correction to an existing approved design, not a redesign. Do not add any other text or details."
+    },
+    {
+      "id": "logo_en",
+      "prompt": "Edit this exact existing game UI asset with a single targeted change. Remove ALL whale tail or whale emblems: replace the small decorative blue whale tail with a simple warm golden spoon with navy outline, preserving the original logo lettering EXACTLY, same wording and line breaks, same composition and proportions. No whale, no dolphin, no corporate logo. Preserve the transparent background and professional handpainted 2D canteen-game art. This is a correction to an existing approved design, not a redesign. Do not add any other text or details."
+    },
+    {
+      "id": "badge_meal",
+      "prompt": "Edit this exact existing game UI asset with a single targeted change. Remove ALL whale tail or whale emblems: replace the whale-tail emblem with a small simple warm golden spoon silhouette, and keep the rest of the medallion composition, object, colors, outlines, readability and gold rim exactly the same. No whale, no dolphin, no corporate logo. Preserve the transparent background and professional handpainted 2D canteen-game art. This is a correction to an existing approved design, not a redesign. Do not add any other text or details."
+    },
+    {
+      "id": "badge_growth",
+      "prompt": "Edit this exact existing game UI asset with a single targeted change. Remove ALL whale tail or whale emblems: replace the whale-tail emblem with a small simple warm golden spoon silhouette, and keep the rest of the medallion composition, object, colors, outlines, readability and gold rim exactly the same. No whale, no dolphin, no corporate logo. Preserve the transparent background and professional handpainted 2D canteen-game art. This is a correction to an existing approved design, not a redesign. Do not add any other text or details."
+    },
+    {
+      "id": "badge_gold",
+      "prompt": "Edit this exact existing game UI asset with a single targeted change. Remove ALL whale tail or whale emblems: replace the whale-tail emblem with a small simple warm golden spoon silhouette, and keep the rest of the medallion composition, object, colors, outlines, readability and gold rim exactly the same. No whale, no dolphin, no corporate logo. Preserve the transparent background and professional handpainted 2D canteen-game art. This is a correction to an existing approved design, not a redesign. Do not add any other text or details."
+    }
+  ],
+  "other_briefs": {
+    "logo_zh": "Chinese hand-lettered two-line title: 吃白饭的 / 大肥鱼. Cream, navy, warm gold. Bowl of rice and spoon. Transparent.",
+    "logo_en": "Matching English wordmark: FATFISH'S / FREE LUNCH. Preserve readable lettering and transparent background.",
+    "recipe_spread": "Full open two-page cookbook with blank cream writing areas, navy cloth, brass corners and coral bookmark. Preserve natural aspect ratio. Transparent outer background."
+  },
+  "note": "Badge and correction prompts are the exact stored tool prompts. Other briefs summarize the art direction; they are not claimed as verbatim tool transcripts."
+}

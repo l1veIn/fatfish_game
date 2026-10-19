@@ -21,7 +21,6 @@ var _closing := false
 var _language := ""
 var _fullscreen_toggle: CheckButton
 var _resolution: OptionButton
-var _section_title: Label
 
 
 func _ready() -> void:
@@ -42,66 +41,51 @@ func _build(focus_key := "") -> void:
 		child.queue_free()
 	_tabs.clear()
 	var dim := ColorRect.new()
-	dim.color = Color(0.025, 0.07, 0.10, 0.84)
+	dim.color = Color(0.03, 0.02, 0.01, 0.78)
 	dim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	add_child(dim)
 	_panel = PanelContainer.new()
-	_panel.add_theme_stylebox_override("panel", UiKit.box(Color(0.97, 0.945, 0.88), Color(0.65, 0.54, 0.35), 2, 20))
 	add_child(_panel)
-	var page := Control.new()
-	page.custom_minimum_size = Vector2(1428, 876)
-	_panel.add_child(page)
-	var rail := Panel.new()
-	rail.position = Vector2(0, 0)
-	rail.size = Vector2(300, 876)
-	rail.add_theme_stylebox_override("panel", UiKit.box(Color(0.065, 0.18, 0.25), Color.TRANSPARENT, 0, 12))
-	page.add_child(rail)
-	var title := UiKit.label(tr("设置"), 50, Color(0.97, 0.91, 0.76))
-	title.position = Vector2(30, 40)
-	rail.add_child(title)
-	var subtitle := UiKit.label(tr("按你的节奏，安心开饭。"), 25, Color(0.73, 0.79, 0.78))
-	subtitle.position = Vector2(30, 118)
-	subtitle.size = Vector2(238, 100)
-	subtitle.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	rail.add_child(subtitle)
+	_layout()
+	_panel.minimum_size_changed.connect(_layout.call_deferred)
+	var col := VBoxContainer.new()
+	col.add_theme_constant_override("separation", 18)
+	_panel.add_child(col)
+	var title := UiKit.label(tr("设置"), 50, UiKit.GOLD)
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	col.add_child(title)
+	var subtitle := _hint(tr("按你的节奏，安心开饭。"))
+	subtitle.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	col.add_child(subtitle)
+	var tabs_row := HBoxContainer.new()
+	tabs_row.add_theme_constant_override("separation", 12)
+	col.add_child(tabs_row)
 	for i in TABS.size():
-		var tab := UiKit.button(tr(TABS[i]), 30, Vector2(248, 72))
-		tab.position = Vector2(26, 274 + i * 94)
+		var tab := UiKit.button(tr(TABS[i]), 29, Vector2(0, 66))
+		tab.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		tab.toggle_mode = true
 		tab.set_meta("focus_key", "tab_%d" % i)
 		tab.pressed.connect(func(): _show_tab(i))
-		_style_button(tab)
-		rail.add_child(tab)
+		tabs_row.add_child(tab)
 		_tabs.append(tab)
-	_section_title = UiKit.label("", 38, Color(0.11, 0.25, 0.30))
-	_section_title.position = Vector2(354, 42)
-	page.add_child(_section_title)
-	var rule := ColorRect.new()
-	rule.color = Color(0.70, 0.61, 0.43, 0.45)
-	rule.position = Vector2(354, 106)
-	rule.size = Vector2(1010, 2)
-	page.add_child(rule)
 	_scroll = ScrollContainer.new()
-	_scroll.position = Vector2(354, 140)
-	_scroll.size = Vector2(1010, 586)
+	_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	_scroll.follow_focus = true
-	page.add_child(_scroll)
+	col.add_child(_scroll)
 	_content = VBoxContainer.new()
 	_content.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_content.add_theme_constant_override("separation", 22)
+	_content.add_theme_constant_override("separation", 18)
 	_scroll.add_child(_content)
-	var footer := _hint(tr("方向键 · Enter / A 选择 · Esc / B 返回"))
-	footer.position = Vector2(354, 784)
-	footer.size = Vector2(690, 70)
-	page.add_child(footer)
-	_back = UiKit.button(tr("返回"), 30, Vector2(260, 72))
-	_back.position = Vector2(1104, 774)
+	var footer := _hint(tr("方向键选择 · Enter / A 确认 · Esc / B 返回"))
+	footer.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	col.add_child(footer)
+	_back = UiKit.button(tr("返回"), 32, Vector2(300, 70))
 	_back.set_meta("ui_back", true)
 	_back.set_meta("focus_key", "back")
+	_back.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	_back.pressed.connect(close)
-	_style_button(_back, true)
-	page.add_child(_back)
+	col.add_child(_back)
 	_show_tab(_active_tab, false)
 	_layout()
 	_restore_internal_focus.call_deferred(focus_key)
@@ -111,25 +95,12 @@ func _layout() -> void:
 	if not is_instance_valid(_panel):
 		return
 	var area := size if size.x > 1.0 else get_viewport_rect().size
-	_panel.size = Vector2(1476, 900)
+	_panel.size = Vector2(minf(1160.0, area.x - 80.0), minf(920.0, area.y - 64.0))
 	_panel.position = (area - _panel.size) * 0.5
-
-
-func _style_button(button: BaseButton, primary := false) -> void:
-	var bg := Color(0.09, 0.25, 0.32) if primary else Color(0.99, 0.97, 0.91)
-	var ink := Color(0.97, 0.94, 0.83) if primary else Color(0.14, 0.27, 0.30)
-	button.add_theme_stylebox_override("normal", UiKit.box(bg, Color(0.69, 0.59, 0.40), 1, 10, 2))
-	button.add_theme_stylebox_override("hover", UiKit.box(Color(0.95, 0.87, 0.69), Color(0.69, 0.59, 0.40), 2, 10))
-	button.add_theme_stylebox_override("pressed", UiKit.box(Color(0.91, 0.78, 0.5), Color(0.69, 0.59, 0.40), 2, 10))
-	button.add_theme_color_override("font_color", ink)
-	button.add_theme_color_override("font_focus_color", ink)
-	button.add_theme_color_override("font_hover_color", Color(0.14, 0.27, 0.30))
-	button.add_theme_color_override("font_pressed_color", Color(0.14, 0.27, 0.30))
 
 
 func _show_tab(index: int, focus_tab := true) -> void:
 	_active_tab = index
-	_section_title.text = tr(TABS[index])
 	_reset_armed = 0.0
 	_reset_btn = null
 	_fullscreen_toggle = null
@@ -202,18 +173,16 @@ func _game_page() -> void:
 	_toggle(tr("切到后台时暂停上班"), Settings.pause_unfocused, "pause_unfocused", func(on): Settings.pause_unfocused = on)
 	var line := HSeparator.new()
 	_content.add_child(line)
-	_content.add_child(UiKit.label(tr("存档"), 30, Color(0.61, 0.25, 0.19)))
+	_content.add_child(UiKit.label(tr("存档"), 30, UiKit.GOLD))
 	_content.add_child(_hint(tr("清除后将失去全部饭票、升级和成就。此操作无法撤销。")))
 	_reset_btn = UiKit.button(tr("清除存档，从头开始"), 27, Vector2(0, 66))
-	_style_button(_reset_btn)
-	_reset_btn.add_theme_color_override("font_color", Color(0.65, 0.22, 0.16))
 	_register(_reset_btn, "reset_save")
 	_reset_btn.pressed.connect(_on_reset)
 	_content.add_child(_reset_btn)
 
 
 func _hint(text: String) -> Label:
-	var label := UiKit.label(text, 25, Color(0.36, 0.40, 0.39))
+	var label := UiKit.label(text, 24, Color(0.85, 0.78, 0.67))
 	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	return label
@@ -222,9 +191,7 @@ func _hint(text: String) -> Label:
 func _row(text: String) -> HBoxContainer:
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 24)
-	row.custom_minimum_size.y = 70
-	var label := UiKit.label(text, 28, Color(0.14, 0.27, 0.30))
-	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	var label := UiKit.label(text, 28)
 	label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	row.add_child(label)
@@ -236,7 +203,6 @@ func _option(key: String) -> OptionButton:
 	var option := OptionButton.new()
 	option.custom_minimum_size = Vector2(370, 64)
 	option.add_theme_font_size_override("font_size", 28)
-	_style_button(option)
 	_register(option, key)
 	return option
 
@@ -252,16 +218,8 @@ func _slider(text: String, bus: String) -> void:
 	slider.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	slider.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	_register(slider, "volume_" + bus)
-	for style in [["slider", Color(0.79, 0.80, 0.75)], ["grabber_area", Color(0.17, 0.36, 0.42)], ["grabber_area_highlight", Color(0.21, 0.43, 0.48)]]:
-		var track := UiKit.box(style[1], Color.TRANSPARENT, 0, 4)
-		track.content_margin_left = 0
-		track.content_margin_right = 0
-		track.content_margin_top = 3
-		track.content_margin_bottom = 3
-		slider.add_theme_stylebox_override(style[0], track)
 	row.add_child(slider)
-	var pct := UiKit.label("%d%%" % int(slider.value), 27, Color(0.14, 0.27, 0.30))
-	pct.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	var pct := UiKit.label("%d%%" % int(slider.value), 27)
 	pct.custom_minimum_size.x = 92
 	pct.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	row.add_child(pct)
@@ -319,7 +277,7 @@ func _link_focus() -> void:
 		var tab := _tabs[i]
 		tab.focus_neighbor_left = tab.get_path_to(_tabs[(i + _tabs.size() - 1) % _tabs.size()])
 		tab.focus_neighbor_right = tab.get_path_to(_tabs[(i + 1) % _tabs.size()])
-		tab.focus_neighbor_top = tab.get_path_to(_tabs[posmod(i - 1, _tabs.size())])
+		tab.focus_neighbor_top = tab.get_path_to(_back)
 		tab.focus_neighbor_bottom = tab.get_path_to(_controls[0] if not _controls.is_empty() else _back)
 	for i in _controls.size():
 		var control := _controls[i]
