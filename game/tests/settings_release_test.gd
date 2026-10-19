@@ -47,6 +47,9 @@ func _wait_real(seconds: float) -> void:
 	var end := Time.get_ticks_msec() + int(seconds * 1000.0)
 	while Time.get_ticks_msec() < end:
 		await get_tree().process_frame
+	# process_frame resumes before the nodes' _process calls. Let Fx process the
+	# frame that crossed the deadline before reading its restored time scale.
+	await get_tree().process_frame
 
 
 func _shot(name: String) -> void:
@@ -94,6 +97,7 @@ func _ready() -> void:
 	Settings.window_size = Vector2i(1280, 720)
 	Settings._read_config(decoded)
 	_check(Settings.reduced_motion and not Settings.screen_shake and not Settings.hit_pause and Settings.window_size == Vector2i(1600, 900), "all accessibility flags and window size round-trip")
+	Settings.vsync = false # capture fixture; apply() can override the engine's startup flag
 	Settings.apply()
 	_check(FileAccess.get_file_as_bytes(Settings.PATH) == player_before, "applying a test profile leaves player settings byte-identical")
 	for screen in [Rect2i(0, 0, 1280, 680), Rect2i(-1920, 0, 1920, 1040), Rect2i(1920, 120, 2560, 1400)]:
@@ -151,6 +155,7 @@ func _ready() -> void:
 	Settings.fullscreen = false
 	Settings.window_size = Vector2i(1280, 720)
 	Settings.language = "zh_CN"
+	Settings.vsync = false
 	Settings.apply()
 	ThemeDB.get_default_theme().merge_with(UiKit.build_theme())
 	_root = Control.new()

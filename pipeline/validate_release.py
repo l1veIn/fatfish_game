@@ -34,6 +34,9 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--runs", type=int, default=0)
     parser.add_argument("--visual", action="store_true")
+    parser.add_argument("--uncapped-ui", action="store_true", help="request VSync-off startup and a 120 FPS cap for UI fixtures; scene settings may override it; not a performance test")
+    parser.add_argument("--ui-timeout", type=int, default=120)
+    parser.add_argument("--only", action="append", default=[], help="run only an exact scenario name; repeat to select more")
     args = parser.parse_args()
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     out = ROOT / "build" / f"verification-{stamp}"
@@ -61,9 +64,17 @@ def main() -> None:
         ("progression-layout", "progression_layout_test", "progression_layout", "PROGRESSION_LAYOUT_TEST: 99 checks, 0 failures"),
         ("tree-dependency", "tree_dependency_test", "tree_dependency_release", "TREE_DEPENDENCY_TEST PASS failures=0"),
         ("stall-layout", "stall_layout_ui_test", "stall_layout_ui", "STALL_LAYOUT_UI_TEST PASS"),
+        ("input-remap", "input_remap_test", "input_remap_release", "INPUT_REMAP_TEST PASS failures=0"),
+        ("input-access", "input_access_test", "input_access", "INPUT_ACCESS_TEST PASS"),
     ]
 
     def execute(name: str, command: list[str], marker: str, timeout=120):
+        if args.only and name not in args.only:
+            return
+        if "--headless" not in command:
+            timeout = max(timeout, args.ui_timeout)
+            if args.uncapped_ui:
+                command[1:1] = ["--disable-vsync", "--max-fps", "120"]
         log = out / f"{name}.log"
         started = datetime.now(timezone.utc).isoformat()
         with log.open("w", encoding="utf-8") as stream:
@@ -75,7 +86,7 @@ def main() -> None:
         text = log.read_text(encoding="utf-8", errors="replace")
         errors = re.findall(r"^.*(?:SCRIPT ERROR:|ERROR:|FAIL ).*$", text, re.M)
         passed = code == 0 and marker in text and not errors
-        results.append({"name": name, "passed": passed, "exit_code": code, "marker": marker,
+        results.append({"name": name, "passed": passed, "exit_code": code, "marker": marker, "command": command,
                         "log": str(log.relative_to(ROOT)), "started_utc": started, "errors": errors})
         print(f"{name}: {'PASS' if passed else 'FAIL'}", flush=True)
 
@@ -94,12 +105,13 @@ def main() -> None:
                         ("tree", "tree_presentation_test", "tree_presentation_release", '"failures":[]'),
                         ("tree-dependency", "tree_dependency_test", "tree_dependency_release", "TREE_DEPENDENCY_TEST PASS failures=0"),
                         ("stall-layout", "stall_layout_ui_test", "stall_layout_ui", "STALL_LAYOUT_UI_TEST PASS"),
+                        ("input-remap", "input_remap_test", "input_remap_release", "INPUT_REMAP_TEST PASS failures=0"),
                         ("shell", "presentation_shell_test", "presentation_shell_release", "PRESENTATION_SHELL_TEST PASS")]:
                     key = f"{name}-{locale}-{size}"
                     command = [str(ENGINE), "--path", str(ROOT / "game"), "--resolution", size,
                                f"res://tests/{scene}.tscn", "--", f"--test-profile={profile}",
                                f"--lang={locale}", f"--out={out / key}", f"--render-size={size}"]
-                    if small and name in {"service", "tree", "tree-dependency", "stall-layout"}:
+                    if small and name in {"service", "tree", "tree-dependency", "stall-layout", "input-remap"}:
                         command.append("--small")
                     execute(key, command, marker)
                 crew_size = "960x540" if small else "1920x1080"
@@ -129,7 +141,7 @@ def main() -> None:
                 f"--settings-shots={out / 'settings-visual'}"], "SETTINGS_RELEASE_TEST failures=0")
         for locale, small in [("zh_CN", False), ("en", True)]:
             key = f"helper-shift-{locale}"
-            command = [str(ENGINE), "--path", str(ROOT / "game"),
+            command = [str(ENGINE), "--verbose", "--print-fps", "--path", str(ROOT / "game"),
                        "res://tests/helper_shift_test.tscn", "--", "--test-profile=helper_shift",
                        f"--lang={locale}", f"--out={out / key}"]
             if small:
@@ -141,7 +153,9 @@ def main() -> None:
     after = fingerprint()
     stable = before == after
     player_unchanged = player_before == player_fingerprint()
-    report = {"passed": all(x["passed"] for x in results) and stable and player_unchanged,
+    selected = not args.only or set(args.only) == {x["name"] for x in results}
+    report = {"passed": bool(results) and selected and all(x["passed"] for x in results) and stable and player_unchanged,
+              "uncapped_ui": args.uncapped_ui, "requested_scenarios": args.only,
               "engine": "Godot 4.7.2 stable", "source_unchanged": stable, "player_files_unchanged": player_unchanged,
               "checks": results, "source_sha256": before,
               "limitations": ["Automated fixtures and input injection do not establish human enjoyment or hardware gamepad compatibility.",

@@ -118,7 +118,12 @@ func _ready() -> void:
 	Settings.pause_unfocused = false
 	Settings.hit_pause = false
 	Settings.screen_shake = false
+	# This fixture advances fixed gameplay steps, so VSync only delays capture.
+	# Explicitly set it before apply(), which can override --disable-vsync.
+	Settings.vsync = false
 	Settings.apply()
+	if DisplayServer.get_name() != "headless":
+		_check(DisplayServer.window_get_vsync_mode() == DisplayServer.VSYNC_DISABLED, "capture fixture keeps VSync disabled after settings apply")
 	if DisplayServer.get_name() != "headless":
 		DisplayServer.window_set_size(_requested_size)
 	ThemeDB.get_default_theme().merge_with(UiKit.build_theme())
@@ -128,7 +133,7 @@ func _ready() -> void:
 	_report = {"seed": FIXTURE_SEED, "step_seconds": STEP, "steps_per_engine_frame": STEPS_PER_FRAME,
 		"scope": "Continuous normal-food shift with existing autotest player, fixed small gameplay steps; not human feel, FPS or balance evidence",
 		"fixture": "Six legal helpers, two per role; egg_veg order from level-one wok. Legal high supply and fast eating, ordinary meal duration. No direct food/box injection.",
-		"language": Settings.language, "requested_size": str(_requested_size), "source_sha256": {}, "levels": Game.levels.duplicate(),
+		"language": Settings.language, "requested_size": str(_requested_size), "vsync_disabled": not Settings.vsync, "source_sha256": {}, "levels": Game.levels.duplicate(),
 		"helper_plan": Game.helper_plan.duplicate(true)}
 	for path in ["scripts/run/canteen_run.gd", "scripts/ui/crew_planner_panel.gd", "scripts/autoload/game.gd", "scripts/run/meal_rules.gd", "data/skill_tree.json", "data/menu.json", "tests/helper_shift_test.gd"]:
 		_report.source_sha256[path] = FileAccess.get_sha256("res://" + path)
