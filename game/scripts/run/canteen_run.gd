@@ -15,7 +15,7 @@ extends Node2D
 ##                Space / Shift / B / RB / RT think, Esc / P / Start pause (PauseMenu)
 ## A shift ends at 吃饱了 (stomach full) or 食堂关门 (the meal clock runs out); then a result
 ## card, then `finished`. All numbers come from Game.stat() (the skill tree).
-##   Space / RMB  深度思考 (from R1, and lent during trials): the world slows down and every
+##   Space / RMB  深度思考 (from R1): the world slows down and every
 ##                piece of food shows where it will cross the basin's height; a gauge limits it
 ## Later versions add 混合思考 (V3.1: good food always shows where it lands) and DSA (V3.2: the
 ## magnet only pulls good food, greens bounce off, golden 「极」 hop around in normal shifts).
@@ -56,7 +56,12 @@ const BOX_PAD := 8.0
 const SPEED := Vector2(2400.0, 1000.0)     # max speed: empty / heavy
 const ACCEL := Vector2(16000.0, 4500.0)    # max acceleration: empty / heavy
 const SLOSH_SPILL := 0.45
-const GOLD_MAGNET := 220.0
+const THINK_COOLDOWN := 1.0
+const THINK_MIN_CHARGE := 0.5
+const PULL_MAX_RANGE := 220.0
+const PULL_HEIGHT := 180.0
+const PULL_ACCEL := 360.0
+const PULL_MAX_SPEED := 150.0
 const MATERIALS := [
 	{"name": "铁饭盒", "mult": 1.0, "tint": Color(0.84, 0.86, 0.9)},
 	{"name": "铜饭盒", "mult": 1.5, "tint": Color(1.0, 0.66, 0.46)},
@@ -66,6 +71,8 @@ const MATERIALS := [
 const TABLE := Rect2(1300, 842, 605, 150)  # the table top (click area for taking / putting boxes)
 const FISH_POS := Vector2(1600, 990)      # her spot (popups are placed from here); she sits in the middle
 const MAX_ITEMS := 160
+const COACH_UI = preload("res://scripts/ui/run_coach.gd")
+const MEAL_RULES = preload("res://scripts/run/meal_rules.gd")
 
 ## Q = a 难题 (hybrid trial), JI = the 「极」 glitch (ji trial: it spoils a whole box), JI_GOLD = the
 ## golden 「极」 of normal shifts from V3.2 (worth a lot, hops around). The last three reuse food art
@@ -287,7 +294,6 @@ const COMBO_CAP := [3, 5, 7, 9, 12, 12]
 const SIG_CAP := [0.3, 0.5, 0.7, 0.85, 1.0, 1.0]
 const WINDOW_NAME := ["32K", "64K", "128K", "256K", "1M", "1M"]
 const MEAL_TIME := [60.0, 70.0, 80.0, 90.0, 105.0, 120.0]   # the canteen closes later every version
-const FUSE := 1.5                     # 上下文溢出: above FUSE x the next target a shift counts sqrt
 var stream_from := 40                 # 首 Token 延迟: bites before 越吃越香 starts
 var mtp := 0.0                        # MTP: + tokens per bite
 var g_good := 0.0                     # SFT: chance a dish is 优质 (LoRA adds per struck dish)
@@ -429,7 +435,7 @@ var _texts: Array = []
 var _think := 0.0                     # gauge, seconds of slow motion left
 var _thinking := false
 # trial: 春节前夜·服务器繁忙
-var _rate := 1.0                      # how fast 梁阿姨 throws (fails make it gentler)
+var _rate := 1.0                      # legacy throw-rate multiplier; review failures do not change difficulty
 var _pile := PackedVector2Array()     # food left on the floor = server load
 var _pile_k := PackedByteArray()
 var pile_max := 50
@@ -460,7 +466,22 @@ var ji_shaken := 0
 var _app_t := 0.0
 const PAD_SPEED := 1500.0             # keyboard / stick aim speed, px/s
 var _was_thinking := false
+var _think_cooldown := 0.0
+var _think_input_held := false
+var _resume_input_guard := 0.0
+var _mouse_steering := true
+var _think_transitions := 0           # state transitions, also useful for bounded audio QA
 var _pause: PauseMenu
+var _coach = null
+var _learning_time := 0.0             # tutorial time never consumes the first meal's clock
+var _recipes_made := 0
+var _full_boxes := 0                 # player boxes actually submitted full, counted once
+var _previous_mono_kind := -1
+var _cache_ready := false
+var _rule_income := 0.0              # actual credited build bonuses, before meal multipliers
+var mono_bonus := 0.0
+var cache_bonus := 0.0
+var rotation_bonus := 0.0
 
 # stats of this shift
 var earned := 0.0
@@ -498,6 +519,7 @@ const CREW := {
 
 
 func _ready() -> void:
+	process_mode = Node.PROCESS_MODE_PAUSABLE
 	load_menu()
 	Fx.world = self
 	texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS   # the art is drawn scaled down
@@ -564,6 +586,32 @@ func _ready() -> void:
 	Audio.music("bgm_trial" if trial != "" else "bgm_run")
 	Audio.ambience("amb_canteen", -20.0)
 	Audio.sfx("shift_start", -4.0)
+	_setup_coach()
+
+
+func _setup_coach() -> void:
+	if autotest or trial != "" or Game.seen_buttons.has("intro_canteen_complete"):
+		return
+	# Existing saves keep their familiar flow. An interrupted lesson is offered again.
+	if Game.runs > 0 and not Game.seen_buttons.has("intro_canteen_started"):
+		return
+	_coach = COACH_UI.new()
+	_coach.completed.connect(func(_skipped: bool):
+		Game.seen_buttons["intro_canteen_complete"] = true
+		Game.save_game()
+		Audio.sfx("ticket", -6.0))
+	add_child(_coach)
+	_aim = Vector2(STACK_AT.x, BAND.y)
+	Game.seen_buttons["intro_canteen_started"] = true
+	Game.save_game()
+
+
+func _learning() -> bool:
+	return is_instance_valid(_coach) and _coach.active
+
+
+func _meal_elapsed() -> float:
+	return maxf(_t - _learning_time, 0.0)
 
 
 func _read_stats() -> void:
@@ -619,9 +667,12 @@ func _read_stats() -> void:
 	diverge = Game.stat("diverge")
 	converge = Game.stat("converge") > 0.0
 	critic = Game.stat("critic")
+	mono_bonus = Game.stat("mono_bonus")
+	cache_bonus = Game.stat("cache_bonus")
+	rotation_bonus = Game.stat("rotation_bonus")
 	_combo_safe = memory >= 2
 	var cut := int(Game.stat("menu_cut"))
-	for id in Game.struck:
+	for id in Game.active_struck():
 		if struck.size() < cut and KIND.has(id):
 			struck[KIND[id]] = true
 	g_good += Game.stat("lora") * struck.size()
@@ -662,20 +713,8 @@ func _read_stats() -> void:
 		stall_lv[id] = clampi(int(Game.stat("stall_" + id)), 0, int(STALLS[id].max))
 
 
-## Every trial: the rush is fixed, not scaled by your 梁阿姨 upgrades (the test is how well you
-## catch), she is never "full", and the next version's ability is lent ("试炼即内测"). Every
-## failure (被用户骂了一顿, max 3) makes the next try easier.
-## 春节前夜·服务器繁忙: five windows, mostly dumplings; food on the floor piles up as server load
-## (a cleaner sweeps slowly) and a full load crashes the server; after every basin the table
-## shows 服务器繁忙 for a moment. Hold out until midnight to pass. Lends 深度思考.
-## 嗯，用户想要……: quick rounds (12 s, she throws fast; thinking now annoys the users) and hard
-## rounds (13 s: volleys of 难题 flung far apart, catch them to solve them; each one on the floor
-## annoys the users too) take turns. Solve enough before the end without 满意度 hitting 0. Lends
-## 混合思考 (good food, 难题 included, always shows where it lands).
-## 极字大清扫: some of the food is the 「极」 glitch, hopping about. A box with a 「极」 in it is spat
-## out whole when she gets to it ("time.Se极cond"); shake the box hard to fling a 「极」 out. Feed
-## her enough clean food before the meal ends, with fewer spoiled boxes than the limit. Lends DSA
-## (the magnet ignores 「极」 and greens, and pushes 「极」 away a little).
+## Release reviews use the same serving rules and owned skills as an ordinary meal.
+## The target comes from Game; fails is history only and does not lower difficulty.
 func _setup_trial() -> void:
 	fails = int(Game.trial_fails.get(trial, 0))
 	target = Game.trial_target(trial)
@@ -738,7 +777,7 @@ func _setup_arms() -> void:
 		seen[st] = k + 1
 		var x := _win_x(STALL_ORDER.find(st)) + (k - (n - 1) * 0.5) * minf(70.0, _win_span(st) / maxf(n - 1, 1))
 		var t0 := randf_range(0.3, 2.0)
-		_arms.append({"x": x, "t": t0, "t0": t0, "raise": 0.0, "stall": st})   # t counts down the cooking
+		_arms.append({"x": x, "t": t0, "t0": t0, "raise": 0.0, "stall": st, "ladle": k + 1})
 	for a in _arms:
 		a.dish = _next_dish(a)
 	for x in _arm_lines + _arm_ladles:
@@ -984,6 +1023,9 @@ func _merge(b: Dictionary, show: bool) -> void:
 	var made := _merge_items(b.items)
 	if made.is_empty():
 		return
+	_recipes_made += made.size()
+	if show:
+		Fx.hitstop(0.025)
 	b["made"] = int(b.get("made", 0)) + made.size()   # (a helper cheers when her box makes one)
 	for r in made:
 		for need in r.needs:
@@ -1043,6 +1085,8 @@ func _catch(b: Dictionary, it: int, show: bool) -> void:
 			it = with_hot(make(I.VEG))
 			k = I.VEG
 	b.items.append(it)
+	if show and _learning():
+		_coach.caught_food()
 	if halluc > 0.0 and not IS_SET[k] and STALL[k] != "" and randf() < halluc:
 		b.items.append(make(_stall_kind(STALL[k]), 0, true, true))
 		if show:
@@ -1151,7 +1195,8 @@ func _can_make(k: int) -> bool:
 
 
 func _magnet() -> float:
-	return magnet + (GOLD_MAGNET if mat_level == 3 else 0.0)
+	# Material changes income only. Attraction must come from an explicitly learned skill.
+	return clampf(magnet, 0.0, PULL_MAX_RANGE)
 
 
 # --- input --------------------------------------------------------------------------------------
@@ -1163,9 +1208,14 @@ func _unhandled_input(event: InputEvent) -> void:
 		return
 	if event is InputEventMouseMotion:
 		if not autotest:   # a real mouse over the window must not steer the bot
-			_aim = get_global_mouse_position()
+			_aim = get_canvas_transform().affine_inverse() * event.position
+			if event.relative.length_squared() > 0.01:
+				_mouse_steering = true
 	elif event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
 		if not _ended:
+			if not autotest:
+				_aim = get_canvas_transform().affine_inverse() * event.position
+				_mouse_steering = true
 			_try_deliver()
 	elif event.is_action_pressed("deliver") and not _ended:
 		_try_deliver()
@@ -1185,10 +1235,15 @@ func _unhandled_input(event: InputEvent) -> void:
 			KEY_F2: _stress()
 
 
-func pause() -> void:
+func pause(from_focus := false) -> void:
 	if is_instance_valid(_pause) or _ended:
 		return
+	_interrupt_thinking()
 	_pause = PauseMenu.new()
+	_pause.focus_pause = from_focus
+	_pause.resumed.connect(func():
+		_resume_input_guard = 0.18
+		_think_input_held = true)
 	_pause.end_shift.connect(func(): _end("提前下班"))
 	_pause.to_title.connect(func():
 		_end("提前下班", false)
@@ -1199,7 +1254,59 @@ func pause() -> void:
 
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_APPLICATION_FOCUS_OUT and Settings.pause_unfocused and not autotest and not _ended and is_inside_tree():
-		pause()
+		pause(true)
+
+
+func _set_thinking(on: bool) -> void:
+	if _thinking == on:
+		return
+	_thinking = on
+	_was_thinking = on
+	_think_transitions += 1
+	Audio.sfx("think_start" if on else "think_end", -6.0)
+	Audio.slowmo(on)
+	if not on:
+		_think_cooldown = THINK_COOLDOWN
+
+
+func _interrupt_thinking() -> void:
+	_set_thinking(false)
+	_think_input_held = true
+	_resume_input_guard = 0.18
+	Audio.slowmo(false)
+
+
+## A press starts one thinking session. Holding through exhaustion never restarts it.
+func _update_thinking(delta: float, want: bool) -> void:
+	_think_cooldown = maxf(_think_cooldown - delta, 0.0)
+	if _resume_input_guard > 0.0:
+		_resume_input_guard = maxf(_resume_input_guard - delta, 0.0)
+		_think_input_held = true
+		_think = minf(_think + think_regen * delta, think_time)
+		return
+	var pressed := want and not _think_input_held
+	_think_input_held = want
+	if _thinking:
+		if want:
+			_think = maxf(_think - delta, 0.0)
+		if not want or _think <= 0.0 or not can_think:
+			_set_thinking(false)
+		return
+	_think = minf(_think + think_regen * delta, think_time)
+	if can_think and pressed and _think_cooldown <= 0.0 and _think >= minf(THINK_MIN_CHARGE, think_time):
+		_set_thinking(true)
+
+
+func _think_hint() -> String:
+	if _thinking:
+		return tr("松手结束 · 冷却 1 秒")
+	if _think_cooldown > 0.0:
+		return tr("冷却 %.1f 秒") % _think_cooldown
+	if _think_input_held:
+		return tr("松开后再按")
+	if _think < minf(THINK_MIN_CHARGE, think_time):
+		return tr("思考恢复中")
+	return tr("按住 空格 / 右键 / B")
 
 
 ## Left click / A over the table: empty hand -> take a box off the stack; an empty box in hand ->
@@ -1211,6 +1318,8 @@ func _update_skills(delta: float) -> void:
 		_empty -= 1
 		_hand = _new_basin(STACK_AT + Vector2(0, -20))
 		_hand.pos = Vector2(_aim.x, clampf(_aim.y, BAND.x, BAND.y))
+		if _learning():
+			_coach.took_box()
 		_push_cd = 0.6
 		Audio.sfx("box_return", -8.0)
 	if auto_return and _hand != null and _space(_hand) >= _cap():
@@ -1224,6 +1333,8 @@ func _try_deliver() -> void:
 		if TABLE.grow(60).has_point(_aim) and _empty > 0:
 			_empty -= 1
 			_hand = _new_basin(STACK_AT + Vector2(0, -20))
+			if _learning():
+				_coach.took_box()
 			Audio.sfx("deliver", -8.0)
 		return
 	if warm and WARM_RECT.grow(20).has_point(_hand.pos) and not _hand.items.is_empty():
@@ -1252,6 +1363,7 @@ func _try_deliver() -> void:
 func _serve(b: Dictionary) -> void:
 	if not b.has("full"):
 		b["full"] = _space(b) >= _cap()
+	_note_served(b)
 	if regen > 0.0 and not b.get("crew", false) and randf() < regen:
 		for i in b.items.size():
 			var it: int = b.items[i]
@@ -1270,11 +1382,73 @@ func _serve(b: Dictionary) -> void:
 func _put_warm(b: Dictionary) -> void:
 	if not b.has("full"):
 		b["full"] = _space(b) >= _cap()
+	_note_served(b)
 	if _warm != null:
 		_queue.append(_warm)
 	_warm = b
 	_float(WARM_AT + Vector2(-80, -110), "留到最后吃", "set")
 	Audio.sfx("deliver", -4.0)
+
+
+func _note_served(b: Dictionary) -> void:
+	if b.get("crew", false) or b.get("takeout", false) or b.items.is_empty() or b.get("run_counted", false):
+		return
+	b["run_counted"] = true
+	var rule := _plan_box(b)
+	b["meal_rule"] = rule
+	_previous_mono_kind = int(rule.next_mono_kind)
+	_cache_ready = bool(rule.cache_ready)
+	_commit_delivery_chain(b, bool(rule.combo_eligible))
+	if rule.cache_primed:
+		_float(b.pos + Vector2(-70, -130), "缓存已备好", "mult")
+	elif float(rule.add_bonus) > 0.0:
+		_float(b.pos + Vector2(-70, -130), tr("搭配 +%d%%") % int(round(float(rule.add_bonus) * 100)), "mult")
+	if b.get("full", false):
+		_full_boxes += 1
+		Fx.hitstop(0.018)
+	if _learning():
+		_coach.served_food()
+
+
+func _box_profile(b: Dictionary) -> Dictionary:
+	var items: Array = []
+	for it in b.items:
+		var k := K(it)
+		items.append({"kind": k, "cells": _cells(it), "ghost": is_ghost(it), "is_set": IS_SET[k], "tier": TIER[k]})
+	return MEAL_RULES.profile(items, _cap())
+
+
+func _plan_box(b: Dictionary) -> Dictionary:
+	return MEAL_RULES.plan(_box_profile(b), _previous_mono_kind, _cache_ready, mono_bonus, cache_bonus, rotation_bonus)
+
+
+func _box_rule_bonus(b: Dictionary) -> float:
+	return float(b.get("meal_rule", {}).get("add_bonus", 0.0))
+
+
+## Freeze the chain at submission time: the table is a stack, so eating order can differ.
+func _commit_delivery_chain(b: Dictionary, eligible: bool) -> void:
+	b["chain_multiplier"] = 1.0
+	if combo <= 0.0:
+		return
+	if eligible:
+		_combo_n += 1
+		b.chain_multiplier = 1.0 + combo * mini(_combo_n - 1, _combo_cap())
+	elif _combo_n > 0:
+		if _combo_safe:
+			_combo_safe = false
+		else:
+			_combo_n = _combo_n / 2 if memory >= 1 else 0
+			_float(Vector2(1700, 440), "连击断了", "info")
+
+
+func _combo_eligible(b: Dictionary) -> bool:
+	if b.has("meal_rule"):
+		return bool(b.meal_rule.combo_eligible)
+	# Unsubmitted player boxes are previews only; helper/takeout never change build state.
+	if not b.get("crew", false) and not b.get("takeout", false):
+		return bool(_plan_box(b).combo_eligible)
+	return int(_box_profile(b).high_sets) >= 2
 
 
 func _stress() -> void:
@@ -1303,26 +1477,23 @@ func _process(delta: float) -> void:
 	var want_think := can_think and (Input.is_action_pressed("think") or Input.is_mouse_button_pressed(MOUSE_BUTTON_RIGHT))
 	if autotest:
 		want_think = can_think and _bot_think()
-	_thinking = want_think and _think > 0.0
-	if _thinking != _was_thinking:
-		Audio.sfx("think_start" if _thinking else "think_end", -6.0)
-		_was_thinking = _thinking
+	_update_thinking(delta, want_think)
 	var stick := Input.get_vector("move_left", "move_right", "move_up", "move_down")
 	if stick != Vector2.ZERO and not autotest:
+		_mouse_steering = false
 		_aim = (_aim + stick * PAD_SPEED * delta).clamp(Vector2(40, BAND.x), Vector2(1880, BAND.y))
-	if _thinking:
-		_think = maxf(_think - delta, 0.0)
-	else:
-		_think = minf(_think + think_regen * delta, think_time)
 	var wdt := delta * (think_slow if _thinking else 1.0)
 	_t += wdt
+	if _learning():
+		_learning_time += wdt
 	_busy_t = maxf(_busy_t - wdt, 0.0)
 	if autotest:
 		_bot()
 	_update_peaks(wdt)
 	_update_rounds(wdt, delta)
 	_update_app(wdt)
-	_update_arms(wdt)
+	if not _learning() or _coach.step != COACH_UI.Step.TAKE:
+		_update_arms(wdt)
 	_update_arm_art()
 	_update_hand(delta)
 	_update_items(wdt)
@@ -1330,11 +1501,13 @@ func _process(delta: float) -> void:
 	_update_flying(wdt)
 	_update_crew(wdt)
 	_update_skills(delta)
+	if _learning():
+		_coach.reconcile_hand(_hand != null, _hand != null and not _hand.items.is_empty())
 	_update_fish(wdt, delta if think_eat and _thinking else wdt)   # 边想边用工具: she eats in real time
 	if _ended:
 		return
 	_update_music()
-	if _t >= meal_time:
+	if _meal_elapsed() >= meal_time:
 		_end("食堂关门了")
 	queue_redraw()
 
@@ -1346,7 +1519,7 @@ const FINAL_SECONDS := 10.0
 const EOS_X := [1.0, 3.0, 5.0, 8.0]      # <EOS> 最后一个 token, by level
 func _update_music() -> void:
 	Audio.music_layer("peak", _peak_on or (legacy == "hybrid" and not _hard))
-	var left := meal_time - _t
+	var left := meal_time - _meal_elapsed()
 	Audio.music_layer("final", left < FINAL_SECONDS)
 	Audio.music_tempo(1.0 + 0.05 * clampf(1.0 - left / FINAL_SECONDS, 0.0, 1.0))
 	Audio.slowmo(_thinking)
@@ -1567,18 +1740,26 @@ func _roll_kind() -> int:
 func _update_hand(delta: float) -> void:
 	if _hand == null:
 		return
+	_hand["previous_pos"] = _hand.pos
 	var fill := float(_space(_hand)) / _cap()
 	var heavy := clampf(fill * box_n / 4.0, 0.0, 1.0)   # a full 2x4 box is the heaviest
-	var want: Vector2 = (_aim - _hand.pos) * minf(12.0, 0.8 / maxf(delta, 0.0001))   # capped: long frames must not overshoot
-	want = want.limit_length(lerpf(SPEED.x, SPEED.y, heavy))
 	var old_vel: Vector2 = _hand.vel
-	_hand.vel = old_vel.move_toward(want, lerpf(ACCEL.x, ACCEL.y, heavy) * delta)
-	_hand.pos += _hand.vel * delta
+	if _mouse_steering and not autotest:
+		# The pointer is the hand. Weight is conveyed by a little food sway, not input lag.
+		_hand.pos = _aim.clamp(Vector2(40, BAND.x), Vector2(1880, BAND.y))
+		var measured: Vector2 = (_hand.pos - _hand.previous_pos) / maxf(delta, 0.0001)
+		_hand.vel = old_vel.lerp(measured.limit_length(SPEED.x), minf(1.0, delta * 18.0))
+	else:
+		var want: Vector2 = (_aim - _hand.pos) * minf(18.0, 0.9 / maxf(delta, 0.0001))
+		want = want.limit_length(lerpf(SPEED.x, 1600.0, heavy))
+		_hand.vel = old_vel.move_toward(want, lerpf(ACCEL.x, 9000.0, heavy) * delta)
+		_hand.pos += _hand.vel * delta
 	if _hand.pos.y < BAND.x or _hand.pos.y > BAND.y:
 		_hand.pos.y = clampf(_hand.pos.y, BAND.x, BAND.y)
 		_hand.vel.y = 0.0
 	var acc_x: float = (_hand.vel.x - old_vel.x) / maxf(delta, 0.0001)
-	_hand.slosh = _hand.slosh * exp(-5.0 * delta) + acc_x * delta / 1500.0
+	var sway := 0.4 if _mouse_steering and not autotest else 1.0
+	_hand.slosh = _hand.slosh * exp(-5.0 * delta) + clampf(acc_x, -12000.0, 12000.0) * delta / 1500.0 * sway
 	var slosh: float = absf(_hand.slosh)
 	if fill > 0.6 and slosh > SLOSH_SPILL:
 		_spill_acc += (slosh - SLOSH_SPILL) * 12.0 * delta
@@ -1603,10 +1784,49 @@ func _update_hand(delta: float) -> void:
 		Audio.sfx("spill", -4.0)
 
 
+## Local skill attraction: only descending food just above the box, with tapered strength.
+## It nudges toward a bounded target speed instead of accumulating unlimited sideways speed.
+func _steer_food(p: Vector2, v: Vector2, k: int, delta: float, clock: float) -> Vector2:
+	if PICKY[k] and v.y > 60.0:
+		v.x += sin(clock * 5.0 + p.y * 0.02) * 90.0 * delta
+	if _hand == null or v.y <= 0.0:
+		return v
+	var pull := clampf(_magnet() + (diverge if _thinking else 0.0), 0.0, PULL_MAX_RANGE)
+	var ignored := (dsa and not grok and (k == I.VEG or k == I.JI)) or (_thinking and converge and not _wanted(k))
+	var dx: float = _hand.pos.x - p.x
+	var dy: float = _hand.pos.y - p.y
+	if pull > 0.0 and not ignored and absf(dx) < pull and dy > 0.0 and dy < PULL_HEIGHT:
+		var strength := (1.0 - absf(dx) / pull) * (1.0 - dy / PULL_HEIGHT)
+		var target_vx := clampf(dx * 3.0, -PULL_MAX_SPEED, PULL_MAX_SPEED)
+		v.x = move_toward(v.x, target_vx, PULL_ACCEL * strength * delta)
+	if dsa and k == I.JI and absf(dx) < _width() * 0.5 + 40.0 and dy > 0.0 and dy < 120.0:
+		v.x = move_toward(v.x, -signf(dx + 0.01) * PULL_MAX_SPEED, PULL_ACCEL * delta)
+	return v
+
+
+## A swept opening in food-minus-box coordinates catches both falling and lateral crossings.
+## Returning the contact fraction also keeps the bounce at the actual point of contact.
+static func _swept_opening(p: Vector2, np: Vector2, box_from: Vector2, box_to: Vector2, half_width: float) -> float:
+	var start := p - box_from
+	var motion := (np - box_to) - start
+	var enter := 0.0
+	var leave := 1.0
+	for axis in 2:
+		var radius := half_width if axis == 0 else 12.0
+		if absf(motion[axis]) < 0.00001:
+			if absf(start[axis]) > radius:
+				return -1.0
+			continue
+		var a: float = (-radius - start[axis]) / motion[axis]
+		var b: float = (radius - start[axis]) / motion[axis]
+		enter = maxf(enter, minf(a, b))
+		leave = minf(leave, maxf(a, b))
+		if enter > leave:
+			return -1.0
+	return enter if leave >= 0.0 and enter <= 1.0 else -1.0
+
+
 func _update_items(delta: float) -> void:
-	var pull := _magnet() if _hand != null else 0.0
-	if _thinking and diverge > 0.0 and _hand != null:
-		pull += diverge   # 发散思维: a wide pull while thinking
 	var w := _width()
 	var i := 0
 	while i < _fp.size():
@@ -1614,35 +1834,31 @@ func _update_items(delta: float) -> void:
 		var v := _fv[i]
 		var it := int(_fk[i])
 		var k := K(it)
+		var initial_vy := v.y
 		v.y += _fg[i] * delta
-		if PICKY[k] and v.y > 60.0:
-			v.x += sin(_t * 5.0 + p.y * 0.02) * 90.0 * delta   # a leaf flutters down
+		v = _steer_food(p, v, k, delta, _t)
 		if k in HOPPY and randf() < ji_hop * delta:
 			v.x = randf_range(-280.0, 280.0)   # 「极」 hops about
 			v.y = minf(v.y, randf_range(-160.0, 40.0))
-		var ignored := (dsa and not grok and (k == I.VEG or k == I.JI)) or (_thinking and diverge > 0.0 and converge and not _wanted(k))   # DSA: the magnet only attends to good food
-		if pull > 0.0 and not ignored and absf(p.x - _hand.pos.x) < pull and p.y < _hand.pos.y and _hand.pos.y - p.y < 360.0:
-			v.x += signf(_hand.pos.x - p.x) * 700.0 * delta
-		if dsa and k == I.JI and _hand != null and absf(p.x - _hand.pos.x) < w * 0.5 + 60.0 and p.y < _hand.pos.y and _hand.pos.y - p.y < 240.0:
-			v.x += signf(p.x - _hand.pos.x + 0.01) * 520.0 * delta   # ...and nudges 「极」 away
 		if not _crew.is_empty():
 			v = _crew_tricks(p, v, k, delta)
 		var np := p + v * delta
+		if k not in HOPPY and is_equal_approx(v.y, initial_vy + _fg[i] * delta):
+			np.y = p.y + initial_vy * delta + 0.5 * _fg[i] * delta * delta
 		_fr[i] += delta * v.x * 0.01
-		var crew_box = _crew_catch(p, np, v, it)   # the helpers' boxes first (they sit lower)
+		var contact := -1.0
+		var pass_through := _thinking and converge and not _wanted(k)
+		if _hand != null and v.y > 0.0 and not pass_through:
+			contact = _swept_opening(p, np, _hand.get("previous_pos", _hand.pos), _hand.pos, w * 0.47 + 8.0)
+		# A long frame may cross both boxes; the earliest physical contact wins.
+		var crew_box = _crew_catch(p, np, v, it, contact if contact >= 0.0 else INF)
 		if crew_box != null:
 			_catch(crew_box, it, false)
 			caught += 1
 			_catch_sound(it, -8.0)
 			_remove_item(i)
 			continue
-		if _hand != null and v.y > 0.0 and p.y < _hand.pos.y and np.y >= _hand.pos.y and absf(np.x - _hand.pos.x) < w * 0.47:
-			var pass_through := _thinking and converge and not _wanted(k)   # 收敛思维: what she can't use falls through
-			if pass_through:
-				_fp[i] = np
-				_fv[i] = v
-				i += 1
-				continue
+		if contact >= 0.0:
 			if not (dsa and not grok and k == I.VEG) and _accepts(_hand, it):
 				_catch_sound(it)
 				_catch(_hand, it, true)
@@ -1657,7 +1873,7 @@ func _update_items(delta: float) -> void:
 				continue
 			v = Vector2(v.x + randf_range(-160, 160), -absf(v.y) * 0.35)   # full (or a green, with DSA): bounces off
 			Audio.sfx("bounce", -8.0)
-			np = Vector2(np.x, _hand.pos.y - 4)
+			np = Vector2(p.lerp(np, contact).x, _hand.pos.y - 16)
 		if np.y >= FLOOR_Y and _crew_floor(np.x, it):
 			caught += 1
 			_catch_sound(it, -8.0)
@@ -1726,7 +1942,30 @@ func _time_to(i: int, y: float) -> float:
 	if p.y > y:
 		return INF
 	var g := _fg[i]
+	if g <= 0.00001:
+		return (y - p.y) / v.y if v.y > 0.0 else INF
 	return (-v.y + sqrt(v.y * v.y + 2.0 * g * (y - p.y))) / g
+
+
+## Predict at the box's current catching height, with the same local steering as live food.
+## The box can move afterwards; helpers may deflect a dish, so this is refreshed every frame.
+func _landing_prediction(i: int, y: float) -> Dictionary:
+	var duration := _time_to(i, y)
+	if not is_finite(duration) or duration < 0.0 or duration > 2.0 or K(_fk[i]) in HOPPY:
+		return {}
+	var p := _fp[i]
+	var v := _fv[i]
+	var elapsed := 0.0
+	while elapsed < duration:
+		var dt := minf(1.0 / 90.0, duration - elapsed)
+		var initial_vy := v.y
+		v.y += _fg[i] * dt
+		v = _steer_food(p, v, K(_fk[i]), dt, _t + elapsed)
+		if not _crew.is_empty():
+			v = _crew_tricks(p, v, K(_fk[i]), dt, false)
+		p += Vector2(v.x * dt, initial_vy * dt + 0.5 * _fg[i] * dt * dt)
+		elapsed += dt
+	return {"position": Vector2(p.x, y), "time": duration}
 
 
 ## Full boxes wait right of the empty stack, slightly overlapping when there are many.
@@ -1746,25 +1985,31 @@ func _update_flying(delta: float) -> void:
 
 
 ## A helper's box catches food crossing its rim line (only boxes in the "catch" state).
-func _crew_catch(p: Vector2, np: Vector2, v: Vector2, it: int):
+func _crew_catch(p: Vector2, np: Vector2, v: Vector2, it: int, before := INF):
 	var k := K(it)
 	if v.y <= 0.0 or (k == I.VEG and not _grokked and not inject) or k == I.JI:
 		return null
+	var first = null
+	var earliest := before
 	for c in _crew:
 		if c.state != "catch" or c.box == null:
 			continue
 		var trick: String = CREW[c.id].trick
 		var hw := _width() * 0.6 * 0.47 * (1.5 if trick == "wide" else 1.0)
 		var y: float = c.box.pos.y - (70.0 if trick == "jump" else 0.0)   # 小G hops up for it
-		if p.y < y and np.y >= y and absf(np.x - c.x) < hw and _accepts(c.box, it):
-			if trick == "jump":
-				c.hop = 0.35
-			return c.box
+		var contact := _swept_opening(p, np, Vector2(c.x, y), Vector2(c.x, y), hw + 5.0)
+		if contact >= 0.0 and contact < earliest and _accepts(c.box, it):
+			earliest = contact
+			first = c
+	if first != null:
+		if CREW[first.id].trick == "jump":
+			first.hop = 0.35
+		return first.box
 	return null
 
 
 ## Helper tricks that act on food in the air (谱谱 pulls food in, 格格 swats the bad stuff away).
-func _crew_tricks(p: Vector2, v: Vector2, k: int, delta: float) -> Vector2:
+func _crew_tricks(p: Vector2, v: Vector2, k: int, delta: float, feedback := true) -> Vector2:
 	for c in _crew:
 		if c.state != "catch" or c.box == null:
 			continue
@@ -1772,13 +2017,15 @@ func _crew_tricks(p: Vector2, v: Vector2, k: int, delta: float) -> Vector2:
 		var dx: float = c.x - p.x
 		match CREW[c.id].trick:
 			"magnet":
-				if k != I.VEG and k != I.JI and absf(dx) < 150.0 and p.y < by and by - p.y < 280.0:
-					v.x += signf(dx) * 600.0 * delta
+				if k != I.VEG and k != I.JI and absf(dx) < 150.0 and p.y < by and by - p.y < 140.0 and v.y > 0.0:
+					var strength: float = (1.0 - absf(dx) / 150.0) * (1.0 - (by - p.y) / 140.0)
+					v.x = move_toward(v.x, clampf(dx * 3.0, -PULL_MAX_SPEED, PULL_MAX_SPEED), PULL_ACCEL * strength * delta)
 			"swat":
 				if (k == I.VEG or k == I.JI) and absf(dx) < 80.0 and p.y < by and by - p.y < 60.0 and v.y > 0.0:
 					v = Vector2(-signf(dx + 0.01) * 380.0, -420.0)
-					c.hop = 0.3
-					Audio.sfx("bounce", -10.0)
+					if feedback:
+						c.hop = 0.3
+						Audio.sfx("bounce", -10.0)
 	return v
 
 
@@ -2000,6 +2247,8 @@ func _update_fish(wdt: float, delta: float) -> void:
 		Audio.sfx("chomp", -4.0)
 		_wait = 0.0
 	if _eating == null:
+		if _learning():
+			return   # let the player learn without impatient barks or a growing wait penalty
 		fish_wait += wdt
 		_wait += wdt
 		_crave_t += wdt
@@ -2074,6 +2323,7 @@ func _update_fish(wdt: float, delta: float) -> void:
 			_fish.play("yum")
 	if gained > 0.0:
 		_credit(gained)
+		_rule_income += gained * float(_eating.get("rule_share", 0.0))
 		_eating["earned"] = float(_eating.get("earned", 0.0)) + gained
 	if _eating.items.is_empty():
 		_box_vals.append(float(_eating.get("earned", 0.0)))
@@ -2131,6 +2381,9 @@ func _start_box(b: Dictionary) -> void:
 	if b.get("full", false):
 		m += fill_bonus
 	m += cot * mini(int(b.get("chains", 0)), 3)
+	var rule_add := _box_rule_bonus(b)
+	m += rule_add
+	b["rule_share"] = rule_add / m
 	var h := 1.0
 	var crew_box: bool = b.get("crew", false)
 	if crave > 0.0:
@@ -2139,21 +2392,7 @@ func _start_box(b: Dictionary) -> void:
 		else:
 			h = _crave_x(_crave_t)
 			_crave_t = 0.0
-	var c := 1.0
-	if combo > 0.0 and not crew_box:
-		var good := 0
-		for it in b.items:
-			if TIER[K(it)] >= 2:
-				good += 1
-		if good >= 2:
-			_combo_n += 1
-			c = 1.0 + combo * mini(_combo_n - 1, _combo_cap())
-		elif _combo_n > 0:
-			if _combo_safe:
-				_combo_safe = false
-			else:
-				_combo_n = _combo_n / 2 if memory >= 1 else 0
-				_float(Vector2(1700, 440), "连击断了", "info")
+	var c: float = b.get("chain_multiplier", 1.0)
 	b["mult"] = m * h * c
 	if h >= 1.3:
 		_float(FISH_POS + Vector2(-250, -330), "馋 ×%.1f" % h, "mult")
@@ -2254,13 +2493,15 @@ func _end(reason: String, card_too := true) -> void:
 	if _ended:
 		return
 	_ended = true
+	if is_instance_valid(_coach):
+		_coach.close()
 	_end_reason = reason
-	_thinking = false
+	_interrupt_thinking()
 	Audio.settle()
 	# closing time (docs/tree_model.md §2.2, docs/settlement_design.md): everything is counted
 	# here at once (so nothing is lost if the player skips or quits); the checkout receipt then
 	# plays it back step by step from `_steps`. Order: the 保温箱 box (and its <EOS> last bite),
-	# 我去睡了, 梯度裁剪, then the meal multipliers 均衡 and 美食评鉴, and the 上下文溢出 fuse last.
+	# 我去睡了, 梯度裁剪, then the meal multipliers 均衡 and 美食评鉴. Earnings are never capped.
 	_score = {"base": _base}
 	var meal := earned   # what she ate during the shift
 	var warm_step := {}
@@ -2268,8 +2509,9 @@ func _end(reason: String, card_too := true) -> void:
 	if _warm != null:
 		var wb: Dictionary = _warm
 		_warm = null
-		var mult := (1.0 + box_bonus + (fill_bonus if wb.get("full", false) else 0.0) + cot * mini(int(wb.get("chains", 0)), 3))
-		mult *= _crave_x(INF) * (1.0 + combo * mini(_combo_n, _combo_cap())) * warm_x
+		var mult := (1.0 + box_bonus + (fill_bonus if wb.get("full", false) else 0.0) + cot * mini(int(wb.get("chains", 0)), 3) + _box_rule_bonus(wb))
+		var rule_share := _box_rule_bonus(wb) / mult
+		mult *= _crave_x(INF) * float(wb.get("chain_multiplier", 1.0)) * warm_x
 		# <EOS>: she keeps the best bite of the box for last, and it counts again
 		var best := -1
 		for i in wb.items.size():
@@ -2287,12 +2529,14 @@ func _end(reason: String, card_too := true) -> void:
 			if i == best:
 				best_got = b
 		_credit(got)
+		_rule_income += got * rule_share
 		_score["warm"] = got
 		warm_step = {"icon": "clock", "text": tr("揭开保温箱"), "mark": "×%.0f" % warm_x, "add": got, "sfx": "version_up"}
 		var ex: float = EOS_X[clampi(int(Game.stat("eos")), 0, EOS_X.size() - 1)]
 		if best >= 0 and ex > 1.0:
 			var extra := best_got * (ex - 1.0)
 			_credit(extra)
+			_rule_income += extra * rule_share
 			_score["eos"] = extra
 			var k := K(wb.items[best])
 			eos_step = {"icon": "crown", "text": tr("最后一口：%s") % tr(NAMES[k]), "mark": "×%.0f" % ex, "add": extra,
@@ -2342,6 +2586,8 @@ func _end(reason: String, card_too := true) -> void:
 	var steps: Array = [{"icon": "token", "text": tr("这顿吃的：%d 份") % eaten, "add": meal}]
 	if _sig_bonus > 0.0:
 		steps.append({"note": tr("其中招牌菜"), "add": _sig_bonus})
+	if _rule_income > 0.0:
+		steps.append({"note": tr("其中搭配加成：单品 / 缓存 / 换菜"), "add": _rule_income})
 	for st in [left_step, warm_step, eos_step]:
 		if not st.is_empty():
 			steps.append(st)
@@ -2359,14 +2605,6 @@ func _end(reason: String, card_too := true) -> void:
 	var mults: Array = [[tr("均衡"), bm]]
 	if critic > 0.0:
 		mults.append([tr("评鉴"), jm])
-	var fuse := {}
-	var cap := FUSE * Game.next_target()
-	if cap > 0.0 and earned > cap:
-		var capped := sqrt(cap * earned)
-		_score["fuse"] = earned - capped
-		fuse = {"cap": cap, "cut": earned - capped}
-		Game.add_tokens(capped - earned)
-		earned = capped
 	var extra := ""
 	if trial != "":
 		passed = earned >= target and reason != "提前下班"
@@ -2390,6 +2628,9 @@ func _end(reason: String, card_too := true) -> void:
 	var record := earned > Game.best_run
 	var stuffed := full and Game.best_run > 0.0 and earned >= Game.best_run * 2.0
 	Game.best_run = maxf(Game.best_run, earned)
+	Game.record_run({"earned": earned, "eaten": eaten, "caught": caught, "spilled": spilled,
+		"wasted": wasted, "recipes": _recipes_made, "balance": bm, "grokked": _grokked,
+		"trial": trial, "passed": passed, "full_boxes": _full_boxes})
 	Game.save_game()
 	if not card_too:
 		return
@@ -2402,7 +2643,6 @@ func _end(reason: String, card_too := true) -> void:
 	card.steps = steps
 	card.subtotal = subtotal
 	card.mults = mults
-	card.fuse = fuse
 	card.total = earned
 	card.target = target
 	card.passed = passed
@@ -2431,7 +2671,7 @@ func catch_rate() -> float:
 
 
 func _clock_text() -> String:
-	var m := 11 * 60 + 30 + int(minf(_t, meal_time))
+	var m := 11 * 60 + 30 + int(minf(_meal_elapsed(), meal_time))
 	return "%02d:%02d" % [m / 60, m % 60]
 
 
@@ -2565,17 +2805,30 @@ func _draw_front() -> void:
 					var ph := fmod(_t * 0.5 + j * 0.37 + p * 0.5 + id.length() * 0.13, 1.0)
 					_sprite(_front, "fx_steam", Vector2(x + sin(ph * 6.0 + j) * 8.0, PAN_Y - 24.0 - ph * 60.0), 24.0 + ph * 26.0, sin(ph * 4.0 + j) * 0.2, Color(1, 1, 1, 0.42 * (1.0 - ph) * minf(ph * 5.0, 1.0)))
 	# each tentacle's cooking bar on the counter front, right under where its food will fly from
+	var ladles := {}
+	for arm in _arms:
+		ladles[arm.stall] = int(ladles.get(arm.stall, 0)) + 1
+	var bar_font := ThemeDB.fallback_font
+	for id in ladles:
+		var label := tr("出菜 ×%d") % int(ladles[id])
+		var width := bar_font.get_string_size(label, HORIZONTAL_ALIGNMENT_LEFT, -1, 20).x
+		_front.draw_string_outline(bar_font, Vector2(_win_x(STALL_ORDER.find(id)) - width * 0.5, 361), label, HORIZONTAL_ALIGNMENT_LEFT, -1, 20, 4, PAPER)
+		_front.draw_string(bar_font, Vector2(_win_x(STALL_ORDER.find(id)) - width * 0.5, 361), label, HORIZONTAL_ALIGNMENT_LEFT, -1, 20, INK)
 	for a in _arms:
 		var x: float = a.x
 		var r := Rect2(x - 24.0, 392.0, 48.0, 10.0)
 		var done := 1.0 if a.raise > 0.0 else clampf(1.0 - a.t / maxf(a.t0, 0.01), 0.0, 1.0)
 		var col := Color(1.0, 0.35, 0.25) if _peak_on else Color(0.95, 0.6, 0.2)
-		if a.raise > 0.0:
+		if a.raise > 0.0 and not Settings.reduced_motion:
 			col = col.lerp(Color.WHITE, 0.5 + 0.5 * sin(_t * 40.0))
 		_front.draw_style_box(_bar_bg, r.grow(2.0))
 		if done > 0.05:
 			_bar_fill.bg_color = col
 			_front.draw_style_box(_bar_fill, Rect2(r.position, Vector2(r.size.x * done, r.size.y)))
+		var number := str(a.get("ladle", 1))
+		_front.draw_string(bar_font, Vector2(x - 5, 385), number, HORIZONTAL_ALIGNMENT_LEFT, -1, 14, INK)
+	_front.draw_string_outline(bar_font, Vector2(65, 432), tr("每条进度是一把勺子 · 满格后抛菜"), HORIZONTAL_ALIGNMENT_LEFT, -1, 18, 3, PAPER)
+	_front.draw_string(bar_font, Vector2(65, 432), tr("每条进度是一把勺子 · 满格后抛菜"), HORIZONTAL_ALIGNMENT_LEFT, -1, 18, INK)
 
 
 ## 梁阿姨's face for the moment.
@@ -2609,7 +2862,7 @@ func _draw() -> void:
 		_count_tag(STACK_AT + Vector2(70, 18), _empty)
 	if _hand == null and _empty > 0 and not _ended:
 		# empty hands and a box to take: a warm glow under the stack, a hand bobbing over it
-		var pulse := 0.5 + 0.5 * sin(_t * 6.0)
+		var pulse := 0.5 if Settings.reduced_motion else 0.5 + 0.5 * sin(_t * 6.0)
 		var top := STACK_AT + Vector2(0, -11.0 * (_empty - 1))
 		_glow(self, top + Vector2(0, 6), 230.0, Color(1.0, 0.85, 0.4, 0.35 + 0.3 * pulse), 0.55)
 		_sprite(self, "hand", top + Vector2(8, -78 - 12.0 * pulse), 96.0, 0.55)   # fingers pointing down at the stack
@@ -2651,17 +2904,16 @@ func _draw() -> void:
 		var hy: float = _hand.pos.y
 		for i in _fp.size():
 			var p := _fp[i]
-			var v := _fv[i]
 			var k := K(_fk[i])
 			if p.y > hy or (PICKY[k] and not _grokked) or k in HOPPY or not (_thinking or _is_good(k) or grade(_fk[i]) > 0):
 				continue
-			var t := _time_to(i, hy)
-			if t < 2.0:
-				var mark := Color(0.7, 0.6, 1.0, 0.75) if _thinking else Color(1.0, 0.82, 0.4, 0.7)
-				var land := Vector2(p.x + v.x * t, hy)
-				_glow(self, land, 64.0 * (1.2 - 0.4 * t / 2.0), mark, 0.4)   # where it will land, firmer as it nears
-				if _is_good(k) or grade(_fk[i]) > 0:
-					_sprite(self, "fx_star", land + Vector2(0, -2), 20.0, _t * 2.0, Color(1, 1, 1, 0.9))
+			var prediction := _landing_prediction(i, hy)
+			if not prediction.is_empty():
+				var land: Vector2 = prediction.position
+				var mark := Color(0.62, 0.86, 1.0, 0.8)
+				_glow(self, land, 38.0, Color(mark, 0.35), 0.3)
+				draw_line(land + Vector2(-12, 0), land + Vector2(12, 0), mark, 2.0, true)
+				draw_line(land + Vector2(0, -8), land, mark, 2.0, true)
 	if _busy_t > 0.0:
 		draw_rect(Rect2(TABLE.position + Vector2(20, -70), Vector2(330, 54)), Color(0.85, 0.2, 0.2, 0.9))
 		_label(font, TABLE.position + Vector2(36, -32), tr("服务器繁忙，请稍后重试"), HORIZONTAL_ALIGNMENT_LEFT, -1, 26, Color.WHITE)
@@ -2693,44 +2945,53 @@ func _draw_food(kind: int, at: Vector2, rot: float, scale_k: float) -> void:
 ## An item: the dish as it is (its picture never changes), with light that tells its grade:
 ## 优质 (silver) — a cool white sheen sweeps across it every 1.8 s, now and then a faint star;
 ## 金牌 (gold) — a warm glow hugging its own outline breathes (1.2 s), a quicker warm sheen, gold
-## stars taking turns on its edge. In a box (`boxed`, small cells) only the sheen stays.
+## stars taking turns on its edge. Boxed food keeps a steady silver/gold rim for readability.
 ## 高温: a little flame.
-func _draw_item(it: int, at: Vector2, rot: float, scale_k: float, boxed := false) -> void:
+func _draw_item(it: int, at: Vector2, rot: float, scale_k: float, boxed := false, canvas: CanvasItem = null) -> void:
+	var ci: CanvasItem = self if canvas == null else canvas
 	var k := K(it)
 	var r: float = SIZE_PX[k] * scale_k * 0.55
 	var g := grade(it)
 	var off := float(it % 97) * 0.137   # each piece on its own beat
 	var tex: Texture2D = _food_tex[k]
 	var ks: float = SIZE_PX[k] * scale_k / maxf(tex.get_width(), tex.get_height())
-	if g == 2 and not boxed and _rim_tex[k] != null:
-		var breath := 0.5 + 0.5 * sin((_t / 1.2 + off) * TAU)
-		draw_set_transform(at, rot, Vector2(ks, ks))
-		draw_texture(_rim_tex[k], -tex.get_size() * 0.5 - Vector2(RIM_PAD, RIM_PAD), Color(1.0, 0.78, 0.32, 0.55 + 0.4 * breath))
-		draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
-	_draw_food_on(self, k, at, rot, scale_k)
-	if g > 0 and _sheen_tex[k] != null:
+	if g > 0 and _rim_tex[k] != null:
+		var breath := 0.5 if boxed or Settings.reduced_motion else 0.5 + 0.5 * sin((_t / 1.2 + off) * TAU)
+		ci.draw_set_transform(at, rot, Vector2(ks, ks))
+		ci.draw_texture(_rim_tex[k], -tex.get_size() * 0.5 - Vector2(RIM_PAD, RIM_PAD), _grade_rim(g, boxed, breath))
+		ci.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+	_draw_food_on(ci, k, at, rot, scale_k)
+	if g > 0 and _sheen_tex[k] != null and not Settings.reduced_motion:
 		var period := 1.1 if g == 2 else 1.8
 		var ph := fmod(_t / period + off, 1.0)
 		if ph < 0.32:   # the sweep takes a third of the period, then it rests
 			var fr := int(ph / 0.32 * SHEEN_FRAMES)
 			var sz := tex.get_size()
-			draw_set_transform(at, rot, Vector2(ks, ks))
-			draw_texture_rect_region(_sheen_tex[k], Rect2(-sz * 0.5, sz), Rect2(fr * sz.x, 0, sz.x, sz.y),
+			ci.draw_set_transform(at, rot, Vector2(ks, ks))
+			ci.draw_texture_rect_region(_sheen_tex[k], Rect2(-sz * 0.5, sz), Rect2(fr * sz.x, 0, sz.x, sz.y),
 				Color(1.0, 0.88, 0.55, 0.95) if g == 2 else Color(0.88, 0.95, 1.0, 0.85 if not boxed else 0.6))
-			draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
-	if not boxed:
+			ci.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+	if not boxed and not Settings.reduced_motion:
 		if g == 2:   # gold stars take turns on its edge
 			for j in 3:
 				var pj := fmod(_t * 1.3 + off + j / 3.0, 1.0)
 				if pj < 0.28:
 					var dir := Vector2.from_angle(-2.2 + j * 1.6 + off)
-					_sprite(self, "fx_star", at + dir * r * 0.95, r * 0.75 * sin(pj / 0.28 * PI), pj * 3.0)
+					_sprite(ci, "fx_star", at + dir * r * 0.95, r * 0.75 * sin(pj / 0.28 * PI), pj * 3.0)
 		elif g == 1:   # silver: a faint white star now and then
 			var pj := fmod(_t * 0.55 + off, 1.0)
 			if pj < 0.18:
-				_sprite(self, "fx_star", at + Vector2(r * 0.7, -r * 0.65), r * 0.5 * sin(pj / 0.18 * PI), 0.0, Color(0.85, 0.92, 1.0, 0.8))
+				_sprite(ci, "fx_star", at + Vector2(r * 0.7, -r * 0.65), r * 0.5 * sin(pj / 0.18 * PI), 0.0, Color(0.85, 0.92, 1.0, 0.8))
 	if is_hot(it):
-		_sprite(self, "icon_flame", at + Vector2(r * 0.75, -r * 0.75), maxf(18.0, 30.0 * scale_k), sin(_t * 9.0) * 0.12)
+		_sprite(ci, "icon_flame", at + Vector2(r * 0.75, -r * 0.75), maxf(18.0, 30.0 * scale_k), 0.0 if Settings.reduced_motion else sin(_t * 9.0) * 0.12)
+
+
+static func _grade_rim(g: int, boxed: bool, breath: float) -> Color:
+	if g == 2:
+		return Color(1.0, 0.75, 0.25, 0.9 if boxed else 0.55 + 0.4 * breath)
+	if g == 1:
+		return Color(0.76, 0.9, 1.0, 0.85 if boxed else 0.65)
+	return Color.TRANSPARENT
 
 
 func _draw_food_tinted(ci: CanvasItem, kind: int, at: Vector2, rot: float, scale_k: float, col: Color) -> void:
@@ -2783,7 +3044,7 @@ func _draw_basin_on(ci: CanvasItem, at: Vector2, b: Dictionary, scale_k: float) 
 			continue
 		var k := K(b.items[i])
 		var centre := Vector2(at.x - gw * 0.5 + (cell_i % n + span * 0.5) * cw, at.y - gh * 0.5 + (cell_i / n + 0.5) * ch - ch * 0.12)
-		_draw_food_on(ci, k, centre, 0.0, cw * (0.88 + 0.42 * (span - 1)) / SIZE_PX[k])
+		_draw_item(b.items[i], centre, 0.0, cw * (0.88 + 0.42 * (span - 1)) / SIZE_PX[k], true, ci)
 
 
 ## The lunch box art for n x n (fixed 45° top-down view: no rotation), tinted by the material and
@@ -2825,17 +3086,16 @@ func _draw_basin(at: Vector2, b: Dictionary, slosh: float, scale_k: float, font:
 		if f.pos.distance_to(at) < 4.0 or in_hand:
 			var q: float = f.t / 0.5
 			var a := 1.0 - q * q
+			if Settings.reduced_motion:
+				_sprite(self, "fx_steam", at + Vector2(0, -45), gw * 0.75, 0.0, Color(1, 1, 1, 0.65 * a))
+				continue
 			_sprite(self, "fx_burst", at, gw * (1.35 + 0.7 * q), q * 0.5, Color(1, 1, 1, 0.9 * a))   # a ring round the box, food stays visible
 			for j in 6:
 				var dir := Vector2.from_angle(j * TAU / 6.0 + 0.4)
 				_sprite(self, "fx_star", at + dir * gw * (0.55 + 0.75 * q), 30.0 * (1.0 - 0.5 * q), q * 4.0, Color(1, 1, 1, a))
 	if in_hand:
 		_draw_hand_tag(Vector2(at.x, art.end.y + 16), b)
-		var tiers := 0
-		for it in b.items:
-			if TIER[K(it)] >= 2:
-				tiers += 1
-		if combo > 0.0 and tiers >= 2:   # 多轮对话: this box keeps the combo going
+		if combo > 0.0 and _combo_eligible(b):
 			_icon("chain", Vector2(art.end.x - 6, art.position.y + 6), 40)
 
 
@@ -2965,13 +3225,17 @@ func _draw_hud(font: Font) -> void:
 	# A: the chalkboard
 	var a := Rect2(24, 14, 372, 196)
 	_piece("ui_chalkboard", a)
-	var left := maxf(meal_time - _t, 0.0)
+	var left := maxf(meal_time - _meal_elapsed(), 0.0)
 	var urgent := left <= 10.0 and not _ended
-	var pulse := 1.0 + (0.08 * sin(_t * 12.0) if urgent else 0.0)
-	_write(font, a.position + Vector2(40, 58), tr("食堂关门还剩"), 22, Color(0.92, 0.95, 0.9), Color(0, 0, 0, 0))
-	var num := "%d" % int(ceil(left))
-	_write(_nfont, a.position + Vector2(196, 74), num, int(54 * pulse), Color(1.0, 0.45, 0.4) if urgent else Color(0.98, 0.98, 0.92), Color(0, 0, 0, 0))
-	_write(font, a.position + Vector2(206 + _dfont.get_string_size(num, HORIZONTAL_ALIGNMENT_LEFT, -1, 54).x, 70), tr("秒"), 22, Color(0.92, 0.95, 0.9), Color(0, 0, 0, 0))
+	var pulse := 1.0 + (0.08 * sin(_t * 12.0) if urgent and not Settings.reduced_motion else 0.0)
+	if _learning():
+		_write(font, a.position + Vector2(40, 50), tr("第一次来，慢慢学"), 23, Color(0.92, 0.95, 0.9), Color.TRANSPARENT)
+		_write(font, a.position + Vector2(40, 82), tr("计时未开始"), 22, Color(1.0, 0.85, 0.5), Color.TRANSPARENT)
+	else:
+		_write(font, a.position + Vector2(40, 58), tr("食堂关门还剩"), 22, Color(0.92, 0.95, 0.9), Color(0, 0, 0, 0))
+		var num := "%d" % int(ceil(left))
+		_write(_nfont, a.position + Vector2(196, 74), num, int(54 * pulse), Color(1.0, 0.45, 0.4) if urgent else Color(0.98, 0.98, 0.92), Color(0, 0, 0, 0))
+		_write(font, a.position + Vector2(206 + _dfont.get_string_size(num, HORIZONTAL_ALIGNMENT_LEFT, -1, 54).x, 70), tr("秒"), 22, Color(0.92, 0.95, 0.9), Color(0, 0, 0, 0))
 	var line2 := tr(Game.plate())
 	if trial != "":
 		line2 = tr("评测：本顿要到 %s") % Game.fmt(target)
@@ -2982,11 +3246,17 @@ func _draw_hud(font: Font) -> void:
 	if peaks:
 		_icon("bell", a.position + Vector2(52, 166), 30, 1.0 if _peak_on else 0.45)
 		_write(font, a.position + Vector2(74, 174), (tr("高峰 %d 秒") if _peak_on else tr("谷时 %d 秒")) % int(ceil(_peak_t)), 20, Color(1.0, 0.6, 0.5) if _peak_on else Color(0.8, 0.85, 0.8), Color(0, 0, 0, 0))
-	if can_think:   # the thinking gauge, as chalk
-		var tr_ := Rect2(a.position + Vector2(200, 160), Vector2(130, 10))
+	if can_think:
+		var think_panel := Rect2(408, 14, 340, 132)
+		_piece("ui_chalkboard", think_panel)
+		_write(font, think_panel.position + Vector2(26, 35), tr("深度思考"), 23, PAPER, Color.TRANSPARENT)
+		_write(_nfont, think_panel.position + Vector2(258, 35), "%.1fs" % _think, 21, PAPER, Color.TRANSPARENT)
+		var tr_ := Rect2(think_panel.position + Vector2(26, 49), Vector2(288, 10))
 		draw_rect(tr_, Color(1, 1, 1, 0.15))
 		draw_rect(Rect2(tr_.position, Vector2(tr_.size.x * _think / maxf(think_time, 0.01), tr_.size.y)), Color(0.75, 0.68, 1.0))
-		_write(font, tr_.position + Vector2(0, -6), tr("思考"), 16, Color(0.8, 0.78, 0.95), Color(0, 0, 0, 0))
+		_write(font, think_panel.position + Vector2(26, 84), _think_hint(), 20, Color(0.9, 0.84, 1.0), Color.TRANSPARENT)
+		if _thinking or hybrid:
+			_write(font, think_panel.position + Vector2(26, 111), tr("蓝线：饭盒高度的预计落点"), 16, Color(0.62, 0.86, 1.0), Color.TRANSPARENT)
 	# B: the cash register and the 主 / 荤 / 素 tray
 	var b := Rect2(1530, 14, 370, 92)
 	_piece("ui_paper", b)
@@ -3023,6 +3293,8 @@ func _draw_hud(font: Font) -> void:
 		rows.append(["leaf", tr("顿悟"), "✓" if _grokked else "%d/%d" % [_grok_n, grok_need], "grok", float(_grok_n)])
 	if critic > 0.0:
 		rows.append(["crown", tr("评鉴"), tr("%d 种") % _kinds_eaten.size(), "critic", float(_kinds_eaten.size())])
+	if cache_bonus > 0.0 and _cache_ready:
+		rows.append(["box", tr("缓存"), "+%d%%" % int(round(cache_bonus * 100)), "cache", cache_bonus])
 	for r in rows:
 		_badge(Vector2(0, y), r[0], r[2], r[3], r[4], r[1], 1890.0)
 		y += 64.0
@@ -3142,6 +3414,21 @@ func _draw_hand_tag(at: Vector2, b: Dictionary) -> void:
 		var c := Vector2(x0 + i * 18.0 + 9.0, at.y)
 		_pip.bg_color = (Color(1.0, 0.5, 0.4) if used >= cap else GOLD_C) if i < used else Color(1, 0.97, 0.9, 0.3)
 		draw_style_box(_pip, Rect2(c - Vector2(7, 7), Vector2(14, 14)))
+	var rule := _plan_box(b)
+	var rule_text := ""
+	if rule.cache_primed:
+		rule_text = tr("送出可存缓存")
+	elif float(rule.add_bonus) > 0.0:
+		var tags: Array[String] = []
+		if float(rule.mono_bonus) > 0.0:
+			tags.append(tr("单品拼盘"))
+		if rule.cache_consumed:
+			tags.append(tr("缓存"))
+		if rule.rotation:
+			tags.append(tr("换菜"))
+		rule_text = "%s +%d%%" % [" · ".join(tags), int(round(float(rule.add_bonus) * 100))]
+	if rule_text != "":
+		_write(ThemeDB.fallback_font, at + Vector2(0, 70), rule_text, 20, PAPER, INK, true)
 	var close := _closest_recipe(b.items)
 	if not close.is_empty():
 		var r: Dictionary = close[0]

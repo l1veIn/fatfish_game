@@ -1,0 +1,109 @@
+"""Freeze game source hashes and run isolated release regression scenarios.
+
+py -3 pipeline/validate_release.py --runs 40 --visual
+Every invocation writes a new evidence folder. Failures and source changes are
+retained in report.json; this script never upgrades an old report to a pass.
+"""
+from __future__ import annotations
+import argparse
+import hashlib
+import json
+import os
+import re
+import subprocess
+from datetime import datetime, timezone
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+ENGINE = ROOT / "tools/godot/Godot_v4.7.2-stable_win64_console.exe"
+
+
+def fingerprint() -> dict[str, str]:
+    return {str(p.relative_to(ROOT)).replace("\\", "/"): hashlib.sha256(p.read_bytes()).hexdigest()
+            for p in sorted((ROOT / "game").rglob("*"))
+            if p.is_file() and not any(part in {".godot", "addons"} for part in p.relative_to(ROOT / "game").parts)}
+
+
+def player_fingerprint() -> dict[str, str]:
+    folder = Path(os.environ.get("APPDATA", "")) / "FatFishFreeLunch"
+    return {name: hashlib.sha256((folder / name).read_bytes()).hexdigest()
+            for name in ["save.json", "save.json.bak", "settings.cfg"] if (folder / name).exists()}
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--runs", type=int, default=0)
+    parser.add_argument("--visual", action="store_true")
+    args = parser.parse_args()
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    out = ROOT / "build" / f"verification-{stamp}"
+    out.mkdir(parents=True, exist_ok=False)
+    before = fingerprint()
+    player_before = player_fingerprint()
+    results = []
+    scenarios = [
+        ("state", "release_state_test", "release_state", "RELEASE_STATE_TEST:"),
+        ("onboarding", "onboarding_test", "onboarding", '"ok":true'),
+        ("settings", "settings_release_test", "settings-release", "SETTINGS_RELEASE_TEST failures=0"),
+        ("ending", "ending_flow_test", "ending_release", "ENDING_FLOW_TEST PASS failures=0"),
+        ("focus", "focus_recovery_test", "focus_recovery", "FOCUS_RECOVERY_TEST failures=0"),
+        ("controls", "canteen_controls_test", "canteen_controls", '"ok":true'),
+        ("mechanics", "mechanic_synergy_test", "mechanic_synergy", "MECHANIC_SYNERGY_TEST:"),
+        ("planner", "meal_planner_test", "meal_planner_release", "MEAL_PLANNER_TEST PASS failures=0"),
+    ]
+
+    def execute(name: str, command: list[str], marker: str, timeout=120):
+        log = out / f"{name}.log"
+        started = datetime.now(timezone.utc).isoformat()
+        with log.open("w", encoding="utf-8") as stream:
+            try:
+                run = subprocess.run(command, cwd=ROOT, stdout=stream, stderr=subprocess.STDOUT, timeout=timeout)
+                code = run.returncode
+            except subprocess.TimeoutExpired:
+                code = -1
+        text = log.read_text(encoding="utf-8", errors="replace")
+        errors = re.findall(r"^.*(?:SCRIPT ERROR:|ERROR:|FAIL ).*$", text, re.M)
+        passed = code == 0 and marker in text and not errors
+        results.append({"name": name, "passed": passed, "exit_code": code, "marker": marker,
+                        "log": str(log.relative_to(ROOT)), "started_utc": started, "errors": errors})
+        print(f"{name}: {'PASS' if passed else 'FAIL'}", flush=True)
+
+    for name, scene, profile, marker in scenarios:
+        execute(name, [str(ENGINE), "--headless", "--path", str(ROOT / "game"),
+                       f"res://tests/{scene}.tscn", "--", f"--test-profile={profile}", "--lang=zh_CN"], marker)
+    if args.visual:
+        for locale in ["zh_CN", "en"]:
+            shots = out / f"visual-{locale}"
+            execute(f"ending-{locale}", [str(ENGINE), "--path", str(ROOT / "game"), "--resolution", "1280x720",
+                    "res://tests/ending_flow_test.tscn", "--", f"--test-profile=ending_{locale}",
+                    f"--lang={locale}", f"--out={shots}"], "ENDING_FLOW_TEST PASS failures=0")
+            execute(f"planner-{locale}", [str(ENGINE), "--path", str(ROOT / "game"), "--resolution", "1280x720",
+                    "res://tests/meal_planner_test.tscn", "--", f"--test-profile=meal_planner_{locale}",
+                    f"--lang={locale}", f"--out={out / ('planner-' + locale)}"], "MEAL_PLANNER_TEST PASS failures=0")
+            execute(f"focus-{locale}", [str(ENGINE), "--path", str(ROOT / "game"), "--resolution", "1280x720",
+                    "res://tests/focus_recovery_test.tscn", "--", f"--test-profile=focus_{locale}",
+                    f"--lang={locale}", f"--out={out / ('focus-' + locale)}"], "FOCUS_RECOVERY_TEST failures=0")
+            execute(f"canteen-{locale}", [str(ENGINE), "--path", str(ROOT / "game"), "--resolution", "1280x720",
+                    "res://tests/canteen_visual_test.tscn", "--", f"--test-profile=canteen_visual_{locale}",
+                    f"--lang={locale}", f"--out={out / ('canteen-' + locale)}"], '"ok":true', 180)
+        execute("settings-visual", [str(ENGINE), "--path", str(ROOT / "game"), "--resolution", "1280x720",
+                "res://tests/settings_release_test.tscn", "--", "--test-profile=settings-release",
+                f"--settings-shots={out / 'settings-visual'}"], "SETTINGS_RELEASE_TEST failures=0")
+    if args.runs > 0:
+        execute("pacing", [str(ENGINE), "--headless", "--path", str(ROOT / "game"), "--", "--autotest",
+                f"--test-profile=release_pacing_{stamp}", f"--runs={args.runs}"], "AUTOTEST OK:", 1800)
+    after = fingerprint()
+    stable = before == after
+    player_unchanged = player_before == player_fingerprint()
+    report = {"passed": all(x["passed"] for x in results) and stable and player_unchanged,
+              "engine": "Godot 4.7.2 stable", "source_unchanged": stable, "player_files_unchanged": player_unchanged,
+              "checks": results, "source_sha256": before,
+              "limitations": ["Automated fixtures and input injection do not establish human enjoyment or hardware gamepad compatibility.",
+                              "No Steam backend, low-end hardware, or real-player pacing certification."]}
+    (out / "report.json").write_text(json.dumps(report, indent=2), encoding="utf-8")
+    print(out, flush=True)
+    raise SystemExit(0 if report["passed"] else 1)
+
+
+if __name__ == "__main__":
+    main()

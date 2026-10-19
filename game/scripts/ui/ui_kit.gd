@@ -227,8 +227,15 @@ static func hook(b: BaseButton) -> void:
 static func _bounce(b: Control, to: float) -> void:
 	if not b.is_inside_tree():
 		return
+	var previous = b.get_meta("ui_bounce_tween") if b.has_meta("ui_bounce_tween") else null
+	if previous is Tween and previous.is_valid():
+		previous.kill()
+	if Settings.reduced_motion:
+		b.scale = Vector2.ONE
+		return
 	b.pivot_offset = b.size * 0.5
 	var tw := b.create_tween()
+	b.set_meta("ui_bounce_tween", tw)
 	tw.tween_property(b, "scale", Vector2.ONE * to, 0.08).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 
 

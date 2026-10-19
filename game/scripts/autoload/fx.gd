@@ -6,6 +6,9 @@ var camera: Camera2D = null   # set by SharedCamera
 var world: Node2D = null      # transient effects and projectiles are spawned here
 
 var _hitstop_end := 0.0
+var _hitstop_active := false
+var _hitstop_restore_scale := 1.0
+var _hitstop_applied_scale := 0.05
 
 
 func _ready() -> void:
@@ -14,11 +17,31 @@ func _ready() -> void:
 	# backup. The same resource is the project's gui/theme/custom_font, so Labels and Buttons
 	# use it too (the web build has no system fonts to fall back on).
 	ThemeDB.fallback_font = load("res://assets/ui/ui_font.tres")
+	Settings.changed.connect(_on_settings_changed)
+	Settings.focus_changed.connect(func(focused: bool):
+		if not focused:
+			_finish_hitstop())
 
 
 func _process(_delta: float) -> void:
-	if Engine.time_scale < 1.0 and _now() >= _hitstop_end:
-		Engine.time_scale = 1.0
+	if not _hitstop_active:
+		return
+	# Another system may have changed the speed during the pause. Its new speed wins.
+	if not is_equal_approx(Engine.time_scale, _hitstop_applied_scale):
+		_hitstop_active = false
+	elif _now() >= _hitstop_end:
+		_finish_hitstop()
+
+
+func _finish_hitstop() -> void:
+	if _hitstop_active and is_equal_approx(Engine.time_scale, _hitstop_applied_scale):
+		Engine.time_scale = _hitstop_restore_scale
+	_hitstop_active = false
+
+
+func _on_settings_changed() -> void:
+	if not Settings.hit_pause:
+		_finish_hitstop()
 
 
 func _now() -> float:
@@ -27,13 +50,23 @@ func _now() -> float:
 
 ## Freezes the game for a few hundredths of a second so hits feel heavy.
 func hitstop(duration: float) -> void:
-	if duration <= 0.0:
+	if duration <= 0.0 or not Settings.hit_pause:
 		return
-	_hitstop_end = maxf(_hitstop_end, _now() + duration)
-	Engine.time_scale = 0.05
+	if _hitstop_active and not is_equal_approx(Engine.time_scale, _hitstop_applied_scale):
+		_hitstop_active = false
+	if not _hitstop_active:
+		_hitstop_restore_scale = Engine.time_scale
+		_hitstop_applied_scale = minf(Engine.time_scale, 0.05)
+		_hitstop_end = _now() + duration
+		_hitstop_active = true
+	else:
+		_hitstop_end = maxf(_hitstop_end, _now() + duration)
+	Engine.time_scale = _hitstop_applied_scale
 
 
 func shake(power: float, duration: float) -> void:
+	if not Settings.screen_shake or Settings.reduced_motion:
+		return
 	if is_instance_valid(camera) and camera.has_method("add_shake"):
 		camera.add_shake(power, duration)
 
@@ -55,6 +88,8 @@ func popup_text(pos: Vector2, text: String, color: Color) -> void:
 
 
 func burst(pos: Vector2, color: Color, count: int, speed: float, size: float) -> void:
+	if Settings.reduced_motion:
+		return
 	var b := Burst.new()
 	b.setup(color, count, speed, size)
 	spawn(b, pos)
@@ -63,6 +98,8 @@ func burst(pos: Vector2, color: Color, count: int, speed: float, size: float) ->
 ## --- procedural effects (see Vfx) -----------------------------------------------------
 
 func muzzle_flash(pos: Vector2, dir: Vector2) -> void:
+	if Settings.reduced_motion:
+		return
 	var v := Vfx.make("muzzle"); v.dir = dir
 	spawn(v, pos)
 	var sm := Vfx.make("smoke"); sm.dir = dir; sm.radius = 14.0; sm.count = 3; sm.life = 0.45
@@ -72,23 +109,31 @@ func muzzle_flash(pos: Vector2, dir: Vector2) -> void:
 
 ## Sparks flying along dir (e.g. the reflection off a wall), plus a small flash.
 func sparks(pos: Vector2, dir: Vector2, color := Color(1.0, 0.8, 0.4), n := 8) -> void:
+	if Settings.reduced_motion:
+		return
 	var v := Vfx.make("spark"); v.dir = dir; v.color = color; v.count = n
 	spawn(v, pos)
 
 
 ## Star-shaped hit flash at a contact point.
 func hit_flash(pos: Vector2, color := Color(1.0, 0.95, 0.75), size := 46.0) -> void:
+	if Settings.reduced_motion:
+		return
 	var v := Vfx.make("flash"); v.color = color; v.radius = size
 	spawn(v, pos)
 
 
 func shell(pos: Vector2, facing: int) -> void:
+	if Settings.reduced_motion:
+		return
 	var v := Vfx.make("shell"); v.dir = Vector2(facing, 0)
 	spawn(v, pos)
 
 
 ## Fireball, shockwave ring, smoke and debris; radius in world px.
 func explosion(pos: Vector2, radius: float) -> void:
+	if Settings.reduced_motion:
+		return
 	var ring := Vfx.make("ring"); ring.radius = radius; ring.color = Color(1.0, 0.85, 0.55)
 	spawn(ring, pos)
 	var fire := Vfx.make("fire"); fire.radius = radius * 0.3; fire.count = 14
@@ -105,6 +150,8 @@ func explosion(pos: Vector2, radius: float) -> void:
 
 ## Heavy ground impact (boss slam / landing): dust shockwave ring, flying rocks, dust clouds.
 func ground_slam(pos: Vector2, radius: float) -> void:
+	if Settings.reduced_motion:
+		return
 	var ring := Vfx.make("ring"); ring.radius = radius; ring.color = Color(0.9, 0.82, 0.62)
 	spawn(ring, pos + Vector2(0, -8))
 	var rocks := Vfx.make("rocks"); rocks.radius = radius; rocks.count = 14; rocks.color = Color(0.36, 0.29, 0.22)
@@ -133,6 +180,8 @@ func _float_label(pos: Vector2, text: String, color: Color, font_size: int, dura
 	label.z_index = 60
 	world.add_child(label)
 	var tween := label.create_tween()
-	tween.tween_property(label, "position:y", label.position.y - 70.0, duration).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
-	tween.parallel().tween_property(label, "modulate:a", 0.0, duration * 0.5).set_delay(duration * 0.5)
+	if not Settings.reduced_motion:
+		tween.tween_property(label, "position:y", label.position.y - 70.0, duration).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+		tween.parallel()
+	tween.tween_property(label, "modulate:a", 0.0, duration * 0.5).set_delay(duration * 0.5)
 	tween.tween_callback(label.queue_free)

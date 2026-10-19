@@ -1,0 +1,106 @@
+[
+  {
+    "path": "game/assets/portraits/release/fish_achievement_trophy.png",
+    "size": [
+      1254,
+      1254
+    ],
+    "mode": "RGBA",
+    "alpha_extrema": [
+      0,
+      255
+    ],
+    "sha256": "1b67004f9ceba75c3a7ee31c955c43cec36db94092d775ab4fd3befc3cda9905"
+  },
+  {
+    "path": "game/assets/portraits/release/fish_balanced.png",
+    "size": [
+      1254,
+      1254
+    ],
+    "mode": "RGBA",
+    "alpha_extrema": [
+      0,
+      255
+    ],
+    "sha256": "a0d38a78e08b9132cf80d54529e317018f01e87c61919a23046a94c6a1c6f739"
+  },
+  {
+    "path": "game/assets/portraits/release/fish_bookworm.png",
+    "size": [
+      1254,
+      1254
+    ],
+    "mode": "RGBA",
+    "alpha_extrema": [
+      0,
+      255
+    ],
+    "sha256": "df108acd6bafc0e725a9ef4ade3a15bc58dfc2c11c9713d6042c094f35aec953"
+  },
+  {
+    "path": "game/assets/portraits/release/fish_first_meal.png",
+    "size": [
+      1254,
+      1254
+    ],
+    "mode": "RGBA",
+    "alpha_extrema": [
+      0,
+      255
+    ],
+    "sha256": "e9c201a0264661c5361682b5a35e64dd1fe104682d20ea7d328d44a2cb23dabc"
+  },
+  {
+    "path": "game/assets/portraits/release/fish_gold_box.png",
+    "size": [
+      1254,
+      1254
+    ],
+    "mode": "RGBA",
+    "alpha_extrema": [
+      0,
+      255
+    ],
+    "sha256": "4dd72f27df4563af4cd677c5a24db03dff1d87f9f3385927afd941692a2c3e58"
+  },
+  {
+    "path": "game/assets/portraits/release/fish_menu_curator.png",
+    "size": [
+      1254,
+      1254
+    ],
+    "mode": "RGBA",
+    "alpha_extrema": [
+      0,
+      255
+    ],
+    "sha256": "4b3e9374142cf151dcbd874ea504a57d02855b8f6a7636e81e5d244ec09c86c9"
+  },
+  {
+    "path": "game/assets/portraits/release/fish_signature_chef.png",
+    "size": [
+      1254,
+      1254
+    ],
+    "mode": "RGBA",
+    "alpha_extrema": [
+      0,
+      255
+    ],
+    "sha256": "4c8b02d4fa0960830fa67910c64b450445bb8f7ef85d07bd2f3c06e152121de7"
+  },
+  {
+    "path": "game/assets/portraits/release/fish_thinker.png",
+    "size": [
+      1254,
+      1254
+    ],
+    "mode": "RGBA",
+    "alpha_extrema": [
+      0,
+      255
+    ],
+    "sha256": "3a23c192e8db7188b94e69334718ce57a0479ab83dbd50ebd3a2cc4637839502"
+  }
+]

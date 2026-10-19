@@ -1,0 +1,22 @@
+{
+  "跳过引导 · View": "Skip lesson · View",
+  "跳过引导 · T": "Skip lesson · T",
+  "开饭啦！计时开始": "Lunch is on! The clock has started",
+  "继续接菜、送桌；关门后用 token 升级。": "Keep catching and serving. Spend your tokens on upgrades after closing.",
+  "随时按 Esc / Start 暂停。": "Press Esc / Start to pause at any time.",
+  "先拿一个饭盒": "Pick up a lunch box",
+  "接住一份菜": "Catch a dish",
+  "把饭盒送上桌": "Bring the box to the table",
+  "方向键 / WASD 移到右下角餐桌，按 E / Enter 拿盒。": "Move to the bottom-right table with WASD / arrow keys. Press E / Enter to take a box.",
+  "方向键 / WASD 移动饭盒，接住一份落下的菜。": "Move the box with WASD / arrow keys and catch a falling dish.",
+  "把饭盒移回右下角餐桌，按 E / Enter 送给她。": "Bring the box to the bottom-right table. Press E / Enter to serve.",
+  "左摇杆移到右下角餐桌，按 A 拿盒。": "Move to the bottom-right table with the left stick. Press A to take a box.",
+  "左摇杆移动饭盒，接住一份落下的菜。": "Move the box with the left stick and catch a falling dish.",
+  "把饭盒移回右下角餐桌，按 A 送给她。": "Bring the box to the bottom-right table. Press A to serve.",
+  "把鼠标移到右下角餐桌，点击拿盒。": "Move the mouse to the bottom-right table and click to take a box.",
+  "移动鼠标，把饭盒放在落下的菜下面。": "Move the mouse to place your box under a falling dish.",
+  "把饭盒移回右下角餐桌，点击送给她。": "Bring the box to the bottom-right table and click to serve.",
+  "先完成一次送餐，再开始计时。不用装满也能送。": "The clock starts after your first delivery. The box does not need to be full.",
+  "第一次来，慢慢学": "Take your time",
+  "计时未开始": "Clock waiting"
+}

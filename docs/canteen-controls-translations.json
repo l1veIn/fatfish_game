@@ -1,0 +1,17 @@
+{
+  "松手结束 · 冷却 1 秒": "Release to stop · 1s cooldown",
+  "冷却 %.1f 秒": "Cooldown %.1fs",
+  "松开后再按": "Release, then press again",
+  "思考恢复中": "Recharging",
+  "按住 空格 / 右键 / B": "Hold Space / RMB / B",
+  "出菜 ×%d": "Ladles ×%d",
+  "每条进度是一把勺子 · 满格后抛菜": "One bar per ladle · Full bar means a serving",
+  "蓝线：饭盒高度的预计落点": "Blue mark: landing at box height",
+  "缓存已备好": "Cache ready",
+  "搭配 +%d%%": "Build bonus +%d%%",
+  "其中搭配加成：单品 / 缓存 / 换菜": "Including platter / cache / variety bonuses",
+  "缓存": "Cache",
+  "送出可存缓存": "Serve to store a cache",
+  "单品拼盘": "Single-dish platter",
+  "换菜": "Variety"
+}

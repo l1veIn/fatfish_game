@@ -1,158 +1,328 @@
 class_name SettingsPanel
 extends Control
-## The settings overlay (title, skill tree and pause menu all open this one): sound volumes,
-## fullscreen / vsync, language, pause-when-unfocused, and resetting the save (two clicks).
-## Changes apply at once (Settings.apply). Esc / B / 返回 closes it; `closed` is emitted.
+## Shared modal settings. Four pages keep controls readable on a 1280 x 720 window.
+## Changes apply immediately; focus stays inside the modal and returns to its opener.
 
 signal closed
 
+const TABS := ["声音", "画面", "辅助", "游戏"]
+
 var _reset_armed := 0.0
 var _reset_btn: Button
-var _first: Control
+var _panel: PanelContainer
+var _scroll: ScrollContainer
+var _content: VBoxContainer
+var _back: Button
+var _tabs: Array[Button] = []
+var _controls: Array[Control] = []
+var _active_tab := 0
+var _return_focus: WeakRef
+var _closing := false
+var _language := ""
+var _fullscreen_toggle: CheckButton
+var _resolution: OptionButton
 
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
+	_return_focus = weakref(get_viewport().gui_get_focus_owner())
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	z_index = 200
 	mouse_filter = Control.MOUSE_FILTER_STOP
+	_language = Settings.language
 	_build()
+	resized.connect(_layout)
+	Settings.changed.connect(_on_settings_changed)
 
 
-func _build() -> void:
-	for c in get_children():
-		c.queue_free()
+func _build(focus_key := "") -> void:
+	for child in get_children():
+		remove_child(child)
+		child.queue_free()
+	_tabs.clear()
 	var dim := ColorRect.new()
-	dim.color = Color(0.03, 0.02, 0.01, 0.7)
-	dim.size = Vector2(1920, 1080)
+	dim.color = Color(0.03, 0.02, 0.01, 0.78)
+	dim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	add_child(dim)
-	var panel := PanelContainer.new()
-	panel.position = Vector2(510, 70)
-	panel.size = Vector2(900, 940)
-	add_child(panel)
+	_panel = PanelContainer.new()
+	add_child(_panel)
+	_layout()
+	_panel.minimum_size_changed.connect(_layout.call_deferred)
 	var col := VBoxContainer.new()
-	col.add_theme_constant_override("separation", 10)
-	panel.add_child(col)
-	var title := UiKit.label(tr("设置"), 52, UiKit.GOLD, 0)
+	col.add_theme_constant_override("separation", 18)
+	_panel.add_child(col)
+	var title := UiKit.label(tr("设置"), 50, UiKit.GOLD)
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	col.add_child(title)
+	var subtitle := _hint(tr("按你的节奏，安心开饭。"))
+	subtitle.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	col.add_child(subtitle)
+	var tabs_row := HBoxContainer.new()
+	tabs_row.add_theme_constant_override("separation", 12)
+	col.add_child(tabs_row)
+	for i in TABS.size():
+		var tab := UiKit.button(tr(TABS[i]), 29, Vector2(0, 66))
+		tab.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		tab.toggle_mode = true
+		tab.set_meta("focus_key", "tab_%d" % i)
+		tab.pressed.connect(func(): _show_tab(i))
+		tabs_row.add_child(tab)
+		_tabs.append(tab)
+	_scroll = ScrollContainer.new()
+	_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	_scroll.follow_focus = true
+	col.add_child(_scroll)
+	_content = VBoxContainer.new()
+	_content.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_content.add_theme_constant_override("separation", 18)
+	_scroll.add_child(_content)
+	var footer := _hint(tr("方向键选择 · Enter / A 确认 · Esc / B 返回"))
+	footer.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	col.add_child(footer)
+	_back = UiKit.button(tr("返回"), 32, Vector2(300, 70))
+	_back.set_meta("ui_back", true)
+	_back.set_meta("focus_key", "back")
+	_back.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	_back.pressed.connect(close)
+	col.add_child(_back)
+	_show_tab(_active_tab, false)
+	_layout()
+	_restore_internal_focus.call_deferred(focus_key)
 
-	_section(col, tr("声音"))
-	var grid := _grid(col)
-	_first = _slider(grid, tr("总音量"), "Master")
-	_slider(grid, tr("音乐"), "Music")
-	_slider(grid, tr("音效"), "SFX")
-	_slider(grid, tr("配音"), "Voice")
-	_toggle(col, tr("切到后台时静音"), Settings.mute_unfocused, func(on): Settings.mute_unfocused = on)
 
-	_section(col, tr("画面"))
-	_toggle(col, tr("全屏（F11）"), Settings.fullscreen, func(on):
+func _layout() -> void:
+	if not is_instance_valid(_panel):
+		return
+	var area := size if size.x > 1.0 else get_viewport_rect().size
+	_panel.size = Vector2(minf(1160.0, area.x - 80.0), minf(920.0, area.y - 64.0))
+	_panel.position = (area - _panel.size) * 0.5
+
+
+func _show_tab(index: int, focus_tab := true) -> void:
+	_active_tab = index
+	_reset_armed = 0.0
+	_reset_btn = null
+	_fullscreen_toggle = null
+	_resolution = null
+	_controls.clear()
+	for child in _content.get_children():
+		_content.remove_child(child)
+		child.queue_free()
+	for i in _tabs.size():
+		_tabs[i].set_pressed_no_signal(i == index)
+	_scroll.scroll_vertical = 0
+	match index:
+		0: _sound_page()
+		1: _display_page()
+		2: _accessibility_page()
+		3: _game_page()
+	_link_focus()
+	if focus_tab:
+		_tabs[index].grab_focus()
+
+
+func _sound_page() -> void:
+	_content.add_child(_hint(tr("音量即时生效，音乐、音效和配音可以分别调整。")))
+	_slider(tr("总音量"), "Master")
+	_slider(tr("音乐"), "Music")
+	_slider(tr("音效"), "SFX")
+	_slider(tr("配音"), "Voice")
+	_toggle(tr("切到后台时静音"), Settings.mute_unfocused, "mute_unfocused", func(on): Settings.mute_unfocused = on)
+
+
+func _display_page() -> void:
+	_fullscreen_toggle = _toggle(tr("全屏（F11）"), Settings.fullscreen, "fullscreen", func(on):
 		if on != Settings.fullscreen:
 			Settings.toggle_fullscreen())
 	if not OS.has_feature("web"):
-		_toggle(col, tr("垂直同步"), Settings.vsync, func(on): Settings.vsync = on)
+		var row := _row(tr("窗口分辨率"))
+		_resolution = _option("resolution")
+		for i in Settings.WINDOW_SIZES.size():
+			var resolution: Vector2i = Settings.WINDOW_SIZES[i]
+			_resolution.add_item("%d × %d" % [resolution.x, resolution.y])
+			if resolution == Settings.window_size:
+				_resolution.select(i)
+		_resolution.item_selected.connect(func(index):
+			Settings.window_size = Settings.WINDOW_SIZES[index]
+			Settings.apply())
+		row.add_child(_resolution)
+		_content.add_child(_hint(tr("窗口会居中并自动适应可用屏幕；全屏时保留所选窗口尺寸。")))
+		_toggle(tr("垂直同步"), Settings.vsync, "vsync", func(on): Settings.vsync = on)
+	_content.add_child(_hint(tr("设置会自动保存，下次开饭继续沿用。")))
 
-	_section(col, tr("游戏"))
-	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 20)
-	var lang_label := UiKit.label(tr("语言 / Language"), 28)
-	lang_label.custom_minimum_size.x = 300
-	row.add_child(lang_label)
-	var lang := OptionButton.new()
-	lang.add_theme_font_size_override("font_size", 28)
-	lang.custom_minimum_size = Vector2(300, 60)
-	var i := 0
+
+func _accessibility_page() -> void:
+	_toggle(tr("减少动态效果"), Settings.reduced_motion, "reduced_motion", func(on): Settings.reduced_motion = on)
+	_content.add_child(_hint(tr("减少装饰动画和漂浮粒子，保留接菜所需的运动提示。")))
+	_toggle(tr("接菜顿帧"), Settings.hit_pause, "hit_pause", func(on): Settings.hit_pause = on)
+	_content.add_child(_hint(tr("合成或重要接菜时短暂停顿，关闭后保持连续动作。")))
+
+
+func _game_page() -> void:
+	var row := _row(tr("语言 / Language"))
+	var lang := _option("language")
 	for code in Settings.LANGUAGES:
 		lang.add_item(Settings.LANGUAGES[code])
 		if code == Settings.language:
-			lang.select(i)
-		i += 1
-	lang.item_selected.connect(func(idx):
-		Settings.language = Settings.LANGUAGES.keys()[idx]
-		Settings.apply()
-		_build.call_deferred())
-	row.add_child(lang)
-	col.add_child(row)
-	_toggle(col, tr("切到后台时暂停上班"), Settings.pause_unfocused, func(on): Settings.pause_unfocused = on)
-
-	_section(col, tr("存档"))
-	_reset_btn = UiKit.button(tr("清除存档，从头开始"), 26, Vector2(420, 64))
-	_reset_btn.pressed.connect(_on_reset)
-	col.add_child(_reset_btn)
-
-	var spacer := Control.new()
-	spacer.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	col.add_child(spacer)
-	var back := UiKit.button(tr("返回"), 34, Vector2(280, 76))
-	back.set_meta("ui_back", true)
-	back.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	back.pressed.connect(close)
-	col.add_child(back)
-	if is_instance_valid(_first):
-		_first.grab_focus.call_deferred()
-
-
-func _section(col: VBoxContainer, text: String) -> void:
-	var l := UiKit.label(text, 30, UiKit.GOLD)
-	col.add_child(l)
-
-
-func _grid(col: VBoxContainer) -> GridContainer:
-	var g := GridContainer.new()
-	g.columns = 3
-	g.add_theme_constant_override("h_separation", 20)
-	g.add_theme_constant_override("v_separation", 6)
-	col.add_child(g)
-	return g
-
-
-func _slider(grid: GridContainer, text: String, bus: String) -> HSlider:
-	var l := UiKit.label(text, 28)
-	l.custom_minimum_size.x = 160
-	grid.add_child(l)
-	var s := HSlider.new()
-	s.min_value = 0
-	s.max_value = 100
-	s.step = 5
-	s.value = round(Settings.volume[bus] * 100.0)
-	s.custom_minimum_size = Vector2(480, 44)
-	s.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	grid.add_child(s)
-	var pct := UiKit.label("%d%%" % int(s.value), 26)
-	pct.custom_minimum_size.x = 90
-	grid.add_child(pct)
-	s.value_changed.connect(func(v):
-		Settings.volume[bus] = v / 100.0
-		pct.text = "%d%%" % int(v)
+			lang.select(lang.item_count - 1)
+	lang.item_selected.connect(func(index):
+		Settings.language = Settings.LANGUAGES.keys()[index]
 		Settings.apply())
-	s.drag_ended.connect(func(_c):
+	row.add_child(lang)
+	_toggle(tr("切到后台时暂停上班"), Settings.pause_unfocused, "pause_unfocused", func(on): Settings.pause_unfocused = on)
+	var line := HSeparator.new()
+	_content.add_child(line)
+	_content.add_child(UiKit.label(tr("存档"), 30, UiKit.GOLD))
+	_content.add_child(_hint(tr("清除后将失去全部饭票、升级和成就。此操作无法撤销。")))
+	_reset_btn = UiKit.button(tr("清除存档，从头开始"), 27, Vector2(0, 66))
+	_register(_reset_btn, "reset_save")
+	_reset_btn.pressed.connect(_on_reset)
+	_content.add_child(_reset_btn)
+
+
+func _hint(text: String) -> Label:
+	var label := UiKit.label(text, 24, Color(0.85, 0.78, 0.67))
+	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	return label
+
+
+func _row(text: String) -> HBoxContainer:
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 24)
+	var label := UiKit.label(text, 28)
+	label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	row.add_child(label)
+	_content.add_child(row)
+	return row
+
+
+func _option(key: String) -> OptionButton:
+	var option := OptionButton.new()
+	option.custom_minimum_size = Vector2(370, 64)
+	option.add_theme_font_size_override("font_size", 28)
+	_register(option, key)
+	return option
+
+
+func _slider(text: String, bus: String) -> void:
+	var row := _row(text)
+	var slider := HSlider.new()
+	slider.min_value = 0
+	slider.max_value = 100
+	slider.step = 5
+	slider.value = round(Settings.volume[bus] * 100.0)
+	slider.custom_minimum_size = Vector2(400, 56)
+	slider.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	slider.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	_register(slider, "volume_" + bus)
+	row.add_child(slider)
+	var pct := UiKit.label("%d%%" % int(slider.value), 27)
+	pct.custom_minimum_size.x = 92
+	pct.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	row.add_child(pct)
+	slider.value_changed.connect(func(value):
+		Settings.volume[bus] = value / 100.0
+		pct.text = "%d%%" % int(value)
+		Settings.apply())
+	slider.drag_ended.connect(func(_changed):
 		if bus == "SFX" or bus == "Master":
 			Audio.sfx("token")
 		elif bus == "Voice":
 			Audio.vo("fish_happy", 2))
-	return s
 
 
-func _toggle(col: VBoxContainer, text: String, on: bool, set_fn: Callable) -> void:
-	var c := CheckButton.new()
-	c.text = text
-	c.button_pressed = on
-	c.add_theme_font_size_override("font_size", 28)
-	c.toggled.connect(func(v):
-		set_fn.call(v)
+func _toggle(text: String, on: bool, key: String, set_fn: Callable) -> CheckButton:
+	# Separate long labels so translations wrap instead of widening the panel.
+	var row := _row(text)
+	var toggle := CheckButton.new()
+	toggle.button_pressed = on
+	toggle.custom_minimum_size = Vector2(112, 60)
+	toggle.tooltip_text = text
+	_register(toggle, key)
+	toggle.toggled.connect(func(value):
+		set_fn.call(value)
 		Settings.apply())
-	col.add_child(c)
+	row.gui_input.connect(func(event):
+		if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
+			toggle.grab_focus()
+			toggle.button_pressed = not toggle.button_pressed
+			row.accept_event())
+	row.add_child(toggle)
+	return toggle
+
+
+func _register(control: Control, key: String) -> void:
+	control.focus_mode = Control.FOCUS_ALL
+	control.set_meta("focus_key", key)
+	var focus := UiKit.box(Color.TRANSPARENT, UiKit.GOLD, 3, 10)
+	focus.draw_center = false
+	control.add_theme_stylebox_override("focus", focus)
+	_controls.append(control)
+
+
+func _link_focus() -> void:
+	var chain: Array[Control] = []
+	for tab in _tabs:
+		chain.append(tab)
+	chain.append_array(_controls)
+	chain.append(_back)
+	for i in chain.size():
+		var control := chain[i]
+		control.focus_next = control.get_path_to(chain[(i + 1) % chain.size()])
+		control.focus_previous = control.get_path_to(chain[(i - 1 + chain.size()) % chain.size()])
+	for i in _tabs.size():
+		var tab := _tabs[i]
+		tab.focus_neighbor_left = tab.get_path_to(_tabs[(i + _tabs.size() - 1) % _tabs.size()])
+		tab.focus_neighbor_right = tab.get_path_to(_tabs[(i + 1) % _tabs.size()])
+		tab.focus_neighbor_top = tab.get_path_to(_back)
+		tab.focus_neighbor_bottom = tab.get_path_to(_controls[0] if not _controls.is_empty() else _back)
+	for i in _controls.size():
+		var control := _controls[i]
+		control.focus_neighbor_top = control.get_path_to(_controls[i - 1] if i > 0 else _tabs[_active_tab])
+		control.focus_neighbor_bottom = control.get_path_to(_controls[i + 1] if i + 1 < _controls.size() else _back)
+		control.focus_neighbor_left = control.get_path_to(control)
+		control.focus_neighbor_right = control.get_path_to(control)
+	_back.focus_neighbor_top = _back.get_path_to(_controls.back() if not _controls.is_empty() else _tabs[_active_tab])
+	_back.focus_neighbor_bottom = _back.get_path_to(_tabs[_active_tab])
+	_back.focus_neighbor_left = _back.get_path_to(_back)
+	_back.focus_neighbor_right = _back.get_path_to(_back)
+
+
+func _restore_internal_focus(key: String) -> void:
+	if _closing or not is_inside_tree():
+		return
+	for control in _controls + _tabs + [_back]:
+		if control.get_meta("focus_key", "") == key:
+			control.grab_focus()
+			return
+	_tabs[_active_tab].grab_focus()
+
+
+func _on_settings_changed() -> void:
+	if _closing:
+		return
+	if _language != Settings.language:
+		_language = Settings.language
+		var focus := get_viewport().gui_get_focus_owner()
+		var key: String = focus.get_meta("focus_key", "") if is_instance_valid(focus) else ""
+		_build.call_deferred(key)
+	elif is_instance_valid(_fullscreen_toggle):
+		_fullscreen_toggle.set_pressed_no_signal(Settings.fullscreen)
 
 
 func _on_reset() -> void:
 	if _reset_armed <= 0.0:
 		_reset_armed = 4.0
-		_reset_btn.text = tr("真的吗？所有进度都会消失。再点一次确认")
+		_reset_btn.text = tr("再次确认：清除全部进度")
 		return
 	_reset_armed = 0.0
 	Game.reset_save()
 	_reset_btn.text = tr("存档已清除")
 	_reset_btn.disabled = true
+	_back.grab_focus()
 
 
 func _process(delta: float) -> void:
@@ -169,5 +339,11 @@ func _unhandled_input(event: InputEvent) -> void:
 
 
 func close() -> void:
+	if _closing:
+		return
+	_closing = true
 	closed.emit()
+	var opener = _return_focus.get_ref() if _return_focus != null else null
+	if is_instance_valid(opener) and opener is Control and opener.is_inside_tree() and opener.is_visible_in_tree():
+		opener.grab_focus.call_deferred()
 	queue_free()

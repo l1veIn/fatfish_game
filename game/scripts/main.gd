@@ -35,6 +35,20 @@ var _debug := false
 var _only_trial := ""
 var _fade: ColorRect
 var _busy := false
+var _title_refresh_pending := false
+
+
+class CreditsPanel extends Control:
+	signal closed
+
+	func close() -> void:
+		closed.emit()
+		queue_free()
+
+	func _unhandled_input(event: InputEvent) -> void:
+		if event.is_action_pressed("ui_cancel") or event.is_action_pressed("pause"):
+			get_viewport().set_input_as_handled()
+			close()
 
 
 func _ready() -> void:
@@ -52,7 +66,12 @@ func _ready() -> void:
 	_fade.size = Vector2(1920, 1080)
 	_fade.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	layer.add_child(_fade)
+	var notices := CanvasLayer.new()
+	notices.layer = 80
+	add_child(notices)
+	notices.add_child(AchievementToast.new())
 	Settings.changed.connect(_on_settings_changed)
+	_lang = Settings.language
 	for a in OS.get_cmdline_user_args():
 		if a == "--autotest":
 			_autotest = true
@@ -90,9 +109,19 @@ func _exit_tree() -> void:
 	UiKit.clear_cache()   # static font cache, freed before the engine checks for leaks
 
 
+func _input(_event: InputEvent) -> void:
+	# The newly mounted screen is visible halfway through a fade. Do not let an early
+	# confirm/skip finish that screen while its next transition is still blocked.
+	if _busy:
+		get_viewport().set_input_as_handled()
+
+
 ## Swaps the current screen; with a short fade through dark except in the autotest.
 func _swap(n: Node) -> void:
-	if _autotest or _screen == null:
+	if _busy:
+		n.free()
+		return
+	if _autotest or _screen == null or Settings.reduced_motion:
 		_set_screen(n)
 		return
 	_busy = true
@@ -123,9 +152,12 @@ var _lang := ""
 func _on_settings_changed() -> void:
 	if _lang != "" and _lang != Settings.language and _screen is TitleScreen:
 		var panel_open := _screen.get_children().any(func(c): return c is SettingsPanel)
-		_set_screen(_make_title())
 		if panel_open:
-			_open_settings(_screen)
+			# The panel translates its own page in place, keeping tab and focus intact.
+			# Rebuild its parent only when the player closes it.
+			_title_refresh_pending = true
+		else:
+			_set_screen(_make_title())
 	_lang = Settings.language
 
 
@@ -135,26 +167,66 @@ func _show_title() -> void:
 
 func _make_title() -> TitleScreen:
 	var t := TitleScreen.new()
-	t.play.connect(func(): _show_run() if Game.runs == 0 else _show_tree())
+	t.play.connect(_continue_game)
+	t.replay_ending.connect(func(): _show_ending(true))
 	t.open_settings.connect(func(): _open_settings(t))
 	t.open_credits.connect(func(): _show_credits(t))
 	t.quit.connect(func(): get_tree().quit())
 	return t
 
 
+func _continue_game() -> void:
+	if _busy:
+		return
+	if Game.ending_pending():
+		_show_ending()
+	elif Game.runs == 0:
+		_show_run()
+	else:
+		_show_tree()
+
+
+func _show_ending(replay := false) -> void:
+	if _busy:
+		return
+	var ending := EndingScreen.new()
+	ending.replay = replay
+	ending.finished.connect(func():
+		Game.mark_ending_seen()
+		_show_tree())
+	_swap(ending)
+
+
 func _open_settings(parent: Node) -> void:
 	var s := SettingsPanel.new()
 	var runs := Game.runs
+	var focus := get_viewport().gui_get_focus_owner()
 	Audio.duck(true)
 	s.closed.connect(func():
 		Audio.duck(false)
-		if parent is TitleScreen and is_instance_valid(parent) and Game.runs != runs:
-			_set_screen(_make_title()))   # the save was reset: 继续上班 -> 开始上班
+		if parent is TitleScreen and is_instance_valid(parent) and (Game.runs != runs or _title_refresh_pending):
+			_refresh_title_after_settings.call_deferred()
+			return
+		if is_instance_valid(focus):
+			focus.grab_focus())
 	parent.add_child(s)
 
 
+func _refresh_title_after_settings() -> void:
+	_title_refresh_pending = false
+	var refreshed := _make_title()
+	_set_screen(refreshed)
+	var settings_button: Button = refreshed.find_child("Settings", true, false)
+	if settings_button != null:
+		settings_button.grab_focus.call_deferred()
+
+
 func _show_credits(parent: Control) -> void:
-	var panel := Control.new()
+	var panel := CreditsPanel.new()
+	var focus := get_viewport().gui_get_focus_owner()
+	panel.closed.connect(func():
+		if is_instance_valid(focus):
+			focus.grab_focus())
 	panel.size = Vector2(1920, 1080)
 	panel.z_index = 200
 	panel.mouse_filter = Control.MOUSE_FILTER_STOP
@@ -181,7 +253,7 @@ func _show_credits(parent: Control) -> void:
 	var back := UiKit.button(tr("返回"), 32, Vector2(240, 72))
 	back.set_meta("ui_back", true)
 	back.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	back.pressed.connect(panel.queue_free)
+	back.pressed.connect(panel.close)
 	col.add_child(back)
 	back.grab_focus.call_deferred()
 
@@ -193,6 +265,11 @@ func _show_run(trial := "") -> void:
 	run.trial = trial
 	run.finished.connect(_on_run_finished.bind(run))
 	run.to_title.connect(_show_title)
+	run.card_shown.connect(func():
+		if not _autotest and Game.ending_pending():
+			for child in run.get_children():
+				if child is CheckoutReceipt:
+					child._back.text = tr("查看结局"))
 	if _shots != "":
 		run.card_shown.connect(func():
 			await get_tree().create_timer(1.2).timeout   # after the score has counted up
@@ -220,7 +297,10 @@ func _on_run_finished(earned: float, run: CanteenRun) -> void:
 		else:
 			_log.append("第 %d 顿 [%s] +%s token：吃了 %d 份，%s，接住率 %d%%，她空等 %.0f 秒" % [Game.runs, Game.plate(), Game.fmt(earned), run.eaten, run.trial_log(),   # notr
 				int(run.catch_rate() * 100), run.fish_wait])   # notr
-	_show_tree()
+	if not _autotest and Game.ending_pending():
+		_show_ending()
+	else:
+		_show_tree()
 
 
 func _show_tree() -> void:
@@ -265,6 +345,15 @@ func _auto_shop(tree: TreeScreen) -> void:
 		print("\n".join(_log))
 		print("菜谱：", Game.recipes)   # notr
 		print("AUTOTEST OK: %d 顿, 累计 %s token, 技能总等级 %d, 版本 %s" % [Game.runs, Game.fmt(Game.total_tokens), Game.total_levels(), Game.plate()])   # notr
+		# Automated purchases queue many sounds on the final frame. Let the
+		# render/audio threads release those references before process teardown.
+		_screen.queue_free()
+		_screen = null
+		await get_tree().process_frame
+		await get_tree().create_timer(0.12, true, false, true).timeout
+		Audio._exit_tree()
+		await get_tree().create_timer(0.12, true, false, true).timeout
+		UiKit.clear_cache()
 		get_tree().quit()
 		return
 	var t := Game.open_trial()   # the bot takes the 评测 once its best shift is close to the target

@@ -5,7 +5,7 @@ extends Control
 ## time: what she ate, the leftovers (eaten in her dreams with 我去睡了, or "wasted"), the 保温箱,
 ## the <EOS> last bite in a spotlight, 梯度裁剪, the subtotal, then the multipliers stamped into a
 ## row of five slots one by one (each stamp multiplies the total there and then, each one a step
-## higher in pitch), the 上下文窗口 cut if there is one, and the result stamps.
+## higher in pitch), and the result stamps. Earned tokens have no hidden overflow deduction.
 ## All the numbers were counted in CanteenRun._end() already: this is only the show. A click
 ## plays it 4x faster, Esc / Enter jumps to the end; the button goes back to the skill tree.
 
@@ -17,7 +17,6 @@ var sub := ""
 var steps: Array = []      # {icon, text, add, mark?, sfx?, sleep?} | {note, add} | {icon, text, lost} | + {dish, dish_name}
 var subtotal := 0.0
 var mults: Array = []      # [[name, x], ...] in stamping order
-var fuse := {}             # {cap, cut} when the 上下文窗口 overflowed
 var total := 0.0
 var target := 0.0
 var passed := false
@@ -46,8 +45,6 @@ var _sub_val := 0.0
 var _slots_on := false
 var _stamped := 0              # multipliers stamped so far
 var _stamp_t: Array = []       # per slot: seconds since stamped (for the slam)
-var _fuse_on := false
-var _fuse_k := 0.0
 var _total_val := 0.0
 var _total_pop := 0.0
 var _results: Array = []       # [[text, colour, t]]
@@ -157,16 +154,6 @@ func _play() -> void:
 		await _roll("_total_val", running, to, 0.45)
 		running = to
 		await _wait(0.3)
-	# 上下文窗口
-	if not fuse.is_empty():
-		_fuse_on = true
-		var t := 0.0
-		while t < 0.7:
-			await get_tree().process_frame
-			t += get_process_delta_time() * _speed
-			_fuse_k = clampf(t / 0.7, 0.0, 1.0)
-		_sfx("deny", -4.0)
-		await _roll("_total_val", running, total, 0.5)
 	_total_val = total
 	await _wait(0.25)
 	# results
@@ -240,14 +227,6 @@ func _draw() -> void:
 		y += 24.0
 		_slots(x0, x1, y)
 		y += 112.0
-	if _fuse_on:
-		y += 30.0
-		_text(_font, Vector2(x0, y), tr("上下文窗口"), 20, GREY)
-		_text(_font, Vector2(x1, y), tr("满了，后面的记不太清：−%s") % Game.fmt(float(fuse.cut)), 20, GREY, false, true)
-		var bar := Rect2(x0, y + 10, x1 - x0, 12)
-		draw_style_box(UiKit.box(Color(0.9, 0.84, 0.72), Color.TRANSPARENT, 0, 6), bar)
-		draw_style_box(UiKit.box(Color(0.37, 0.56, 0.84), Color.TRANSPARENT, 0, 6), Rect2(bar.position, Vector2(bar.size.x * _fuse_k, bar.size.y)))
-		y += 22.0
 	# the total, once there is a subtotal to multiply
 	_need_h = y - r.position.y + (130.0 if _sub_on else 30.0)
 	if _sub_on:

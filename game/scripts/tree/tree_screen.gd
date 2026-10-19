@@ -15,6 +15,7 @@ signal to_title
 const NODE_R := 44.0
 const TICKET := Vector2(176, 116)     # a skill's meal ticket on the board, at zoom 1
 const ZOOM := Vector2(0.45, 1.3)
+const MealPlannerPanel := preload("res://scripts/ui/meal_planner.gd")
 
 var _zoom := 0.75
 var _bar: HBoxContainer
@@ -32,6 +33,9 @@ var _flash_time := 0.0
 var _fish: FishRig
 var _start: Button
 var _trial: Button
+var _planner: Control
+var _modal_focus: Array = []
+var _tooltip_bounds := Rect2()
 
 
 func _ready() -> void:
@@ -66,6 +70,7 @@ func _ready() -> void:
 	_update_trial_button()
 	_bar = HBoxContainer.new()
 	_bar.add_theme_constant_override("separation", 14)
+	_bar.resized.connect(func(): _bar.position = Vector2(1860 - _bar.size.x, 30))
 	add_child(_bar)
 	_build_bar()
 	Game.changed.connect(_build_bar)
@@ -105,11 +110,13 @@ func _build_bar() -> void:
 		return
 	_bar_key = key
 	for c in _bar.get_children():
+		_bar.remove_child(c)
 		c.queue_free()
 	_new_buttons.clear()
 	for spec in specs:
 		var b := UiKit.button(spec[1], 26, Vector2(170, 64))
 		var id: String = spec[0]
+		b.name = "Tree_" + id
 		var fn: Callable = spec[2]
 		b.pressed.connect(func():
 			if not Game.seen_buttons.has(id):
@@ -131,7 +138,8 @@ func _build_bar() -> void:
 			if not Game.seen_buttons.has(id + "_card"):
 				Game.seen_buttons[id + "_card"] = true
 				_feature_card.call_deferred(id, fn)
-	_bar.position = Vector2(1860 - specs.size() * 184 + 14, 30)
+	_bar.size = _bar.get_combined_minimum_size()
+	_bar.position = Vector2(1860 - _bar.size.x, 30)
 
 
 const FEATURES := {
@@ -143,7 +151,10 @@ const FEATURES := {
 ## The first time a feature unlocks: a ticket-paper card slides in from the right with one plain
 ## sentence and a 「去看看」 button, and slides away by itself after a while.
 func _feature_card(id: String, open: Callable) -> void:
+	if is_instance_valid(_planner):
+		return
 	var card := Control.new()
+	card.set_meta("feature_card", true)
 	card.size = Vector2(440, 250)
 	card.position = Vector2(1940, 150)
 	card.z_index = 40
@@ -215,99 +226,47 @@ var _flash_text := ""
 
 ## 招牌菜: pick up to sig_slots of the dishes the open stalls serve.
 func _open_signatures() -> void:
-	var panel := PanelContainer.new()
-	panel.position = Vector2(460, 140)
-	panel.custom_minimum_size = Vector2(1000, 760)
-	panel.z_index = 50
-	add_child(panel)
-	var col := VBoxContainer.new()
-	col.add_theme_constant_override("separation", 12)
-	panel.add_child(col)
-	col.add_child(UiKit.label(tr("招牌菜（最多 %d 道）：选中的菜这一顿有特别加成") % int(Game.stat("sig_slots")), 32, UiKit.GOLD))
-	CanteenRun.load_menu()
-	var grid := GridContainer.new()
-	grid.columns = 2
-	grid.add_theme_constant_override("h_separation", 16)
-	grid.add_theme_constant_override("v_separation", 10)
-	col.add_child(grid)
-	var any := false
-	for id in CanteenRun.KIND:
-		var k: int = CanteenRun.KIND[id]
-		if CanteenRun.SIG[k] == null:
-			continue
-		var b := CheckButton.new()
-		b.add_theme_font_size_override("font_size", 22)
-		b.custom_minimum_size = Vector2(470, 0)
-		if Game.signature_available(id):
-			any = true
-			b.text = "%s：%s" % [tr(CanteenRun.NAMES[k]), _sig_text(CanteenRun.SIG[k])]
-			b.button_pressed = Game.active_signatures().has(id)
-			b.toggled.connect(func(_on):
-				Game.toggle_signature(id)
-				panel.queue_free()
-				_open_signatures.call_deferred())
-		else:
-			b.text = tr("（%s：开档口或升级后解锁）") % tr(CanteenRun.NAMES[k])
-			b.disabled = true
-		grid.add_child(b)
-	if not any:
-		col.add_child(UiKit.label(tr("还没有能选的招牌菜：先在技能树上开档口、升级档口"), 24))
-	var close := UiKit.button(tr("好了"), 30, Vector2(220, 70))
-	close.set_meta("ui_back", true)
-	close.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	close.pressed.connect(panel.queue_free)
-	col.add_child(close)
+	_open_planner("signatures")
 
 
 ## 今日菜单 (System Prompt): strike up to menu_cut dishes of the open stalls off the menu.
 func _open_menu() -> void:
-	var panel := PanelContainer.new()
-	panel.position = Vector2(360, 120)
-	panel.custom_minimum_size = Vector2(1200, 800)
-	panel.z_index = 50
+	_open_planner("menu")
+
+
+func _open_planner(page: String) -> void:
+	if is_instance_valid(_planner):
+		_planner.show_mode(page)
+		return
+	var opener: WeakRef = weakref(get_viewport().gui_get_focus_owner())
+	_dragging = false
+	_hover = ""
+	for child in get_children():
+		if child.has_meta("feature_card"):
+			child.queue_free()
+	_modal_focus.clear()
+	# Disable every underlying focus target before adding the modal. Tab cannot escape it.
+	for control in find_children("*", "BaseButton", true, false):
+		_modal_focus.append({"node": weakref(control), "mode": control.focus_mode})
+		control.focus_mode = Control.FOCUS_NONE
+	var panel := MealPlannerPanel.new()
+	panel.mode = page
+	_planner = panel
+	panel.closed.connect(func():
+		if panel.get_parent() == self:
+			remove_child(panel)
+		_planner = null
+		for state in _modal_focus:
+			var control = state.node.get_ref()
+			if is_instance_valid(control):
+				control.focus_mode = state.mode
+		_modal_focus.clear()
+		var focus = opener.get_ref()
+		if is_instance_valid(focus) and focus is Control and focus.is_inside_tree():
+			focus.grab_focus.call_deferred()
+		else:
+			_start.grab_focus.call_deferred())
 	add_child(panel)
-	var col := VBoxContainer.new()
-	col.add_theme_constant_override("separation", 12)
-	panel.add_child(col)
-	var cut := int(Game.stat("menu_cut"))
-	col.add_child(UiKit.label(tr("今日菜单：划掉的菜这一顿不出（可以划 %d 道，已划 %d 道）") % [cut, mini(Game.struck.size(), cut)], 30, UiKit.GOLD))
-	if cut == 0:
-		col.add_child(UiKit.label(tr("先在技能树上点「System Prompt：今日菜单」才能划菜"), 24))
-	CanteenRun.load_menu()
-	var grid := GridContainer.new()
-	grid.columns = 4
-	grid.add_theme_constant_override("h_separation", 12)
-	grid.add_theme_constant_override("v_separation", 8)
-	col.add_child(grid)
-	for id in CanteenRun.KIND:
-		var k: int = CanteenRun.KIND[id]
-		var st: String = CanteenRun.STALL[k]
-		if CanteenRun.IS_SET[k] or st == "" or Game.stat("stall_" + st) < CanteenRun.LEVEL[k]:
-			continue
-		var b := CheckButton.new()
-		b.add_theme_font_size_override("font_size", 22)
-		b.custom_minimum_size = Vector2(280, 0)
-		b.text = tr("划掉%s") % tr(CanteenRun.NAMES[k])
-		b.button_pressed = Game.struck.has(id) and Game.struck.find(id) < cut
-		b.disabled = cut == 0
-		b.toggled.connect(func(_on):
-			Game.toggle_struck(id)
-			panel.queue_free()
-			_open_menu.call_deferred())
-		grid.add_child(b)
-	var close := UiKit.button(tr("好了"), 30, Vector2(220, 70))
-	close.set_meta("ui_back", true)
-	close.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	close.pressed.connect(panel.queue_free)
-	col.add_child(close)
-
-
-func _sig_text(e: Dictionary) -> String:
-	if e.has("stack"):
-		return tr("每吃一份，本顿它的价值 +%d%%（叠加）") % int(float(e.stack) * 100)
-	if e.has("mult"):
-		return tr("价值 ×%.1f，但它的档口出餐慢 %d%%") % [float(e.mult), int(float(e.slow) * 100)]
-	return tr("每吃一份，均衡倍率 +%.2f") % float(e.balance)
 
 
 ## Later version rings grow off to the left: pan so the newest ring is on screen.
@@ -360,7 +319,7 @@ func _process(delta: float) -> void:
 
 
 func _unhandled_input(event: InputEvent) -> void:
-	if get_children().any(func(c): return c is SettingsPanel):
+	if is_instance_valid(_planner) or get_children().any(func(c): return c is SettingsPanel or c is RecipeBook):
 		return
 	if event.is_action_pressed("pause"):
 		get_viewport().set_input_as_handled()
@@ -408,6 +367,8 @@ func _step(dir: Vector2) -> void:
 
 
 func _gui_input(event: InputEvent) -> void:
+	if is_instance_valid(_planner):
+		return
 	if event is InputEventMouseButton and event.pressed and event.button_index in [MOUSE_BUTTON_WHEEL_UP, MOUSE_BUTTON_WHEEL_DOWN]:
 		var nz := clampf(_zoom * (1.1 if event.button_index == MOUSE_BUTTON_WHEEL_UP else 1.0 / 1.1), ZOOM.x, ZOOM.y)
 		_pan = (_pan + Vector2(960, 540) - event.position) * (nz / _zoom) + event.position - Vector2(960, 540)   # zoom around the cursor
@@ -496,21 +457,26 @@ func _draw() -> void:
 			draw_texture_rect(tex, r, false, tint)
 		else:
 			draw_rect(r, Color(0.95, 0.9, 0.78) * tint)
-		# the name on the ticket (two lines at most), the level on the tear-off stub
+		# Keep names and progress inside the paper's safe area. The stub is reserved for
+		# a small completion stamp; a partly purchased skill must never look completed.
 		var fs := int(21 * z)
-		var label := _name_lines(font, tr(n["name"]), fs, sz.x * 0.74)
-		var y := c.y - (label.size() - 1) * fs * 0.6 + fs * 0.1
+		var label := _name_lines(font, tr(n["name"]), fs, sz.x * 0.70)
+		var y := r.position.y + sz.y * 0.34
 		for line in label:
 			var tw := font.get_string_size(line, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
-			draw_string(font, Vector2(c.x - sz.x * 0.08 - tw * 0.5, y), line, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, Color(0.3, 0.17, 0.08))
+			draw_string(font, Vector2(r.position.x + sz.x * 0.44 - tw * 0.5, y), line, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, Color(0.3, 0.17, 0.08))
 			y += fs * 1.2
 		var lvtext: String = tr("门票") if ticket else "%d/%d" % [lv, int(n["max"])]
 		var ls := int(16 * z)
-		var lw := font.get_string_size(lvtext, HORIZONTAL_ALIGNMENT_LEFT, -1, ls).x
-		draw_string(font, Vector2(r.end.x - sz.x * 0.11 - lw * 0.5, c.y + ls * 0.35), lvtext, HORIZONTAL_ALIGNMENT_LEFT, -1, ls, Color(0.45, 0.25, 0.12))
-		if lv > 0 and _tex.has("stamp"):   # 已兑: a stamp, bigger once maxed
-			var ss := sz.y * (0.62 if Game.is_maxed(id) else 0.42)
-			var sc := r.position + Vector2(sz.x * 0.86, sz.y * 0.86)   # on the corner, clear of the name
+		draw_string(font, r.position + Vector2(16 * z, sz.y - 24 * z), lvtext, HORIZONTAL_ALIGNMENT_LEFT, -1, ls, Color(0.45, 0.25, 0.12))
+		var track := Rect2(r.position + Vector2(16 * z, sz.y - 16 * z), Vector2(sz.x - 64 * z, 5 * z))
+		draw_rect(track, Color(0.48, 0.3, 0.16, 0.22))
+		var fraction := clampf(float(lv) / maxf(1.0, float(n["max"])), 0.0, 1.0)
+		if fraction > 0.0:
+			draw_rect(Rect2(track.position, Vector2(track.size.x * fraction, track.size.y)), Color(0.6, 0.31, 0.1))
+		if Game.is_maxed(id) and _tex.has("stamp"):
+			var ss := 34.0 * z
+			var sc := r.position + Vector2(sz.x - 23 * z, sz.y - 28 * z)
 			draw_set_transform(sc, -0.25, Vector2.ONE)
 			draw_texture_rect(_tex.stamp, Rect2(-Vector2(ss, ss) * 0.5, Vector2(ss, ss)), false, Color(1, 1, 1, 0.8))
 			draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
@@ -604,9 +570,17 @@ func _draw_tooltip(font: Font, n: Dictionary) -> void:
 		w = maxf(w, sz.x)
 		h += sz.y + 10.0
 	var pos := _at(n) + Vector2(TICKET.x * _zoom * 0.5 + 16, -60)
-	pos.x = minf(pos.x, size.x - w - 60)
-	pos.y = clampf(pos.y, 10.0, size.y - h - 10.0)
-	UiKit.nine(self, _tex.get("ui_chalkboard", null), Rect2(pos, Vector2(w + 40, h)).grow(10.0), 60.0, 0.6)
+	pos.x = clampf(pos.x, 20.0, size.x - w - 60)
+	pos.y = clampf(pos.y, 20.0, size.y - h - 20.0)
+	# Child controls draw above this board. Keep the complete explanation clear of both
+	# lunch and trial actions, including the chalkboard's painted frame.
+	for action in [_start, _trial]:
+		if action.visible:
+			var blocked: Rect2 = action.get_rect().grow(18.0)
+			if Rect2(pos, Vector2(w + 40, h)).grow(10.0).intersects(blocked):
+				pos.y = maxf(20.0, blocked.position.y - h - 10.0)
+	_tooltip_bounds = Rect2(pos, Vector2(w + 40, h)).grow(10.0)
+	UiKit.nine(self, _tex.get("ui_chalkboard", null), _tooltip_bounds, 60.0, 0.6)
 	var y := pos.y + 20
 	for l in lines:
 		draw_multiline_string(font, Vector2(pos.x + 20, y + l[1]), l[0], HORIZONTAL_ALIGNMENT_LEFT, WRAP, l[1], -1, l[2])

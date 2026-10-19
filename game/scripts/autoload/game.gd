@@ -7,12 +7,14 @@ extends Node
 ## trial for the next version, and passing the trial bumps `version`.
 
 signal changed
+signal achievement_unlocked(id: String)
+signal save_failed(message: String)
 
 ## Autotests play on their own save so they never touch the player's progress.
 var save_path := "user://save.json"
 ## 2 = the canteen core (tokens). Version-1 saves came from the old task-bubble prototype and
 ## are reset rather than migrated.
-const SAVE_VERSION := 2
+const SAVE_VERSION := 3
 const TREE_PATH := "res://data/skill_tree.json"
 
 ## Shift stats before any upgrade. Every key here can be named in a node's "effects".
@@ -29,15 +31,10 @@ const BASE := {
 	"peak_time": 5.0,      # seconds of each peak
 	"peak_good": 3.0,      # good-stuff multiplier during peaks
 	"helper": 0.0,         # 招募小助手: 问问, then 谱谱 / 小G / 克劳 / 双子 / 格格 (CanteenRun.CREW)
-	"crew_pu": 0.0,
-	"crew_g": 0.0,
-	"crew_ke": 0.0,
-	"crew_zi": 0.0,
-	"crew_ge": 0.0,
 	"helper_speed": 1.0,   # how fast they run (多 Agent 编排)
 	"crit_chance": 0.0,    # 中午吃什么: chance a bite is a crit
 	"crit_mult": 2.0,
-	"magnet": 0.0,         # px: the basin pulls nearby food in (the gold basin adds its own)
+	"magnet": 0.0,         # fixed base radius; material never grants attraction
 	"think_time": 2.5,     # 深度思考 (R1): seconds of slow motion the gauge holds
 	"think_slow": 0.35,    # world speed while thinking
 	"think_regen": 0.4,    # gauge refilled per second when not thinking
@@ -69,6 +66,9 @@ const BASE := {
 	"overfit": 0.0,        # 过拟合
 	"box_bonus": 0.0,      # 光学压缩: + to every box
 	"fill_bonus": 0.0,     # 上下文填满: + to a full box
+	"mono_bonus": 0.0,     # Prompt 模板: full box of one real dish qualifies as a platter
+	"cache_bonus": 0.0,    # 上下文压缩: a roomy recipe box charges the next full player box
+	"rotation_bonus": 0.0, # 上下文记忆: alternating the dish in consecutive single-dish platters
 	"tier1": 0.0,          # 套餐等级: Prompt 模板 / Few-shot / Agent 工作流 / AGI 菜谱
 	"tier2": 0.0,
 	"tier3": 0.0,
@@ -111,13 +111,13 @@ const BASE := {
 const VERSIONS := [
 	{"plate": "大肥鱼 V3"},
 	{"plate": "大肥鱼 R1", "trial": "spring", "trial_name": "春节前夜·服务器繁忙", "target": 2000.0,
-		"reward": "深度思考（按住空格或右键，时间变慢）、上下文 64K、饭点延长"},
+		"reward": "深度思考、上下文 64K（流式、连击和招牌菜的成长上限提高）、饭点延长"},
 	{"plate": "大肥鱼 V3.1", "trial": "hybrid", "trial_name": "嗯，用户想要……", "target": 20000.0,
-		"reward": "混合思考（好菜的落点自动标出来）、上下文 128K、饭点延长"},
+		"reward": "混合思考（好菜自动标出落点）、上下文 128K（成长上限提高）、饭点延长"},
 	{"plate": "大肥鱼 V3.2", "trial": "ji", "trial_name": "V3.1-Terminus 终于不再冒「极」字了", "target": 60000.0,
-		"reward": "DSA 稀疏注意力（磁铁只吸好东西，青菜会弹开）、上下文 256K、饭点延长"},
+		"reward": "DSA 稀疏注意力（未学顿悟时避开青菜）、上下文 256K（成长上限提高）、饭点延长"},
 	{"plate": "大肥鱼 V4", "trial": "v4", "trial_name": "下周一定", "target": 400000.0,
-		"reward": "上下文 1M、饭点延长"},
+		"reward": "上下文 1M（流式、连击和招牌菜的成长上限提高）、饭点延长"},
 	{"plate": "大肥鱼 AGI", "trial": "agi", "trial_name": "实现 AGI，但是也要先吃饱", "target": 2000000.0,
 		"reward": "通关！大肥鱼实现了 AGI，然后又饿了"},
 ]
@@ -133,7 +133,16 @@ var recipes := {}         # 菜谱图鉴: recipe id -> times made
 var signatures: Array = []  # 招牌菜 picked by the player (food ids); see active_signatures()
 var struck: Array = []      # 今日菜单: dishes struck off (food ids), up to stat menu_cut
 var seen_buttons := {}      # tree-screen buttons the player has pressed at least once (new ones glow)
-const TRIAL_FEE := 0.1     # trial id -> times failed (each one makes the next try easier, max 3)
+var achievements := {}      # stable ids -> first unlock time, independent of refundable skills
+var lifetime := {"eaten": 0, "full_boxes": 0}
+var ending_seen := false
+var save_status := ""
+var _save_read_only := false
+var _test_profile := false
+var _achievement_defs: Array = []
+var _recipe_ids: Array = []
+var _food_ids: Array = []
+const TRIAL_FEE := 0.1     # each attempt costs 10% of its target; failure counts do not change difficulty
 
 var nodes: Array = []     # from skill_tree.json
 var _by_id := {}
@@ -143,16 +152,46 @@ var _stats := {}
 func _ready() -> void:
 	var data: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(TREE_PATH))
 	nodes = data["nodes"]
-	if "--autotest" in OS.get_cmdline_user_args():
-		save_path = "user://autotest_save.json"
-		DirAccess.remove_absolute(ProjectSettings.globalize_path(save_path))
+	var args := OS.get_cmdline_user_args()
+	# Custom test scenes also stay isolated when launched from the editor/MCP without
+	# command-line user arguments. Explicit test profiles below may override the name.
+	for arg in OS.get_cmdline_args():
+		if arg.begins_with("res://tests/") and arg.ends_with(".tscn"):
+			_test_profile = true
+			save_path = "user://qa_scene_%s.json" % arg.get_file().get_basename().validate_filename()
+	for arg in args:
+		if arg.begins_with("--test-profile="):
+			var profile := arg.trim_prefix("--test-profile=")
+			var valid := not profile.is_empty() and profile.length() <= 48
+			for ch in profile:
+				if not "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-".contains(ch):
+					valid = false
+			_test_profile = true
+			save_path = "user://qa_%s.json" % (profile if valid else "invalid_profile")
+			if not valid:
+				push_warning("Invalid test profile; using isolated invalid_profile save")
+	if "--autotest" in args:
+		if not _test_profile:
+			save_path = "user://autotest_save.json"
+		_test_profile = true
+		for suffix in ["", ".bak", ".tmp"]:
+			DirAccess.remove_absolute(save_path + suffix)
 	for n in nodes:
 		_by_id[n["id"]] = n
+	var defs: Dictionary = JSON.parse_string(FileAccess.get_file_as_string("res://data/achievements.json"))
+	_achievement_defs = defs.get("achievements", [])
+	var menu: Dictionary = JSON.parse_string(FileAccess.get_file_as_string("res://data/menu.json"))
+	for recipe in menu.get("recipes", []):
+		if recipe.get("kind", "") != "special":
+			_recipe_ids.append(str(recipe.id))
+	for food in menu.get("foods", []):
+		_food_ids.append(str(food.id))
 	_migrate_user_dir()
 	load_game()
 	if level("start") == 0:
 		levels["start"] = 1
 	_recompute()
+	_check_achievements({}, false)
 
 
 func node(id: String) -> Dictionary:
@@ -247,35 +286,97 @@ func trial_info(trial: String) -> Dictionary:
 ## Passing a trial releases the next version: its ring shows up on the tree.
 func pass_trial() -> void:
 	version = mini(version + 1, VERSIONS.size() - 1)
+	_check_achievements()
 	save_game()
 	changed.emit()
 
 
-## The target the next release asks for (a shift's fuse is 3 x this); the last one at the end.
+## The next release's earning target; retain the final target after AGI.
 func next_target() -> float:
 	return float(VERSIONS[mini(version + 1, VERSIONS.size() - 1)].get("target", 0.0))
 
 
-## 今日菜单: strike a dish off / put it back (the oldest strike drops out when all are used).
-func toggle_struck(id: String) -> void:
-	if struck.has(id):
-		struck.erase(id)
+## The effective menu always keeps at least one currently available dish per open stall.
+## Old saves are processed in selection order: skip only exclusions that would empty a stall.
+func active_struck() -> Array:
+	return _validated_struck(struck)
+
+
+func _available_menu() -> Dictionary:
+	CanteenRun.load_menu()
+	var available := {}
+	for id in CanteenRun.KIND:
+		var k: int = CanteenRun.KIND[id]
+		var stall: String = CanteenRun.STALL[k]
+		if not CanteenRun.IS_SET[k] and not stall.is_empty() and float(_stats.get("stall_" + stall, 0.0)) >= CanteenRun.LEVEL[k]:
+			available[id] = stall
+	return available
+
+
+func _validated_struck(selection: Array) -> Array:
+	var available := _available_menu()
+	var remaining := {}
+	for id in available:
+		var stall: String = available[id]
+		remaining[stall] = int(remaining.get(stall, 0)) + 1
+	var out: Array = []
+	var capacity := maxi(0, int(_stats.get("menu_cut", 0.0)))
+	for id in selection:
+		if out.size() >= capacity:
+			break
+		if not available.has(id) or out.has(id):
+			continue
+		var stall: String = available[id]
+		if int(remaining[stall]) <= 1:
+			continue
+		out.append(id)
+		remaining[stall] = int(remaining[stall]) - 1
+	return out
+
+
+## An empty string means the change is valid. The UI translates the returned reason.
+func struck_toggle_reason(id: String) -> String:
+	var on := active_struck()
+	if on.has(id):
+		return ""
+	var capacity := maxi(0, int(_stats.get("menu_cut", 0.0)))
+	if capacity == 0:
+		return "先学会「今日菜单」，再挑想划掉的菜。"
+	if not _available_menu().has(id):
+		return "这道菜还没有开放。"
+	on.append(id)
+	while on.size() > capacity:
+		on.pop_front()
+	if not _validated_struck(on).has(id):
+		return "每个档口至少保留一道菜。"
+	return ""
+
+
+## The oldest strike drops out at capacity. Failed changes cannot alter or save selections.
+func toggle_struck(id: String) -> bool:
+	var on := active_struck()
+	if on.has(id):
+		on.erase(id)
 	else:
-		struck.append(id)
-		while struck.size() > int(stat("menu_cut")):
-			struck.pop_front()
+		if not struck_toggle_reason(id).is_empty():
+			return false
+		on.append(id)
+		while on.size() > int(stat("menu_cut")):
+			on.pop_front()
+	struck = _validated_struck(on)
 	save_game()
 	changed.emit()
+	return true
 
 
 ## Right click on the tree: refund every level of one node (tickets and the root stay).
 func refund(id: String) -> float:
 	var n := node(id)
-	if id == "start" or n.get("kind", "") == "ticket" or level(id) == 0:
+	if n.is_empty() or id == "start" or n.get("kind", "") == "ticket" or level(id) == 0:
 		return 0.0
 	var back := 0.0
 	for i in level(id):
-		back += float(n["cost"]) * pow(float(n.get("growth", 1.0)), i)
+		back += floor(float(n["cost"]) * pow(float(n.get("growth", 1.0)), i))
 	levels.erase(id)
 	tokens += back
 	_recompute()
@@ -296,7 +397,7 @@ func trial_fee(trial: String) -> float:
 ## Pays the ticket for one try; false if you cannot afford it.
 func pay_trial(trial: String) -> bool:
 	var fee := trial_fee(trial)
-	if trial == "" or tokens < fee:
+	if trial == "" or trial != open_trial() or fee <= 0.0 or tokens < fee:
 		return false
 	tokens -= fee
 	save_game()
@@ -352,10 +453,12 @@ func respec() -> float:
 			keep[id] = levels[id]
 			continue
 		for i in int(levels[id]):
-			back += float(n["cost"]) * pow(float(n.get("growth", 1.0)), i)
+			back += floor(float(n["cost"]) * pow(float(n.get("growth", 1.0)), i))
 	levels = keep
 	tokens += back
 	_recompute()
+	if back > 0.0:
+		_unlock("checkpoint")
 	save_game()
 	changed.emit()
 	return back
@@ -368,11 +471,12 @@ func fail_trial(trial: String) -> int:
 
 
 func buy(id: String) -> bool:
-	if not can_buy(id):
+	if not _by_id.has(id) or not can_buy(id):
 		return false
 	tokens -= cost(id)
 	levels[id] = level(id) + 1
 	_recompute()
+	_check_achievements()
 	save_game()
 	changed.emit()
 	return true
@@ -434,68 +538,178 @@ func fmt(x: float) -> String:
 
 ## Saves atomically: write save.json.tmp, keep the previous save as save.json.bak, then rename,
 ## so a crash or power cut mid-write never leaves a broken save (load_game falls back to .bak).
-func save_game() -> void:
+func save_game() -> bool:
+	if _save_read_only:
+		return _save_error("This save belongs to a newer game version; it has not been overwritten.")
 	var tmp := save_path + ".tmp"
 	var f := FileAccess.open(tmp, FileAccess.WRITE)
 	if f == null:
-		push_warning("cannot write the save")
-		return
+		return _save_error("Cannot write save file (%s)." % error_string(FileAccess.get_open_error()))
 	f.store_string(JSON.stringify({"version": SAVE_VERSION, "tokens": tokens, "total_tokens": total_tokens,
-		"runs": runs, "best_run": best_run, "levels": levels, "fish_version": version, "trial_fails": trial_fails, "recipes": recipes, "signatures": signatures, "struck": struck, "seen_buttons": seen_buttons, "saved_at": Time.get_unix_time_from_system()}, "\t"))
+		"runs": runs, "best_run": best_run, "levels": levels, "fish_version": version,
+		"trial_fails": trial_fails, "recipes": recipes, "signatures": signatures, "struck": struck,
+		"seen_buttons": seen_buttons, "achievements": achievements, "lifetime": lifetime,
+		"ending_seen": ending_seen, "saved_at": Time.get_unix_time_from_system()}, "\t"))
+	f.flush()
+	var write_error := f.get_error()
 	f.close()
-	if FileAccess.file_exists(save_path):
-		DirAccess.rename_absolute(save_path, save_path + ".bak")
-	DirAccess.rename_absolute(tmp, save_path)
+	if write_error != OK or _read_save(tmp).is_empty():
+		return _save_error("Save write did not complete; previous progress is preserved.")
+	# Never rotate a corrupt primary over the last good backup. Copy, then replace the
+	# primary: a failed backup or final rename leaves the original in place.
+	if not _read_save(save_path).is_empty():
+		var backup_tmp := save_path + ".bak.tmp"
+		var err := DirAccess.copy_absolute(save_path, backup_tmp)
+		if err == OK:
+			err = DirAccess.rename_absolute(backup_tmp, save_path + ".bak")
+		if err != OK:
+			return _save_error("Cannot update save backup (%s)." % error_string(err))
+	var rename_error := DirAccess.rename_absolute(tmp, save_path)
+	if rename_error != OK:
+		return _save_error("Cannot replace save file (%s)." % error_string(rename_error))
+	save_status = ""
+	return true
+
+
+func _save_error(message: String) -> bool:
+	save_status = message
+	push_warning(message)
+	save_failed.emit(message)
+	return false
+
+
+func _number(value: Variant) -> bool:
+	return (value is int or value is float) and is_finite(float(value))
+
+
+## A syntactically valid JSON object can still be an unusable save. Refuse wrong field
+## types before converting them, so a damaged primary also gets backup recovery.
+func _read_save(path: String) -> Dictionary:
+	if not FileAccess.file_exists(path):
+		return {}
+	var parser := JSON.new()
+	if parser.parse(FileAccess.get_file_as_string(path)) != OK or not parser.data is Dictionary:
+		return {}
+	var d: Dictionary = parser.data
+	if not _number(d.get("version", null)):
+		return {}
+	if int(d.version) > SAVE_VERSION:
+		return d   # protect future formats without trying to interpret their schema
+	if int(d.version) >= 2:
+		for key in ["tokens", "total_tokens", "runs", "best_run", "fish_version", "levels"]:
+			if not d.has(key):
+				return {}
+	for key in ["tokens", "total_tokens", "runs", "best_run", "fish_version"]:
+		if d.has(key) and not _number(d[key]):
+			return {}
+	for key in ["levels", "trial_fails", "recipes", "seen_buttons", "achievements", "lifetime"]:
+		if d.has(key) and not d[key] is Dictionary:
+			return {}
+	for key in ["signatures", "struck"]:
+		if d.has(key) and not d[key] is Array:
+			return {}
+	return d
 
 
 ## Builds before 0.2 kept the save in Godot's default folder (app_userdata/吃白饭的大肥鱼);
 ## the game now has its own ASCII folder (application/config/custom_user_dir_name), friendlier
 ## to Steam Cloud. Copy an old save over once.
 func _migrate_user_dir() -> void:
-	if FileAccess.file_exists(save_path) or OS.has_feature("web") or save_path.contains("autotest"):
+	if FileAccess.file_exists(save_path) or FileAccess.file_exists(save_path + ".bak") or FileAccess.file_exists(save_path + ".tmp") or OS.has_feature("web") or _test_profile:
 		return
 	var old := OS.get_data_dir().path_join("Godot/app_userdata/吃白饭的大肥鱼/save.json")   # notr
-	if FileAccess.file_exists(old):
-		DirAccess.copy_absolute(old, ProjectSettings.globalize_path(save_path))
-		print("save moved from ", old)
+	_import_legacy_save(old)
+
+
+func _import_legacy_save(old: String) -> bool:
+	for suffix in ["", ".tmp", ".bak"]:
+		if not _read_save(old + suffix).is_empty():
+			if DirAccess.copy_absolute(old + suffix, save_path) == OK:
+				print("save recovered from legacy directory")
+				return true
+	return false
 
 
 func load_game() -> void:
-	if not FileAccess.file_exists(save_path):
-		return
-	var d = JSON.parse_string(FileAccess.get_file_as_string(save_path))
-	if not d is Dictionary and FileAccess.file_exists(save_path + ".bak"):
-		push_warning("save file unreadable, using the backup")
-		d = JSON.parse_string(FileAccess.get_file_as_string(save_path + ".bak"))
-	if not d is Dictionary:
-		push_warning("save file unreadable, starting fresh")
+	_save_read_only = false
+	var d := _read_save(save_path)
+	if d.is_empty():
+		for suffix in [".tmp", ".bak"]:
+			d = _read_save(save_path + suffix)
+			if not d.is_empty():
+				save_status = "Recovered progress from " + suffix
+				push_warning(save_status)
+				break
+	if d.is_empty():
+		if FileAccess.file_exists(save_path):
+			_save_error("Save and backups could not be read.")
 		return
 	if int(d.get("version", 1)) < 2:
 		print("old prototype save (version %d) reset for the canteen version" % int(d.get("version", 1)))
 		return
+	if int(d.version) > SAVE_VERSION:
+		_save_read_only = true
+		_save_error("This save belongs to a newer game version; please use that version to continue.")
+		return
 	d = _migrate(d)
-	tokens = float(d.get("tokens", 0.0))
-	total_tokens = float(d.get("total_tokens", 0.0))
-	runs = int(d.get("runs", 0))
-	best_run = float(d.get("best_run", 0.0))
+	tokens = maxf(0.0, float(d.get("tokens", 0.0)))
+	total_tokens = maxf(tokens, float(d.get("total_tokens", 0.0)))
+	runs = maxi(0, int(d.get("runs", 0)))
+	best_run = maxf(0.0, float(d.get("best_run", 0.0)))
 	version = clampi(int(d.get("fish_version", 0)), 0, VERSIONS.size() - 1)
-	trial_fails = d.get("trial_fails", {})
-	recipes = d.get("recipes", {})
-	signatures = d.get("signatures", [])
-	struck = d.get("struck", [])
-	seen_buttons = d.get("seen_buttons", {})
+	trial_fails = _count_dict(d.get("trial_fails", {}), 3)
+	recipes = _count_dict(d.get("recipes", {}))
+	for id in recipes.keys():
+		if not _recipe_ids.has(id):
+			recipes.erase(id)
+	signatures = _food_list(d.get("signatures", []))
+	struck = _food_list(d.get("struck", []))
+	seen_buttons = {}
+	for id in d.get("seen_buttons", {}):
+		if d.seen_buttons[id] is bool:
+			seen_buttons[id] = d.seen_buttons[id]
+	achievements = {}
+	for def in _achievement_defs:
+		var timestamp: Variant = d.get("achievements", {}).get(def.id, 0)
+		if _number(timestamp) and float(timestamp) > 0.0:
+			achievements[def.id] = float(timestamp)
+	lifetime = _count_dict(d.get("lifetime", {}))
+	ending_seen = d.get("ending_seen", false) == true
 	levels = {}
 	var saved: Dictionary = d.get("levels", {})
 	for id in saved:
-		if _by_id.has(id):   # nodes removed from the tree are dropped
-			levels[id] = mini(int(saved[id]), int(_by_id[id]["max"]))
+		if _by_id.has(id) and _number(saved[id]):
+			levels[id] = clampi(int(saved[id]), 0, int(_by_id[id]["max"]))
+	levels["start"] = 1
+	_recompute()
+	struck = active_struck()
+	_check_achievements({}, false)
+
+
+func _count_dict(source: Dictionary, maximum := 2000000000) -> Dictionary:
+	var out := {}
+	for id in source:
+		if id is String and _number(source[id]):
+			out[id] = clampi(int(source[id]), 0, maximum)
+	return out
+
+
+func _food_list(source: Array) -> Array:
+	var out: Array = []
+	for id in source:
+		if id is String and _food_ids.has(id) and not out.has(id):
+			out.append(id)
+	return out
 
 
 ## Upgrade older saves step by step: add a branch per SAVE_VERSION bump.
 func _migrate(d: Dictionary) -> Dictionary:
 	var v := int(d.get("version", SAVE_VERSION))
-	if v > SAVE_VERSION:
-		push_warning("save is from a newer version (%d)" % v)
+	if v == 2:
+		d["achievements"] = {}
+		d["lifetime"] = {"eaten": 0, "full_boxes": 0}
+		d["ending_seen"] = false
+		d["version"] = 3
 	return d
 
 
@@ -507,9 +721,71 @@ func reset_save() -> void:
 	version = 0
 	trial_fails = {}
 	recipes = {}
+	signatures = []
 	struck = []
 	seen_buttons = {}
+	achievements = {}
+	lifetime = {"eaten": 0, "full_boxes": 0}
+	ending_seen = false
+	_save_read_only = false
 	levels = {"start": 1}
 	_recompute()
+	if save_game():
+		# An explicit reset must not resurrect old progress after a damaged fresh save.
+		DirAccess.copy_absolute(save_path, save_path + ".bak")
+	changed.emit()
+
+
+func achievement_catalog() -> Array:
+	return _achievement_defs.duplicate(true)
+
+
+func ending_pending() -> bool:
+	return version == VERSIONS.size() - 1 and not ending_seen
+
+
+func mark_ending_seen() -> void:
+	ending_seen = true
 	save_game()
 	changed.emit()
+
+
+func _unlock(id: String, announce := true) -> void:
+	if achievements.has(id):
+		return
+	achievements[id] = Time.get_unix_time_from_system()
+	if announce:
+		achievement_unlocked.emit(id)
+
+
+## Called once at settlement, after runs/best_run are updated. Unknown historical
+## per-shift metrics are never inferred when migrating an older save.
+func record_run(summary: Dictionary) -> void:
+	for key in ["eaten", "full_boxes"]:
+		lifetime[key] = int(lifetime.get(key, 0)) + maxi(0, int(summary.get(key, 0)))
+	_check_achievements(summary)
+
+
+func _check_achievements(summary: Dictionary = {}, announce := true) -> void:
+	var conditions := {
+		"first_meal": runs >= 1, "regular": runs >= 10, "resident": runs >= 30,
+		"release_r1": version >= 1, "release_v31": version >= 2, "release_v32": version >= 3,
+		"release_v4": version >= 4, "release_agi": version >= 5,
+		"tokens_10k": total_tokens >= 10000.0, "tokens_1m": total_tokens >= 1000000.0,
+		"recipe_first": recipes.size() >= 1, "recipe_ten": recipes.size() >= 10,
+		"recipe_twentyfive": recipes.size() >= 15,
+		"recipe_all": not _recipe_ids.is_empty() and recipes.size() >= _recipe_ids.size(),
+		"bites_100": int(lifetime.get("eaten", 0)) >= 100,
+		"bites_1000": int(lifetime.get("eaten", 0)) >= 1000,
+		"full_boxes": int(lifetime.get("full_boxes", 0)) >= 25,
+		"balanced": float(summary.get("balance", 0.0)) >= 1.9 and int(summary.get("eaten", 0)) >= 20,
+		"grokked": summary.get("grokked", false) == true,
+		"steady_hands": int(summary.get("caught", 0)) >= 20 and int(summary.get("spilled", 1)) == 0,
+		"feast": int(summary.get("eaten", 0)) >= 100,
+		"all_stalls": _stats.get("stall_wok", 0.0) > 0 and _stats.get("stall_dim", 0.0) > 0 and _stats.get("stall_fry", 0.0) > 0 and _stats.get("stall_sweet", 0.0) > 0,
+		"full_crew": _stats.get("helper", 0.0) >= 6.0,
+		"gold_box": _stats.get("material", 0.0) >= 3.0,
+	}
+	for id in conditions:
+		if conditions[id]:
+			_unlock(id, announce)

@@ -26,6 +26,7 @@
 - 站酷快乐体（ZCOOL KuaiLe），SIL Open Font License（`game/assets/ui/OFL_ZCOOLKuaiLe.txt`）
 
 ## 生成素材
+- 菜单与成就主题插画（2026-10-19，8 张）：OpenAI 内置图像生成工具，以本项目 `art_src/rig/master_fixed.png` 为角色参考生成透明 PNG，用于菜单管理员、招牌主厨、奖杯、思考、第一餐、均衡、金饭盒和图鉴主题。原始输出未二次修图，提示词、输出记录及 SHA-256 见 `docs/release-art-prompts.json` 与 `docs/release-art-validation.json`；沿用角色二创的 CC BY-NC-SA 4.0 定位。
 - 大肥鱼立绘：65535（gpt-image-2）按社区参考图生成，属于上述角色的二创，CC BY-NC-SA 4.0。参考图只用于生成，不随游戏分发
 - 大肥鱼游戏内形象（0.3 起）：65535（gpt-image-2.5，透明背景）生成主体立绘 `art_src/rig/master_c_0.png`，手部和 9 种表情分别重画后对齐拼回（`pipeline/prep_rig.py`），CC BY-NC-SA 4.0
 - 食堂场景、梁阿姨（原创角色）、食物、饭盒、触手、汤勺：65535（gpt-image-2.5，透明背景）生成，再人工挑选、裁切、拼接（4×4 饭盒由 4×3 图拼出），CC BY-NC-SA 4.0

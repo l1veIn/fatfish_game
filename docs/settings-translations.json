@@ -1,0 +1,15 @@
+{
+  "辅助": "Accessibility",
+  "按你的节奏，安心开饭。": "Settle in. Make yourself comfortable.",
+  "方向键选择 · Enter / A 确认 · Esc / B 返回": "Arrows to navigate · Enter / A to select · Esc / B to return",
+  "音量即时生效，音乐、音效和配音可以分别调整。": "Adjust music, effects and voices separately. Changes apply immediately.",
+  "窗口分辨率": "Window size",
+  "窗口会居中并自动适应可用屏幕；全屏时保留所选窗口尺寸。": "The window centers and fits your screen. Fullscreen keeps your chosen window size for later.",
+  "设置会自动保存，下次开饭继续沿用。": "Settings save automatically for your next meal.",
+  "减少动态效果": "Reduce motion",
+  "减少装饰动画和漂浮粒子，保留接菜所需的运动提示。": "Reduce decorative animation and floating particles while keeping essential catching cues.",
+  "接菜顿帧": "Impact pause",
+  "合成或重要接菜时短暂停顿，关闭后保持连续动作。": "A brief pause gives combinations and special catches extra weight. Turn off for continuous motion.",
+  "清除后将失去全部饭票、升级和成就。此操作无法撤销。": "This removes all meal tickets, upgrades and achievements. It cannot be undone.",
+  "再次确认：清除全部进度": "Confirm: erase all progress"
+}

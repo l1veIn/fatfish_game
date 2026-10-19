@@ -11,6 +11,7 @@ extends Control
 signal play
 signal open_settings
 signal open_credits
+signal replay_ending
 signal quit
 
 const FOOD := ["ball", "bowl", "leg", "gold", "veg", "dump"]
@@ -22,6 +23,7 @@ var _t := 0.0
 var _menu: VBoxContainer
 var _poke_cd := 0.0
 var _early := false
+var _buttons: Array[Button] = []
 var _pats := 0.0          # how fed up she is: +1 a pat, slowly forgiven
 var _helmet_t := 0.0      # > 0: the basin is on her head (seconds left unless knocked)
 var _knocks := 0
@@ -55,54 +57,86 @@ func _ready() -> void:
 	_fish.height = 1000.0
 	_fish.position = Vector2(1390, 1048)
 	add_child(_fish)
+	_fish.set_process(not Settings.reduced_motion)
+	Settings.changed.connect(_apply_motion)
 
 	_logo = Control.new()
 	_logo.position = Vector2(120, 90)
 	add_child(_logo)
-	var shadow := UiKit.label(tr("吃白饭的大肥鱼"), 128, Color(0.1, 0.05, 0.02, 0.6))
+	var logo_size := 92 if Settings.is_english() else 118
+	var shadow := UiKit.label(tr("吃白饭的大肥鱼"), logo_size, Color(0.1, 0.05, 0.02, 0.6))
 	shadow.position = Vector2(8, 10)
 	_logo.add_child(shadow)
-	var logo := UiKit.label(tr("吃白饭的大肥鱼"), 128, Color(1.0, 0.93, 0.72), 30)
+	var logo := UiKit.label(tr("吃白饭的大肥鱼"), logo_size, Color(1.0, 0.93, 0.72), 20)
 	_logo.add_child(logo)
-	var tag := UiKit.label(tr("接住梁阿姨抛来的饭，喂饱大肥鱼"), 34, Color(0.98, 0.84, 0.6), 10)
-	tag.position = Vector2(10, 168)
+	var tag := UiKit.label(tr("接住梁阿姨抛来的饭，喂饱大肥鱼"), 32, Color(0.98, 0.84, 0.6), 8)
+	tag.position = Vector2(10, 160)
 	_logo.add_child(tag)
 
 	_menu = VBoxContainer.new()
-	_menu.position = Vector2(150, 420)
-	_menu.add_theme_constant_override("separation", 18)
+	_menu.position = Vector2(150, 402)
+	_menu.custom_minimum_size.x = 620
+	_menu.add_theme_constant_override("separation", 16)
 	add_child(_menu)
-	var start := UiKit.button(tr("开始上班") if Game.runs == 0 else tr("继续上班"), 40, Vector2(420, 96))
+	var start := UiKit.button(tr("开始上班") if Game.runs == 0 else tr("继续上班"), 38, Vector2(620, 92))
+	start.name = "Continue" if Game.runs > 0 else "Start"
 	start.pressed.connect(func(): play.emit())
 	_menu.add_child(start)
+	_buttons.append(start)
 	if Game.runs > 0:
-		var info := UiKit.label(tr("第 %d 顿饭 · %s · %s token") % [Game.runs + 1, Game.plate(), Game.fmt(Game.tokens)], 24, Color(0.95, 0.88, 0.75), 8)
+		var info := UiKit.label(tr("第 %d 顿饭 · %s · %s token") % [Game.runs + 1, tr(Game.plate()), Game.fmt(Game.tokens)], 24, Color(0.95, 0.88, 0.75), 8)
 		_menu.add_child(info)
-	var book := UiKit.button(tr("菜谱图鉴"), 34, Vector2(420, 80))
+	var grid := GridContainer.new()
+	grid.columns = 2
+	grid.add_theme_constant_override("h_separation", 16)
+	grid.add_theme_constant_override("v_separation", 16)
+	_menu.add_child(grid)
+	var book := UiKit.button(tr("菜谱图鉴"), 29, Vector2(302, 76))
 	book.pressed.connect(func():
 		var b := RecipeBook.new()
-		b.closed.connect(func(): start.grab_focus())
+		b.closed.connect(func(): book.grab_focus())
 		add_child(b))
-	_menu.add_child(book)
-	var settings := UiKit.button(tr("设置"), 34, Vector2(420, 80))
+	grid.add_child(book)
+	_buttons.append(book)
+	var achievements := UiKit.button(tr("食堂成就"), 29, Vector2(302, 76))
+	achievements.name = "Achievements"
+	achievements.pressed.connect(func():
+		var panel := AchievementsPanel.new()
+		panel.closed.connect(func(): achievements.grab_focus())
+		add_child(panel))
+	grid.add_child(achievements)
+	_buttons.append(achievements)
+	var settings := UiKit.button(tr("设置"), 29, Vector2(302, 76))
+	settings.name = "Settings"
 	settings.pressed.connect(func(): open_settings.emit())
-	_menu.add_child(settings)
-	var credits := UiKit.button(tr("鸣谢"), 34, Vector2(420, 80))
+	grid.add_child(settings)
+	_buttons.append(settings)
+	var credits := UiKit.button(tr("鸣谢"), 29, Vector2(302, 76))
 	credits.pressed.connect(func(): open_credits.emit())
-	_menu.add_child(credits)
+	grid.add_child(credits)
+	_buttons.append(credits)
+	if Game.version >= Game.VERSIONS.size() - 1:
+		var ending := UiKit.button(tr("重看结局"), 29, Vector2(302, 76))
+		ending.name = "ReplayEnding"
+		ending.pressed.connect(func(): replay_ending.emit())
+		grid.add_child(ending)
+		_buttons.append(ending)
 	if not OS.has_feature("web"):
-		var q := UiKit.button(tr("退出游戏"), 34, Vector2(420, 80))
+		var q := UiKit.button(tr("退出游戏"), 29, Vector2(302, 76))
 		q.set_meta("ui_back", true)
 		q.pressed.connect(func(): quit.emit())
-		_menu.add_child(q)
+		grid.add_child(q)
+		_buttons.append(q)
+	_wire_focus()
 	start.grab_focus.call_deferred()
 
 	var credit := UiKit.label(tr("角色「蓝色大肥鱼」：原型「溟月」© 上善无形，女仆版 © ZipZipPipe，依 CC BY-NC-SA 4.0 二创。本作为免费粉丝作品，与 DeepSeek 官方无关。"), 20, Color(0.85, 0.78, 0.68), 6)
-	credit.position = Vector2(0, 1036)
-	credit.size = Vector2(1920, 30)
+	credit.position = Vector2(70, 1026)
+	credit.size = Vector2(1780, 50)
+	credit.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	credit.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	add_child(credit)
-	var ver := UiKit.label("Demo v" + str(ProjectSettings.get_setting("application/config/version", "")), 20, Color(0.8, 0.72, 0.62), 6)
+	var ver := UiKit.label("v" + str(ProjectSettings.get_setting("application/config/version", "")), 20, Color(0.8, 0.72, 0.62), 6)
 	ver.position = Vector2(1700, 1000)
 	ver.size = Vector2(190, 30)
 	ver.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
@@ -114,6 +148,8 @@ func _ready() -> void:
 
 ## The logo drops in with a bounce, the buttons slide in one after another.
 func _intro() -> void:
+	if Settings.reduced_motion:
+		return
 	_logo.position.y = -260
 	create_tween().tween_property(_logo, "position:y", 90.0, 0.7).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 	var i := 0
@@ -129,15 +165,38 @@ func _intro() -> void:
 func _process(delta: float) -> void:
 	_t += delta
 	_poke_cd = maxf(_poke_cd - delta, 0.0)
-	for f in _food:
-		f.pos += f.vel * delta
-		f.rot += f.spin * delta
-		if f.pos.y > 1180:
-			f.pos = Vector2(randf_range(0, 1920), -100)
-	_logo.rotation = sin(_t * 1.3) * 0.012
+	if not Settings.reduced_motion:
+		for f in _food:
+			f.pos += f.vel * delta
+			f.rot += f.spin * delta
+			if f.pos.y > 1180:
+				f.pos = Vector2(randf_range(0, 1920), -100)
+		_logo.rotation = sin(_t * 1.3) * 0.012
 	if _early:
 		_update_mood(delta)
 	queue_redraw()
+
+
+func _apply_motion() -> void:
+	_fish.set_process(not Settings.reduced_motion)
+	if Settings.reduced_motion:
+		_logo.rotation = 0.0
+
+
+func _wire_focus() -> void:
+	for i in _buttons.size():
+		var b: Button = _buttons[i]
+		b.focus_previous = b.get_path_to(_buttons[posmod(i - 1, _buttons.size())])
+		b.focus_next = b.get_path_to(_buttons[(i + 1) % _buttons.size()])
+		if i == 0:
+			b.focus_neighbor_bottom = b.get_path_to(_buttons[1])
+			b.focus_neighbor_top = b.get_path_to(_buttons.back())
+			continue
+		var j := i - 1
+		b.focus_neighbor_top = b.get_path_to(_buttons[i - 2] if j >= 2 else _buttons[0])
+		b.focus_neighbor_bottom = b.get_path_to(_buttons[i + 2] if i + 2 < _buttons.size() else _buttons[0])
+		b.focus_neighbor_left = b.get_path_to(_buttons[i - 1] if j % 2 == 1 else b)
+		b.focus_neighbor_right = b.get_path_to(_buttons[i + 1] if j % 2 == 0 and i + 1 < _buttons.size() else b)
 
 
 ## Patience comes back slowly; the basin comes off when nobody knocks for a while.

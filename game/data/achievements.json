@@ -1,0 +1,29 @@
+{
+  "achievements": [
+    {"id":"first_meal","name":"开饭啦","desc":"完成第一顿饭。","group":"食堂日常"},
+    {"id":"regular","name":"老地方见","desc":"完成 10 顿饭。","group":"食堂日常"},
+    {"id":"resident","name":"食堂常驻人口","desc":"完成 30 顿饭。","group":"食堂日常"},
+    {"id":"release_r1","name":"让我想想","desc":"通过 R1 发布评测。","group":"成长旅程"},
+    {"id":"release_v31","name":"该快就快","desc":"通过 V3.1 发布评测。","group":"成长旅程"},
+    {"id":"release_v32","name":"专心干饭","desc":"通过 V3.2 发布评测。","group":"成长旅程"},
+    {"id":"release_v4","name":"这周真的发布了","desc":"通过 V4 发布评测。","group":"成长旅程"},
+    {"id":"release_agi","name":"AGI 也要吃饭","desc":"通过最终的 AGI 发布评测。","group":"成长旅程"},
+    {"id":"tokens_10k","name":"第一桶饭","desc":"累计获得 1 万 token。","group":"食堂日常"},
+    {"id":"tokens_1m","name":"百万饭票","desc":"累计获得 100 万 token。","group":"食堂日常"},
+    {"id":"recipe_first","name":"原来还能这样搭","desc":"发现第一种套餐。","group":"菜谱收藏"},
+    {"id":"recipe_ten","name":"今日推荐","desc":"发现 10 种不同套餐。","group":"菜谱收藏"},
+    {"id":"recipe_twentyfive","name":"行走的菜单","desc":"发现 15 种不同套餐。","group":"菜谱收藏"},
+    {"id":"recipe_all","name":"食堂百科全书","desc":"发现图鉴中的全部套餐。","group":"菜谱收藏"},
+    {"id":"bites_100","name":"再来一口","desc":"累计吃下 100 份食物。","group":"吃饭的学问"},
+    {"id":"bites_1000","name":"胃口是无底洞","desc":"累计吃下 1000 份食物。","group":"吃饭的学问"},
+    {"id":"full_boxes","name":"满载而归","desc":"亲手送出 25 个装满的饭盒。","group":"吃饭的学问"},
+    {"id":"balanced","name":"营养师点头了","desc":"一顿吃下至少 20 份食物，均衡倍率达到 ×1.9。","group":"吃饭的学问"},
+    {"id":"grokked","name":"青菜突然变香了","desc":"在一顿饭中触发顿悟。","group":"吃饭的学问"},
+    {"id":"steady_hands","name":"端稳这一碗","desc":"一顿接住至少 20 份食物，且没有从饭盒里洒出食物。","group":"吃饭的学问"},
+    {"id":"feast","name":"百份不够吃","desc":"在一顿饭中吃下至少 100 份食物。","group":"吃饭的学问"},
+    {"id":"all_stalls","name":"食堂全开","desc":"同时开放全部五个档口。","group":"后厨建设"},
+    {"id":"full_crew","name":"今天全员到齐","desc":"同时招齐六位小助手。","group":"后厨建设"},
+    {"id":"gold_box","name":"金饭盒","desc":"把饭盒升级为金材质。","group":"后厨建设"},
+    {"id":"checkpoint","name":"换个吃法","desc":"使用回滚功能退还已购买的技能。","group":"后厨建设"}
+  ]
+}

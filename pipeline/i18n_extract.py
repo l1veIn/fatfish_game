@@ -48,6 +48,9 @@ def from_gd(text: str) -> list:
 
 
 def main() -> None:
+    # Windows terminals may default to GBK; diagnostics must preserve all game text.
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8")
     loc = sys.argv[1] if len(sys.argv) > 1 else "en"
     keys = []
     for root, _, files in os.walk(os.path.join(ROOT, "game", "scripts")):
@@ -57,6 +60,9 @@ def main() -> None:
     tree = json.load(open(os.path.join(ROOT, "game", "data", "skill_tree.json"), encoding="utf-8"))
     for n in tree["nodes"]:
         keys += [n["name"], n["desc"]]
+    achievements = json.load(open(os.path.join(ROOT, "game", "data", "achievements.json"), encoding="utf-8"))
+    for item in achievements["achievements"]:
+        keys += [item["name"], item["desc"], item["group"]]
     menu = json.load(open(os.path.join(ROOT, "game", "data", "menu.json"), encoding="utf-8"))
     for f in menu["foods"]:
         keys += [f["name"]] + ([f["glyph"]] if f.get("glyph") else [])
