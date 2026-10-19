@@ -92,6 +92,15 @@ func _ready() -> void:
 	await _key(KEY_ESCAPE)
 	_check(not get_tree().paused, "pause cancel resumes")
 	await _clear()
+	Game.best_run = 12345678
+	Game.levels = {"start": 1, "stall_main": 3, "stall_wok": 3, "stall_dim": 3, "stall_fry": 3, "stall_sweet": 3, "moe": 3, "menu": 4, "grok": 1, "mtp": 4, "prompt": 3}
+	Game.signatures = ["burger", "pork", "icecream"]
+	Game.struck = ["ball", "potato", "soymilk", "fries"]
+	Game._recompute()
+	Game.recipes = {}
+	CanteenRun.load_menu()
+	for i in mini(18, CanteenRun.RECIPES.size()):
+		Game.recipes[CanteenRun.RECIPES[i].id] = 1
 	var ending := EndingScreen.new()
 	_current = ending
 	add_child(ending)
@@ -101,6 +110,34 @@ func _ready() -> void:
 		await _shot("ending_%d" % page)
 		if page < 2:
 			await _key(KEY_ENTER)
+	_check(ending._summary.runs == Game.runs and ending._summary.best_run == Game.best_run and ending._summary.total_tokens == Game.total_tokens, "keepsake uses real current progress")
+	_check(ending._summary.signatures == Game.active_signatures() and ending._summary.struck == Game.active_struck(), "keepsake reflects the effective current menu")
+	for skill in ending._summary.skills:
+		_check(Game.level(skill.id) == skill.level and skill.level > 0, "keepsake skill is actually owned: " + skill.id)
+	var previous_bottom := 0.0
+	for child in ending._content.get_children():
+		if child is Label:
+			_check(child.get_rect().end.y <= ending._content.size.y, "keepsake text stays on the paper: " + child.text.left(24))
+			if child.name.begins_with("KeepsakeStat"):
+				_check(child.get_rect().end.y <= 371, "keepsake statistic clears its caption: " + child.text)
+			if child.position.x == 0 and child.position.y >= 426:
+				_check(child.position.y >= previous_bottom, "keepsake build rows do not overlap")
+				previous_bottom = child.get_rect().end.y
+	var ending_marker_before := Game.ending_seen
+	ending.export_directory = _out.path_join("keepsakes") if _out != "" else "user://qa_keepsakes"
+	ending._save.grab_focus()
+	await _pad(JOY_BUTTON_A)
+	await _wait()
+	if DisplayServer.get_name() != "headless":
+		_check(ending._last_export_error == OK and FileAccess.file_exists(ending._last_export_path), "focused save action writes a local PNG")
+		if ending._last_export_path != "":
+			var keepsake := Image.load_from_file(ending._last_export_path)
+			_check(keepsake != null and keepsake.get_size() == _requested_size, "keepsake PNG matches the actual viewport")
+			_report["keepsake_png"] = ending._last_export_path
+	else:
+		_check(ending._last_export_error == ERR_UNAVAILABLE, "headless export reports unavailable instead of claiming a PNG")
+	_check(ending._save.has_focus() and ending._next.visible and not ending._exporting, "export restores navigation and focused action")
+	_check(Game.ending_seen == ending_marker_before and Game.runs == 123, "export leaves progress and ending marker unchanged")
 	await _clear()
 	var receipt := CheckoutReceipt.new()
 	receipt.heading = tr("第 %d 顿 · 结账") % 123
@@ -131,6 +168,15 @@ func _ready() -> void:
 	_check(receipt._done and not receipt._back.disabled, "reduced-motion receipt finishes and enables its action")
 	_check(receipt._need_h + receipt.PAPER.position.y < receipt._back.position.y, "dense receipt paper clears its return action")
 	_check(not receipt._extra_label.get_rect().intersects(receipt._back.get_rect()), "receipt explanation clears its return action")
+	await _wait()
+	_check(receipt._drawn_result_bounds.size() == receipt._results.size(), "every actually drawn result stamp reports its ink and paper bounds")
+	_report["receipt_stamp_bounds"] = []
+	for bounds in receipt._drawn_result_bounds:
+		_check(bounds.position.x >= receipt.PAPER.end.x + 31.0 and Rect2(0, 0, 1920, 1080).encloses(bounds), "drawn result stamp clears the receipt and stays on screen")
+		_report.receipt_stamp_bounds.append(str(bounds))
+	for stamp_time in [0.0, 0.04, 0.08, 0.16, 1.0]:
+		var animated: Rect2 = receipt._result_stamp_layout(140.0, tr("吃撑了"), stamp_time).bounds
+		_check(animated.position.x >= receipt.PAPER.end.x + 31.0 and Rect2(0, 0, 1920, 1080).encloses(animated), "stamp animation respects the receipt edge at %.2fs" % stamp_time)
 	await _shot("receipt_dense")
 	receipt._back.grab_focus()
 	await _pad(JOY_BUTTON_A)

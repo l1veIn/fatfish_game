@@ -57,6 +57,7 @@ var _done := false
 var _back: Button
 var _closed := false
 var _extra_label: Label
+var _drawn_result_bounds: Array[Rect2] = []
 
 
 func _ready() -> void:
@@ -262,6 +263,7 @@ func _draw() -> void:
 		var k := 1.0 + 0.18 * _total_pop
 		_text(_nfont, Vector2(x1, ty), Game.fmt(_total_val), int(64 * k), Color(1.0, 0.42, 0.32), false, true)
 	# the result stamps, right of the receipt
+	_drawn_result_bounds.clear()
 	var sy := 140.0
 	for res in _results:
 		_result_stamp(Vector2(r.end.x + 150.0, sy), res[0], res[1], res[2])
@@ -351,13 +353,40 @@ func _slots(x0: float, x1: float, y: float) -> void:
 
 
 func _result_stamp(c: Vector2, text: String, col: Color, t: float) -> void:
-	var k := 1.0 + 1.4 * maxf(0.0, 1.0 - t / 0.16)
+	var layout := _result_stamp_layout(c.y, text, t)
+	var k: float = layout.scale
+	c = layout.center
 	var a := clampf(t / 0.06, 0.0, 1.0)
-	var w := _dfont.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, 40).x + 40.0
+	var fs: int = layout.font_size
+	var w: float = layout.width
+	_drawn_result_bounds.append(layout.bounds)
 	draw_set_transform(c, -0.16, Vector2(k, k))
 	draw_style_box(UiKit.box(Color(1.0, 0.96, 0.87, 0.92 * a), Color(col, a), 5, 10), Rect2(-w * 0.5, -36, w, 66))
-	_text(_dfont, Vector2(0, 12), text, 40, Color(col, a), true)
+	_text(_dfont, Vector2(0, 12), text, fs, Color(col, a), true)
 	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+
+
+## Measure both ink and paper after rotation, including the animated stamp scale.
+## A long English result must stay in the free space beside the receipt at every frame.
+func _result_stamp_layout(y: float, text: String, t: float) -> Dictionary:
+	var safe_left := PAPER.end.x + 32.0
+	var safe_right := size.x - 32.0
+	var available := safe_right - safe_left
+	var fs := 40
+	var ink_width := _dfont.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
+	while ink_width + 40.0 > available and fs > 20:
+		fs -= 1
+		ink_width = _dfont.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
+	var width := ink_width + 40.0
+	var ink := Rect2(-ink_width * 0.5, 12.0 - _dfont.get_ascent(fs), ink_width, _dfont.get_height(fs))
+	var local_bounds := Rect2(-width * 0.5, -36, width, 66).merge(ink).grow(3.0)
+	var rotated := Transform2D(-0.16, Vector2.ZERO) * local_bounds
+	var scale_factor := minf(1.0 + 1.4 * maxf(0.0, 1.0 - t / 0.16), available / rotated.size.x)
+	rotated = Rect2(rotated.position * scale_factor, rotated.size * scale_factor)
+	var center := Vector2((safe_left + safe_right) * 0.5 - rotated.get_center().x,
+		clampf(y, 32.0 - rotated.position.y, size.y - 32.0 - rotated.end.y))
+	return {"center": center, "scale": scale_factor, "font_size": fs, "width": width,
+		"bounds": Rect2(center + rotated.position, rotated.size)}
 
 
 ## The <EOS> last bite: the dish big in the middle under a warm light, then its stamp.

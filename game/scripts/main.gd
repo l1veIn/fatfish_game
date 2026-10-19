@@ -36,6 +36,7 @@ var _only_trial := ""
 var _fade: ColorRect
 var _busy := false
 var _title_refresh_pending := false
+var _notices: CanvasLayer
 
 
 class CreditsPanel extends Control:
@@ -66,10 +67,10 @@ func _ready() -> void:
 	_fade.size = Vector2(1920, 1080)
 	_fade.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	layer.add_child(_fade)
-	var notices := CanvasLayer.new()
-	notices.layer = 80
-	add_child(notices)
-	notices.add_child(AchievementToast.new())
+	_notices = CanvasLayer.new()
+	_notices.layer = 80
+	add_child(_notices)
+	_notices.add_child(AchievementToast.new())
 	Settings.changed.connect(_on_settings_changed)
 	_lang = Settings.language
 	for a in OS.get_cmdline_user_args():
@@ -191,6 +192,7 @@ func _show_ending(replay := false) -> void:
 		return
 	var ending := EndingScreen.new()
 	ending.replay = replay
+	ending.share_capture_changed.connect(func(active: bool): _notices.visible = not active)
 	ending.finished.connect(func():
 		Game.mark_ending_seen()
 		_show_tree())

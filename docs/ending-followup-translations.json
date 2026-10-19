@@ -1,0 +1,18 @@
+{
+  "保存纪念饭票": "Save keepsake",
+  "继续开饭": "Keep eating",
+  "保存一张干净的饭票，也可以直接截图。食堂还会开门。": "Save a clean keepsake, or take a screenshot. The canteen stays open.",
+  "角色原型「溟月」：上善无形 · 女仆版：ZipZipPipe · CC BY-NC-SA 4.0 · 免费非商用粉丝作品 · 与 DeepSeek 官方无关": "Mingyue: Shangshan Wuxing · Maid design: ZipZipPipe · CC BY-NC-SA 4.0 · Free, noncommercial fan game · Not affiliated with DeepSeek",
+  "下一顿，才刚开始。": "The next meal is just beginning.",
+  "暂无": "None yet",
+  "AGI 纪念饭票 · 当前进度": "AGI keepsake · Current progress",
+  "实现 AGI 了吗？\n……又饿了。": "AGI achieved?\n…Hungry again.",
+  "通用人工智能，专用干饭系统。": "General intelligence. Specialized in dinner.",
+  "最佳单顿 token": "Best meal · tokens",
+  "当前构筑 · 技能总等级 %d": "Current build · %d skill levels",
+  "招牌菜：%s": "Signatures: %s",
+  "今日划掉：%s": "Off today's menu: %s",
+  "关键技能：%s": "Key skills: %s",
+  "未能保存饭票，请检查保存目录后重试。": "Could not save the keepsake. Check the destination folder and try again.",
+  "饭票已保存：%s": "Keepsake saved: %s"
+}
