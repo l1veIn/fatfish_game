@@ -16,6 +16,7 @@ const NODE_R := 44.0
 const TICKET := Vector2(172, 108)     # avoids the four closest authored pairs without moving nodes
 const ZOOM := Vector2(0.45, 1.3)
 const MealPlannerPanel := preload("res://scripts/ui/meal_planner.gd")
+const CrewPlannerPanel := preload("res://scripts/ui/crew_planner_panel.gd")
 
 var _zoom := 0.75
 var _bar: HBoxContainer
@@ -35,6 +36,8 @@ var _start: Button
 var _trial: Button
 var _planner: Control
 var _book: Control
+var _crew_planner: Control
+var _crew_button: Button
 var _modal_focus: Array = []
 var _tooltip_bounds := Rect2()
 
@@ -70,6 +73,13 @@ func _ready() -> void:
 	_trial.size = Vector2(400, 90)
 	_trial.pressed.connect(_on_trial)
 	add_child(_trial)
+	_crew_button = UiKit.button(tr("助手分工"), 29, Vector2(280, 72))
+	_crew_button.name = "Tree_crew"
+	_crew_button.position = Vector2(1580, 736)
+	_crew_button.pressed.connect(_open_crew)
+	add_child(_crew_button)
+	_start.focus_neighbor_top = _start.get_path_to(_crew_button)
+	_crew_button.focus_neighbor_bottom = _crew_button.get_path_to(_start)
 	_update_trial_button()
 	_bar = HBoxContainer.new()
 	_bar.add_theme_constant_override("separation", 14)
@@ -155,7 +165,7 @@ const FEATURES := {
 ## The first time a feature unlocks: a ticket-paper card slides in from the right with one plain
 ## sentence and a 「去看看」 button, and slides away by itself after a while.
 func _feature_card(id: String, open: Callable) -> void:
-	if is_instance_valid(_planner):
+	if is_instance_valid(_planner) or is_instance_valid(_crew_planner):
 		return
 	var card := Control.new()
 	card.set_meta("feature_card", true)
@@ -240,7 +250,7 @@ func _open_menu() -> void:
 
 
 func _open_book() -> void:
-	if is_instance_valid(_book):
+	if is_instance_valid(_book) or is_instance_valid(_planner) or is_instance_valid(_crew_planner):
 		return
 	_book = RecipeBook.new()
 	var opener: WeakRef = weakref(get_viewport().gui_get_focus_owner())
@@ -253,6 +263,8 @@ func _open_book() -> void:
 
 
 func _open_planner(page: String) -> void:
+	if is_instance_valid(_crew_planner) or is_instance_valid(_book):
+		return
 	if is_instance_valid(_planner):
 		_planner.show_mode(page)
 		return
@@ -289,6 +301,41 @@ func _open_planner(page: String) -> void:
 	add_child(panel)
 
 
+func _open_crew() -> void:
+	if is_instance_valid(_crew_planner) or is_instance_valid(_planner) or is_instance_valid(_book) or get_children().any(func(c): return c is SettingsPanel):
+		return
+	var opener := get_viewport().gui_get_focus_owner()
+	var previous: WeakRef = weakref(opener) if opener != null else null
+	_dragging = false
+	_hover = ""
+	for child in get_children():
+		if child.has_meta("feature_card"):
+			child.queue_free()
+	_modal_focus.clear()
+	_modal_focus.append({"node": weakref(self), "mode": focus_mode})
+	focus_mode = Control.FOCUS_NONE
+	for control in find_children("*", "Control", true, false):
+		_modal_focus.append({"node": weakref(control), "mode": control.focus_mode})
+		control.focus_mode = Control.FOCUS_NONE
+	var panel := CrewPlannerPanel.new()
+	_crew_planner = panel
+	panel.closed.connect(func():
+		if panel.get_parent() == self:
+			remove_child(panel)
+		_crew_planner = null
+		for state in _modal_focus:
+			var control = state.node.get_ref()
+			if is_instance_valid(control):
+				control.focus_mode = state.mode
+		_modal_focus.clear()
+		var target = previous.get_ref() if previous != null else null
+		if is_instance_valid(target) and target.is_inside_tree():
+			target.grab_focus.call_deferred()
+		else:
+			_crew_button.grab_focus.call_deferred())
+	add_child(panel)
+
+
 ## Later version rings grow off to the left: pan so the newest ring is on screen.
 ## The tree grows out from the middle in every direction: start centred, a little to the right
 ## of the side texts.
@@ -306,7 +353,7 @@ func _at(n: Dictionary) -> Vector2:
 
 
 func node_at(p: Vector2) -> String:
-	if _header_rect().has_point(p) or _bar.get_rect().grow(10).has_point(p):
+	if _header_rect().has_point(p) or _bar.get_rect().grow(10).has_point(p) or _crew_button.get_rect().grow(10).has_point(p):
 		return ""
 	for n in Game.nodes:
 		if Game.is_visible(n["id"]) and Rect2(_at(n) - TICKET * _zoom * 0.5, TICKET * _zoom).has_point(p):
@@ -350,7 +397,7 @@ func _input(event: InputEvent) -> void:
 
 
 func _unhandled_input(event: InputEvent) -> void:
-	if is_instance_valid(_planner) or get_children().any(func(c): return c is SettingsPanel or c is RecipeBook):
+	if is_instance_valid(_planner) or is_instance_valid(_crew_planner) or get_children().any(func(c): return c is SettingsPanel or c is RecipeBook):
 		return
 	if event.is_action_pressed("pause"):
 		get_viewport().set_input_as_handled()
@@ -400,7 +447,7 @@ func _step(dir: Vector2) -> void:
 
 
 func _gui_input(event: InputEvent) -> void:
-	if is_instance_valid(_planner) or is_instance_valid(_book) or get_children().any(func(c): return c is SettingsPanel):
+	if is_instance_valid(_planner) or is_instance_valid(_crew_planner) or is_instance_valid(_book) or get_children().any(func(c): return c is SettingsPanel):
 		return
 	if has_focus():
 		for direction in [["ui_left", Vector2.LEFT], ["ui_right", Vector2.RIGHT], ["ui_up", Vector2.UP], ["ui_down", Vector2.DOWN]]:
@@ -572,7 +619,7 @@ func _draw() -> void:
 	CanteenRun.load_menu()
 	draw_string(font, Vector2(60, 215), tr("菜谱图鉴 %d / %d") % [Game.recipes.size(), CanteenRun.RECIPES.size()], HORIZONTAL_ALIGNMENT_LEFT, -1, 26, Color(1.0, 0.88, 0.55))
 	draw_string(font, Vector2(60, 175), tr(Game.plate()), HORIZONTAL_ALIGNMENT_LEFT, -1, 40, Color(1.0, 0.8, 0.45))
-	if _hover != "" and not Game.node(_hover).is_empty() and not is_instance_valid(_planner) and not is_instance_valid(_book):
+	if _hover != "" and not Game.node(_hover).is_empty() and not is_instance_valid(_planner) and not is_instance_valid(_crew_planner) and not is_instance_valid(_book):
 		_draw_tooltip(font, Game.node(_hover))
 
 
@@ -646,7 +693,7 @@ func _tooltip_rect(n: Dictionary, dimensions: Vector2) -> Rect2:
 	var at := _at(n)
 	var preferred := at + Vector2(TICKET.x * _zoom * 0.5 + 18, -60)
 	var blocked := [_header_rect().grow(12), _bar.get_rect().grow(12)]
-	for action in [_start, _trial]:
+	for action in [_start, _trial, _crew_button]:
 		if action.visible:
 			blocked.append(action.get_rect().grow(18))
 	for child in get_children():
