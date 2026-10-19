@@ -39,6 +39,15 @@ func _ready() -> void:
 	_tree.start_run.connect(func(): _started += 1)
 	add_child(_tree)
 	await _wait(0.1)
+	_tree._hover = "menu"
+	_tree._board.grab_focus()
+	await _pad(JOY_BUTTON_A)
+	_check(Game.level("menu") == 3, "gamepad A on the map upgrades the selected skill once")
+	await _pad(JOY_BUTTON_DPAD_LEFT)
+	_check(_tree._hover != "menu" and _tree._board.has_focus(), "gamepad direction navigates the map without leaving its focus")
+	Game.levels["menu"] = 2
+	Game._recompute()
+	Game.changed.emit()
 	_tree._zoom = 1.15
 	_tree._pan = -_tree._pos(Game.node("menu")) * _tree._zoom
 	await _wait(0.05)

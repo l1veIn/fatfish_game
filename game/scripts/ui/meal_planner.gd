@@ -4,10 +4,12 @@ extends Control
 
 signal closed
 
-const INK := Color(0.29, 0.16, 0.08)
-const SOFT := Color(0.48, 0.34, 0.23)
-const RED := Color(0.68, 0.2, 0.14)
-const PAPER := preload("res://assets/canteen/ui_paper.png")
+const INK := Color("233d46")
+const SOFT := Color("65736e")
+const RED := Color("b15e4a")
+const PAPER := Color("f6efdf")
+const NAVY := Color("193b49")
+const BRASS := Color("b89758")
 
 var mode := "menu"
 var _cards: Array[Button] = []
@@ -44,20 +46,22 @@ func _ready() -> void:
 		tab.toggle_mode = true
 		tab.pressed.connect(func(): show_mode("menu" if i == 0 else "signatures"))
 		add_child(tab)
+		_style_button(tab)
 		_tabs.append(tab)
 	_close = UiKit.button(tr("返回"), 27, Vector2(200, 64))
 	_close.position = Vector2(1600, 90)
 	_close.set_meta("ui_back", true)
 	_close.pressed.connect(close)
 	add_child(_close)
+	_style_button(_close)
 	_scroll = ScrollContainer.new()
 	_scroll.position = Vector2(108, 300)
-	_scroll.size = Vector2(1184, 600)
+	_scroll.size = Vector2(1184, 590)
 	_scroll.follow_focus = true
 	_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	add_child(_scroll)
 	_grid = GridContainer.new()
-	_grid.columns = 3
+	_grid.columns = 2
 	_grid.add_theme_constant_override("h_separation", 18)
 	_grid.add_theme_constant_override("v_separation", 18)
 	_scroll.add_child(_grid)
@@ -65,10 +69,10 @@ func _ready() -> void:
 	_portrait.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 	_portrait.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	_portrait.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	_portrait.position = Vector2(1320, 238)
-	_portrait.size = Vector2(470, 326)
+	_portrait.position = Vector2(1320, 208)
 	_portrait.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(_portrait)
+	_portrait.size = Vector2(470, 338)
 	_fallback = FishRig.new()
 	_fallback.emote = Game.emotion()
 	_fallback.basin = _fallback.emote < 2
@@ -77,25 +81,40 @@ func _ready() -> void:
 	_fallback.height = 390
 	add_child(_fallback)
 	_fallback.set_process(not Settings.reduced_motion)
-	_count = _label("", Vector2(1335, 580), 31, INK, 430)
-	_summary = _label("", Vector2(1335, 635), 23, SOFT, 430)
-	_detail_name = _label("", Vector2(1335, 770), 27, INK, 430)
-	_detail_body = _label("", Vector2(1335, 823), 23, SOFT, 430)
-	_rule = _label("", Vector2(112, 928), 22, SOFT, 1170)
+	_count = _label("", Vector2(1335, 564), 31, INK, 430)
+	_summary = _label("", Vector2(1335, 620), 24, SOFT, 430)
+	_summary.max_lines_visible = 2
+	_summary.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	_detail_name = _label("", Vector2(1335, 724), 29, INK, 430)
+	_detail_name.max_lines_visible = 2
+	_detail_name.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	_detail_body = _label("", Vector2(1335, 804), 25, SOFT, 430)
+	_rule = _label("", Vector2(112, 918), 22, SOFT, 1170)
 	_done = UiKit.button(tr("准备好了"), 31, Vector2(440, 76))
 	_done.position = Vector2(1330, 934)
 	_done.set_meta("ui_back", true)
 	_done.pressed.connect(close)
 	add_child(_done)
+	_style_button(_done, true)
 	show_mode(mode)
 	Game.changed.connect(_refresh)
 
 
 func _draw() -> void:
-	draw_rect(Rect2(0, 0, 1920, 1080), Color(0.06, 0.035, 0.015, 0.83))
-	UiKit.nine(self, PAPER, Rect2(64, 48, 1792, 984), 80)
-	draw_line(Vector2(1306, 292), Vector2(1306, 906), Color(0.53, 0.34, 0.18, 0.25), 2)
-	draw_texture_rect(UiKit.glow(), Rect2(1270, 195, 560, 420), false, Color(1.0, 0.74, 0.31, 0.25))
+	draw_rect(Rect2(0, 0, 1920, 1080), NAVY)
+	draw_style_box(UiKit.box(PAPER, BRASS, 1, 18, 1), Rect2(64, 48, 1792, 984))
+	draw_line(Vector2(112, 192), Vector2(1800, 192), Color("d5c7a9"), 1)
+	draw_line(Vector2(1306, 220), Vector2(1306, 1004), Color("d5c7a9"), 1)
+	draw_line(Vector2(112, 902), Vector2(1275, 902), Color("d5c7a9"), 1)
+
+
+func _style_button(button: Button, primary := false) -> void:
+	for key in ["font_color", "font_hover_color", "font_pressed_color"]:
+		button.add_theme_color_override(key, PAPER if primary else INK)
+	button.add_theme_stylebox_override("normal", UiKit.box(NAVY if primary else PAPER, BRASS, 1, 10, 1))
+	button.add_theme_stylebox_override("hover", UiKit.box(NAVY.lightened(0.12) if primary else Color("fff9ec"), BRASS, 2, 10, 1))
+	button.add_theme_stylebox_override("pressed", UiKit.box(NAVY.darkened(0.12) if primary else Color("e4dcc9"), BRASS, 2, 10, 1))
+	button.add_theme_stylebox_override("focus", UiKit.box(Color.TRANSPARENT, BRASS, 3, 10, 3))
 
 
 func _label(text: String, at: Vector2, font_size: int, color: Color, width: float) -> Label:
@@ -143,34 +162,36 @@ func show_mode(next: String) -> void:
 func _make_card(id: String, k: int) -> Button:
 	var card := Button.new()
 	card.name = "Dish_" + id
-	card.custom_minimum_size = Vector2(376, 286)
+	card.custom_minimum_size = Vector2(570, 180)
 	card.set_meta("dish_id", id)
 	var pic := TextureRect.new()
+	pic.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 	pic.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	pic.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	pic.texture = load("res://assets/canteen/food_%s.png" % CanteenRun.FOOD_ART[k])
-	pic.position = Vector2(82, 36)
-	pic.size = Vector2(212, 150)
+	pic.position = Vector2(14, 12)
 	pic.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	card.add_child(pic)
+	pic.size = Vector2(118, 126)
 	card.set_meta("picture", pic)
-	var status := UiKit.label("", 20, RED)
-	status.position = Vector2(18, 12)
-	status.size.x = 338
-	status.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	var status := UiKit.label("", 22, RED)
+	status.position = Vector2(152, 104)
+	status.size = Vector2(396, 62)
+	status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	status.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	card.add_child(status)
 	card.set_meta("status", status)
-	var title := UiKit.label(tr(CanteenRun.NAMES[k]), 27, INK)
-	title.position = Vector2(18, 187)
-	title.size.x = 340
-	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	var title := UiKit.label(tr(CanteenRun.NAMES[k]), 28, INK)
+	title.position = Vector2(152, 22)
+	title.size = Vector2(396, 72)
+	title.max_lines_visible = 2
+	title.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	title.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	title.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	card.add_child(title)
-	var subtitle := UiKit.label(tr(CanteenRun.STALLS[CanteenRun.STALL[k]].name), 20, SOFT)
-	subtitle.position = Vector2(18, 253)
-	subtitle.size.x = 340
+	var subtitle := UiKit.label(tr(CanteenRun.STALLS[CanteenRun.STALL[k]].name), 19, SOFT)
+	subtitle.position = Vector2(8, 143)
+	subtitle.size.x = 130
 	subtitle.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	subtitle.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	card.add_child(subtitle)
@@ -178,7 +199,7 @@ func _make_card(id: String, k: int) -> Button:
 	slash.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	slash.draw.connect(func():
 		if mode == "menu" and _active.has(id):
-			slash.draw_line(Vector2(92, 155), Vector2(286, 70), Color(0.72, 0.23, 0.15, 0.88), 7, true))
+			slash.draw_line(Vector2(28, 118), Vector2(118, 33), RED, 5, true))
 	card.add_child(slash)
 	card.set_meta("slash", slash)
 	card.pressed.connect(func(): _choose(id))
@@ -210,14 +231,15 @@ func _refresh() -> void:
 		var id: String = card.get_meta("dish_id")
 		var chosen := _active.has(id)
 		var available := _available(id)
-		var normal := Color(1.0, 0.965, 0.87) if available else Color(0.85, 0.81, 0.72)
-		var border := UiKit.WOOD
+		var normal := Color("fcf8ee") if available else Color("e7e4db")
+		var border := Color("c9c9bb")
 		if chosen:
-			normal = Color(0.91, 0.84, 0.72) if mode == "menu" else Color(1.0, 0.86, 0.51)
-			border = RED if mode == "menu" else Color(0.72, 0.4, 0.08)
-		card.add_theme_stylebox_override("normal", UiKit.box(normal, border, 4 if chosen else 2, 18, 6))
-		card.add_theme_stylebox_override("hover", UiKit.box(normal.lightened(0.07), border, 4, 18, 6))
-		card.add_theme_stylebox_override("pressed", UiKit.box(normal.darkened(0.06), border, 4, 18, 3))
+			normal = Color("eee1d6") if mode == "menu" else Color("e2eadf")
+			border = RED if mode == "menu" else NAVY
+		card.add_theme_stylebox_override("normal", UiKit.box(normal, border, 2 if chosen else 1, 10, 1))
+		card.add_theme_stylebox_override("hover", UiKit.box(normal.lightened(0.06), BRASS, 2, 10, 1))
+		card.add_theme_stylebox_override("pressed", UiKit.box(normal.darkened(0.04), border, 2, 10, 1))
+		card.add_theme_stylebox_override("focus", UiKit.box(Color.TRANSPARENT, BRASS, 3, 10, 3))
 		var status: Label = card.get_meta("status")
 		status.text = tr("已划掉") if chosen and mode == "menu" else tr("招牌 %d") % (_active.find(id) + 1) if chosen else tr("未解锁") if not available else tr("保留出餐") if mode == "menu" else tr("可选招牌")
 		if mode == "menu" and not chosen and available and _capacity() > 0 and Game.struck_toggle_reason(id) != "":
@@ -293,10 +315,10 @@ func _link_focus() -> void:
 		chain[i].focus_previous = chain[i].get_path_to(chain[posmod(i - 1, chain.size())])
 	for i in _cards.size():
 		var card: Button = _cards[i]
-		card.focus_neighbor_top = card.get_path_to(_cards[i - 3] if i >= 3 else _tabs[0 if mode == "menu" else 1])
-		card.focus_neighbor_bottom = card.get_path_to(_cards[i + 3] if i + 3 < _cards.size() else _done)
-		card.focus_neighbor_left = card.get_path_to(_cards[i - 1] if i % 3 > 0 else card)
-		card.focus_neighbor_right = card.get_path_to(_cards[i + 1] if i % 3 < 2 and i + 1 < _cards.size() else _done)
+		card.focus_neighbor_top = card.get_path_to(_cards[i - 2] if i >= 2 else _tabs[0 if mode == "menu" else 1])
+		card.focus_neighbor_bottom = card.get_path_to(_cards[i + 2] if i + 2 < _cards.size() else _done)
+		card.focus_neighbor_left = card.get_path_to(_cards[i - 1] if i % 2 > 0 else card)
+		card.focus_neighbor_right = card.get_path_to(_cards[i + 1] if i % 2 == 0 and i + 1 < _cards.size() else _done)
 	for tab in _tabs:
 		tab.focus_neighbor_bottom = tab.get_path_to(_cards[0] if not _cards.is_empty() else _done)
 		tab.focus_neighbor_top = tab.get_path_to(_done)

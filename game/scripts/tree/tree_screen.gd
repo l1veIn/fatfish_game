@@ -1,201 +1,276 @@
 class_name TreeScreen
 extends Control
-## The skill tree between shifts. Nodes come from res://data/skill_tree.json; a node appears
-## once its version ring is released and a parent is owned. Click a node to buy a level, drag
-## empty space to pan, then press 去打饭 for the next shift. Once the next version's ticket is
-## bought, a red 提交评测 button starts its trial.
-## Gamepad / keyboard: D-pad / stick / arrows move between nodes, A / Enter buys, Y / G goes to
-## lunch, Start / Esc opens the settings.
+## Authored node coordinates/prices stay unchanged. A fixed detail column separates inspection
+## from purchase, while the clipped map never covers the toolbar or next-meal actions.
 
 signal start_run
 signal start_trial(trial: String)
 signal open_settings
 signal to_title
 
-const NODE_R := 44.0
-const TICKET := Vector2(176, 116)     # a skill's meal ticket on the board, at zoom 1
-const ZOOM := Vector2(0.45, 1.3)
+const TICKET := Vector2(172, 108)
+const ZOOM := Vector2(0.55, 1.5)
+const BOARD := Rect2(32, 178, 1264, 724)
+const DETAIL := Rect2(1320, 178, 568, 724)
+const PAPER := Color("f6efdf")
+const NAVY := Color("193b49")
+const INK := Color("233d46")
+const SOFT := Color("65736e")
+const BRASS := Color("b89758")
 const MealPlannerPanel := preload("res://scripts/ui/meal_planner.gd")
+const TICKET_ART := preload("res://assets/canteen/ticket.png")
+const CORK_ART := preload("res://assets/canteen/cork_bg.png")
+const STAMP_ART := preload("res://assets/canteen/stamp.png")
+# Category art describes what the upgrade changes; individual skills keep their authored names.
+const ART_GROUPS := {
+	"food_bowl": ["start", "stall_main", "eat", "ttft", "stream", "mtp", "busy", "queue", "sleep"],
+	"food_kungpao": ["stall_wok"], "food_dump": ["stall_dim"],
+	"food_leg": ["stall_fry"], "food_icecream": ["stall_sweet"],
+	"food_set_bento": ["menu", "moe", "prompt", "fewshot", "inject", "agentwf", "fuse3", "hodge", "agirec", "emerge"],
+	"icon_box": ["vram", "ocr", "mat", "fill", "compress", "warm"],
+	"icon_clock": ["think", "diverge", "converge", "cot", "rag"],
+	"icon_leaf": ["canteen_std", "overfit", "rlhf", "constit", "grok", "warmup", "aftertaste", "nutri"],
+	"icon_chain": ["multiturn", "memory"],
+	"icon_flame": ["temp", "hot"],
+	"icon_dice": ["lunch", "halluc", "regen", "spec", "bon"],
+	"icon_bolt": ["api", "batch", "peak", "drift", "conc"],
+	"icon_token": ["lora", "final", "eos"],
+	"icon_crown": ["sft", "dpo", "fp32", "critic", "bench"],
+	"icon_bell": ["skills", "hire", "orch", "fc", "clip", "async"],
+}
 
-var _zoom := 0.75
-var _bar: HBoxContainer
-var _bar_key := ""
-var _new_buttons := {}                # button -> its id, while it has never been clicked
-var _tex := {}                        # board art: cork, ticket, ticket_gold, stamp, pin
-
+var _zoom := 1.0
 var _pan := Vector2.ZERO
 var _dragging := false
-var _drag_from := Vector2.ZERO
 var _drag_moved := 0.0
-var _hover := ""
-var _flash_at := Vector2.ZERO
-var _flash_time := 0.0
-var _fish: FishRig
+var _hover := "start" # Persistent selection; name retained for the existing debug/test tools.
+var _bar: HBoxContainer
+var _bar_key := ""
+var _board: Control
 var _start: Button
 var _trial: Button
+var _buy: Button
+var _refund: Button
 var _planner: Control
+var _book: Control
 var _modal_focus: Array = []
-var _tooltip_bounds := Rect2()
+var _tooltip_bounds := DETAIL
+var _detail_name: Label
+var _detail_status: Label
+var _detail_icon: TextureRect
+var _art_cache := {}
+var _detail_body: Label
+var _detail_path: Label
+var _detail_price: Label
+var _detail_scroll: ScrollContainer
+var _budget: Label
+var _version: Label
+var _notice: Label
+var _zoom_label: Label
+var _last_detail := ""
+var _respec_armed := 0.0
+var _flash_text := ""
+var _flash_time := 0.0
 
 
 func _ready() -> void:
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	mouse_filter = Control.MOUSE_FILTER_STOP
-	_fish = FishRig.new()
-	_fish.emote = Game.emotion()
-	_fish.basin = _fish.emote < 2   # before V4: deadpan, holding her basin
-	if _fish.basin:
-		_fish.idle_clip = "title_basin"
-	_fish.position = Vector2(190, 1040)
-	_fish.height = 420.0
-	add_child(_fish)
-	_start = Button.new()
-	_start.text = tr("去打饭")
-	_start.add_theme_font_size_override("font_size", 40)
-	_start.position = Vector2(1580, 940)
-	_start.size = Vector2(280, 90)
-	_start.pressed.connect(func(): start_run.emit())
-	add_child(_start)
-	_trial = Button.new()
-	_trial.add_theme_font_size_override("font_size", 30)
-	_trial.add_theme_color_override("font_color", Color(1, 0.9, 0.8))
-	var red := StyleBoxFlat.new()
-	red.bg_color = Color(0.7, 0.15, 0.15)
-	red.set_corner_radius_all(10)
-	_trial.add_theme_stylebox_override("normal", red)
-	_trial.position = Vector2(1460, 830)
-	_trial.size = Vector2(400, 90)
-	_trial.pressed.connect(_on_trial)
-	add_child(_trial)
-	_update_trial_button()
+	CanteenRun.load_menu()
+	_label(tr("下一顿，更进一步"), Rect2(48, 28, 700, 60), 44, PAPER)
+	_budget = _label("", Rect2(48, 98, 570, 42), 32, Color("e3c78c"))
+	_version = _label("", Rect2(630, 106, 1250, 38), 25, Color("d2ddd7"))
 	_bar = HBoxContainer.new()
-	_bar.add_theme_constant_override("separation", 14)
-	_bar.resized.connect(func(): _bar.position = Vector2(1860 - _bar.size.x, 30))
+	_bar.position = Vector2(800, 30)
+	_bar.add_theme_constant_override("separation", 10)
 	add_child(_bar)
 	_build_bar()
-	Game.changed.connect(_build_bar)
-	for n in ["cork_bg", "ticket", "ticket_gold", "stamp", "pin", "icon_lock", "fx_burst", "fx_star", "ui_chalkboard"]:
-		var f := "res://assets/canteen/%s.png" % n
-		if ResourceLoader.exists(f):
-			_tex[n] = load(f)
-	Game.changed.connect(queue_redraw)
-	Game.changed.connect(_update_trial_button)
+	_board = Control.new()
+	_board.position = BOARD.position
+	_board.size = BOARD.size
+	_board.clip_contents = true
+	_board.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+	_board.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_board.focus_mode = Control.FOCUS_ALL
+	_board.draw.connect(_draw_board)
+	_board.gui_input.connect(_map_input)
+	add_child(_board)
+	_label(tr("技能路线"), Rect2(54, 194, 650, 40), 27, INK)
+	var recent := _button(tr("当前进度"), Vector2(254, 48), 24)
+	recent.position = Vector2(772, 190)
+	recent.pressed.connect(_show_newest_ring)
+	add_child(recent)
+	for spec in [["−", -1, 1050], ["+", 1, 1208]]:
+		var b := _button(spec[0], Vector2(54, 48), 28)
+		b.position = Vector2(spec[2], 190)
+		b.pressed.connect(func(): _change_zoom(pow(1.15, spec[1]), BOARD.get_center()))
+		add_child(b)
+	_zoom_label = _label("100%", Rect2(1108, 198, 94, 34), 23, SOFT)
+	_zoom_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_label(tr("技能详情"), Rect2(1348, 194, 512, 30), 24, SOFT)
+	_detail_name = _label("", Rect2(1348, 238, 512, 90), 34, INK)
+	_detail_status = _label("", Rect2(1348, 340, 512, 44), 27, NAVY)
+	_detail_icon = TextureRect.new()
+	_detail_icon.position = Vector2(1796, 330)
+	_detail_icon.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+	_detail_icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	_detail_icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	_detail_icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(_detail_icon)
+	_detail_icon.size = Vector2(64, 64)
+	_detail_scroll = ScrollContainer.new()
+	_detail_scroll.position = Vector2(1348, 398)
+	_detail_scroll.size = Vector2(512, 282)
+	_detail_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	_detail_scroll.follow_focus = true
+	add_child(_detail_scroll)
+	var copy := VBoxContainer.new()
+	copy.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	copy.add_theme_constant_override("separation", 26)
+	_detail_scroll.add_child(copy)
+	_detail_body = UiKit.label("", 27, INK)
+	_detail_body.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_detail_body.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	copy.add_child(_detail_body)
+	_detail_path = UiKit.label("", 24, SOFT)
+	_detail_path.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	copy.add_child(_detail_path)
+	_detail_price = _label("", Rect2(1348, 704, 512, 40), 29, INK)
+	_buy = _button(tr("升级"), Vector2(322, 70), 29, true)
+	_buy.position = Vector2(1348, 762)
+	_buy.pressed.connect(func(): try_buy(_hover))
+	add_child(_buy)
+	_refund = _button(tr("退还"), Vector2(174, 70), 27)
+	_refund.position = Vector2(1686, 762)
+	_refund.pressed.connect(_refund_selected)
+	add_child(_refund)
+	_label(tr("选中节点后查看详情；购买会即时保存。"), Rect2(1348, 850, 512, 38), 21, SOFT)
+	_notice = _label(tr("拖动查看路线 · 滚轮缩放\n方向键选节点 · Enter / A 升级 · G / Y 开饭"), Rect2(48, 950, 880, 96), 25, PAPER)
+	_start = _button(tr("去打饭"), Vector2(368, 82), 36, true)
+	_start.position = Vector2(1520, 950)
+	_start.pressed.connect(func(): start_run.emit())
+	add_child(_start)
+	_trial = _button("", Vector2(520, 82), 28)
+	_trial.position = Vector2(980, 950)
+	_trial.pressed.connect(_on_trial)
+	add_child(_trial)
+	Game.changed.connect(_refresh)
 	_show_newest_ring()
+	_refresh()
+	_board.grab_focus.call_deferred()
 	Audio.music("bgm_tree")
 	Audio.ambience("")
+
+
+func _button(text: String, dimensions: Vector2, fs: int, primary := false) -> Button:
+	var b := UiKit.button(text, fs, dimensions)
+	for key in ["font_color", "font_hover_color", "font_pressed_color"]:
+		b.add_theme_color_override(key, PAPER if primary else INK)
+	b.add_theme_stylebox_override("normal", UiKit.box(NAVY if primary else PAPER, BRASS, 1, 12, 1))
+	b.add_theme_stylebox_override("hover", UiKit.box(NAVY.lightened(0.12) if primary else Color("fff9ec"), BRASS, 2, 12, 1))
+	b.add_theme_stylebox_override("pressed", UiKit.box(NAVY.darkened(0.12) if primary else Color("e6dcc7"), BRASS, 2, 12, 1))
+	b.add_theme_stylebox_override("focus", UiKit.box(Color.TRANSPARENT, Color("daaa50"), 3, 12, 3))
+	b.add_theme_stylebox_override("disabled", UiKit.box(Color("e3dfd3"), Color("c9c7bb"), 1, 12, 1))
+	b.add_theme_color_override("font_disabled_color", SOFT)
+	return b
+
+
+func _label(text: String, rect: Rect2, fs: int, color: Color) -> Label:
+	var l := UiKit.label(text, fs, color)
+	l.position = rect.position
+	l.size = rect.size
+	l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	l.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(l)
+	return l
+
+
+func _build_bar() -> void:
+	var specs: Array = [["book", tr("图鉴"), _open_book]]
+	if Game.stat("menu_cut") > 0.0:
+		specs.append(["menu", tr("今日菜单"), _open_menu])
+	if Game.stat("sig_slots") > 0.0:
+		specs.append(["sigs", tr("招牌菜"), _open_signatures])
+	specs.append_array([["respec", tr("回滚"), _on_respec], ["settings", tr("设置"), func(): open_settings.emit()], ["title", tr("标题"), func(): to_title.emit()]])
+	var key := ",".join(specs.map(func(s): return s[0]))
+	if key == _bar_key:
+		return
+	_bar_key = key
+	for child in _bar.get_children():
+		_bar.remove_child(child)
+		child.queue_free()
+	for spec in specs:
+		var b := _button(spec[1], Vector2(170, 56), 25)
+		b.name = "Tree_" + spec[0]
+		var id: String = spec[0]
+		var action: Callable = spec[2]
+		b.pressed.connect(func():
+			if not Game.seen_buttons.has(id):
+				Game.seen_buttons[id] = true
+				Game.save_game()
+			action.call())
+		_bar.add_child(b)
+	_bar.position.x = 1888 - _bar.get_combined_minimum_size().x
+
+
+func _refresh() -> void:
+	_build_bar()
+	_budget.text = "%s  token" % Game.fmt(Game.tokens)
+	_version.text = "%s   ·   %s" % [tr(Game.plate()), tr("第 %d 顿饭 · 累计吐出 %s token") % [Game.runs + 1, Game.fmt(Game.total_tokens)]]
+	_update_trial_button()
+	_last_detail = ""
+	_refresh_detail()
+	queue_redraw()
 
 
 func _update_trial_button() -> void:
 	var t := Game.open_trial()
 	_trial.visible = t != ""
 	if t != "":
-		_trial.text = tr("评测「%s」 门票 %s") % [tr(Game.trial_name(t)).get_slice("·", 0).strip_edges(), Game.fmt(Game.trial_fee(t))]
-		var fs := 30   # long (English) names: smaller text rather than spilling out of the button
-		while fs > 16 and ThemeDB.fallback_font.get_string_size(_trial.text, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x > _trial.size.x - 30:
-			fs -= 2
-		_trial.add_theme_font_size_override("font_size", fs)
+		_trial.text = tr("提交评测 · 门票 %s") % Game.fmt(Game.trial_fee(t))
 
 
-## The top bar. 今日菜单 and 招牌菜 show up once a skill unlocks them; a button the player has
-## never pressed glows with a 「新！」 tag until they do.
-func _build_bar() -> void:
-	var specs: Array = [["book", tr("图鉴"), func(): add_child(RecipeBook.new())]]
-	if Game.stat("menu_cut") > 0.0:
-		specs.append(["menu", tr("今日菜单"), _open_menu])
-	if Game.stat("sig_slots") > 0.0:
-		specs.append(["sigs", tr("招牌菜"), _open_signatures])
-	specs.append_array([["respec", tr("回滚"), _on_respec], ["settings", tr("设置"), func(): open_settings.emit()], ["title", tr("标题"), func(): to_title.emit()]])
-	var key := ",".join(specs.map(func(x): return x[0]))
-	if key == _bar_key:
+func _refresh_detail() -> void:
+	if _hover == "" or Game.node(_hover).is_empty():
+		_hover = "start"
+	var n: Dictionary = Game.node(_hover)
+	var key := _hover + ":" + str(Game.level(_hover)) + ":" + str(Game.tokens) + ":" + str(Game.version)
+	if key == _last_detail:
 		return
-	_bar_key = key
-	for c in _bar.get_children():
-		_bar.remove_child(c)
-		c.queue_free()
-	_new_buttons.clear()
-	for spec in specs:
-		var b := UiKit.button(spec[1], 26, Vector2(170, 64))
-		var id: String = spec[0]
-		b.name = "Tree_" + id
-		var fn: Callable = spec[2]
-		b.pressed.connect(func():
-			if not Game.seen_buttons.has(id):
-				Game.seen_buttons[id] = true
-				_new_buttons.erase(b)
-				Game.save_game()
-			fn.call())
-		_bar.add_child(b)
-		if id in ["menu", "sigs"] and not Game.seen_buttons.has(id):
-			_new_buttons[b] = id
-			var dot := Control.new()   # the red dot sits on the button itself, above its art
-			dot.mouse_filter = Control.MOUSE_FILTER_IGNORE
-			dot.position = Vector2(164, 6)
-			dot.draw.connect(func():
-				dot.draw_circle(Vector2.ZERO, 13.0, Color(1, 1, 1))
-				dot.draw_circle(Vector2.ZERO, 10.0, Color(0.78, 0.22, 0.18)))
-			b.add_child(dot)
-			b.pressed.connect(dot.queue_free)
-			if not Game.seen_buttons.has(id + "_card"):
-				Game.seen_buttons[id + "_card"] = true
-				_feature_card.call_deferred(id, fn)
-	_bar.size = _bar.get_combined_minimum_size()
-	_bar.position = Vector2(1860 - _bar.size.x, 30)
+	_last_detail = key
+	_detail_scroll.scroll_vertical = 0
+	_detail_name.text = tr(n.name)
+	_detail_icon.texture = _skill_art(n)
+	_detail_body.text = tr(n.desc)
+	var maxed := Game.is_maxed(_hover)
+	var locked := bool(n.get("locked", false))
+	var ticket: bool = n.get("kind", "") == "ticket"
+	_detail_status.text = tr("敬请期待") if locked else tr("已发布") if ticket and maxed and Game.open_trial() == "" else tr("已解锁评测") if ticket and maxed else tr("已满级") if maxed else tr("等级 %d / %d") % [Game.level(_hover), int(n.max)]
+	var path: Array[String] = []
+	for parent in n.parents:
+		path.append(("✓ " if Game.level(parent) > 0 else "○ ") + tr(Game.node(parent).name))
+	_detail_path.text = tr("解锁路线") + "\n" + "\n".join(path) if not path.is_empty() else tr("这是你的第一步。")
+	var need := int(n.get("need_levels", 0))
+	var have := Game.ring_levels(int(n.get("ring", 0)))
+	if need > have:
+		_detail_path.text += "\n\n" + tr("要先在这一环升满 %d 级（现在 %d 级）") % [need, have]
+	_detail_price.text = "" if maxed or locked else tr("花费 %s token") % Game.fmt(Game.cost(_hover))
+	_buy.text = tr("已满级") if maxed and not ticket else tr("已提交") if maxed else tr("解锁评测") if ticket else tr("升级")
+	_buy.disabled = not Game.can_buy(_hover)
+	_refund.disabled = Game.level(_hover) <= 0 or _hover == "start" or ticket
 
 
-const FEATURES := {
-	"menu": ["新功能：今日菜单", "开饭前划掉不想要的菜，想要的出得更多。"],
-	"sigs": ["新功能：招牌菜", "选一道招牌菜，这顿它有特别加成。"],
-}
+func _skill_art(n: Dictionary) -> Texture2D:
+	var key := "icon_crown" if n.get("kind", "") == "ticket" else "food_bowl"
+	for category in ART_GROUPS:
+		if n.id in ART_GROUPS[category]:
+			key = category
+			break
+	if not _art_cache.has(key):
+		_art_cache[key] = load("res://assets/canteen/" + key + ".png")
+	return _art_cache[key]
 
 
-## The first time a feature unlocks: a ticket-paper card slides in from the right with one plain
-## sentence and a 「去看看」 button, and slides away by itself after a while.
-func _feature_card(id: String, open: Callable) -> void:
-	if is_instance_valid(_planner):
-		return
-	var card := Control.new()
-	card.set_meta("feature_card", true)
-	card.size = Vector2(440, 250)
-	card.position = Vector2(1940, 150)
-	card.z_index = 40
-	add_child(card)
-	var bg := TextureRect.new()
-	if ResourceLoader.exists("res://assets/canteen/ui_paper.png"):
-		bg.texture = load("res://assets/canteen/ui_paper.png")
-	bg.size = card.size
-	bg.stretch_mode = TextureRect.STRETCH_SCALE
-	card.add_child(bg)
-	var title := UiKit.label(tr(FEATURES[id][0]), 30, Color(0.78, 0.22, 0.18))
-	title.position = Vector2(34, 34)
-	card.add_child(title)
-	var body := UiKit.label(tr(FEATURES[id][1]), 22, Color(0.29, 0.16, 0.08))
-	body.position = Vector2(34, 86)
-	body.size = Vector2(372, 70)
-	body.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	card.add_child(body)
-	var go := UiKit.button(tr("去看看"), 24, Vector2(160, 54))
-	go.position = Vector2(246, 170)
-	card.add_child(go)
-	var hide := func():
-		if is_instance_valid(card):
-			var tw2 := create_tween()
-			tw2.tween_property(card, "position:x", 1940.0, 0.25)
-			tw2.tween_callback(card.queue_free)
-	go.pressed.connect(func():
-		Game.seen_buttons[id] = true
-		Game.save_game()
-		_bar_key = ""
-		_build_bar()
-		hide.call()
-		open.call())
-	var tw := create_tween()
-	tw.tween_property(card, "position:x", 1460.0, 0.35).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
-	tw.tween_interval(7.0)
-	tw.tween_callback(hide)
-	Audio.sfx("ticket", -6.0)
-
-
-## 评测: pay the ticket (10% of the target) and go.
 func _on_trial() -> void:
 	var t := Game.open_trial()
 	if Game.pay_trial(t):
@@ -203,35 +278,46 @@ func _on_trial() -> void:
 		start_trial.emit(t)
 	else:
 		Audio.sfx("deny", -6.0)
-		_fish.play("broke")
-
-
-## 回滚到 checkpoint: refund every skill (two clicks).
-var _respec_armed := 0.0
 
 
 func _on_respec() -> void:
 	if _respec_armed <= 0.0:
 		_respec_armed = 3.0
 		_flash_text = tr("再点一次「回滚」：所有技能全额退款，重新加点")
+	else:
+		_respec_armed = 0.0
+		_flash_text = tr("回滚完成：退回 %s token") % Game.fmt(Game.respec())
+		Audio.sfx("buy", -3.0)
+	_flash_time = 5.0
+
+
+func _refund_selected() -> void:
+	var back := Game.refund(_hover)
+	if back > 0.0:
+		_flash_text = tr("退掉「%s」：返还 %s token") % [tr(Game.node(_hover).name), Game.fmt(back)]
+		_flash_time = 5.0
+		Audio.sfx("buy", -6.0)
+
+
+func _open_book() -> void:
+	if is_instance_valid(_book):
 		return
-	_respec_armed = 0.0
-	var back := Game.respec()
-	_flash_text = tr("回滚完成：退回 %s token") % Game.fmt(back)
-	Audio.sfx("buy", -3.0)
+	_book = RecipeBook.new()
+	var opener: WeakRef = weakref(get_viewport().gui_get_focus_owner())
+	_book.tree_exited.connect(func():
+		_book = null
+		var old = opener.get_ref()
+		if is_instance_valid(old):
+			old.grab_focus.call_deferred())
+	add_child(_book)
 
 
-var _flash_text := ""
-
-
-## 招牌菜: pick up to sig_slots of the dishes the open stalls serve.
-func _open_signatures() -> void:
-	_open_planner("signatures")
-
-
-## 今日菜单 (System Prompt): strike up to menu_cut dishes of the open stalls off the menu.
 func _open_menu() -> void:
 	_open_planner("menu")
+
+
+func _open_signatures() -> void:
+	_open_planner("signatures")
 
 
 func _open_planner(page: String) -> void:
@@ -240,15 +326,11 @@ func _open_planner(page: String) -> void:
 		return
 	var opener: WeakRef = weakref(get_viewport().gui_get_focus_owner())
 	_dragging = false
-	_hover = ""
-	for child in get_children():
-		if child.has_meta("feature_card"):
-			child.queue_free()
 	_modal_focus.clear()
-	# Disable every underlying focus target before adding the modal. Tab cannot escape it.
-	for control in find_children("*", "BaseButton", true, false):
-		_modal_focus.append({"node": weakref(control), "mode": control.focus_mode})
-		control.focus_mode = Control.FOCUS_NONE
+	for control in find_children("*", "Control", true, false):
+		if control.focus_mode != Control.FOCUS_NONE:
+			_modal_focus.append({"node": weakref(control), "mode": control.focus_mode})
+			control.focus_mode = Control.FOCUS_NONE
 	var panel := MealPlannerPanel.new()
 	panel.mode = page
 	_planner = panel
@@ -257,69 +339,78 @@ func _open_planner(page: String) -> void:
 			remove_child(panel)
 		_planner = null
 		for state in _modal_focus:
-			var control = state.node.get_ref()
-			if is_instance_valid(control):
-				control.focus_mode = state.mode
+			var c = state.node.get_ref()
+			if is_instance_valid(c):
+				c.focus_mode = state.mode
 		_modal_focus.clear()
-		var focus = opener.get_ref()
-		if is_instance_valid(focus) and focus is Control and focus.is_inside_tree():
-			focus.grab_focus.call_deferred()
+		var old = opener.get_ref()
+		if is_instance_valid(old) and old.is_inside_tree():
+			old.grab_focus.call_deferred()
 		else:
-			_start.grab_focus.call_deferred())
+			_board.grab_focus.call_deferred())
 	add_child(panel)
 
 
-## Later version rings grow off to the left: pan so the newest ring is on screen.
-## The tree grows out from the middle in every direction: start centred, a little to the right
-## of the side texts.
 func _show_newest_ring() -> void:
-	_pan = Vector2(180, 70)
+	_hover = "start"
+	for n in Game.nodes:
+		if int(n.get("ring", 0)) == Game.version and Game.is_visible(n.id) and not Game.is_maxed(n.id):
+			_hover = n.id
+			break
+	_pan = -_pos(Game.node(_hover)) * _zoom
 
 
 func center() -> Vector2:
-	return Vector2(960, 540) + _pan
+	return BOARD.get_center() + _pan + Vector2(0, 28)
 
 
-## Where a node sits on screen (the board pans and zooms).
+func _pos(n: Dictionary) -> Vector2:
+	return Vector2(n.pos[0], n.pos[1])
+
+
 func _at(n: Dictionary) -> Vector2:
 	return center() + _pos(n) * _zoom
 
 
 func node_at(p: Vector2) -> String:
+	if not BOARD.grow(-10).has_point(p) or p.y < 248:
+		return ""
 	for n in Game.nodes:
-		if Game.is_visible(n["id"]) and Rect2(_at(n) - TICKET * _zoom * 0.5, TICKET * _zoom).has_point(p):
-			return n["id"]
+		if Game.is_visible(n.id) and Rect2(_at(n) - TICKET * _zoom * 0.5, TICKET * _zoom).has_point(p):
+			return n.id
 	return ""
 
 
-## Buys one level; returns true on success (also used by the autotest).
 func try_buy(id: String) -> bool:
+	_hover = id
 	if Game.buy(id):
-		var p := _at(Game.node(id))
 		Audio.sfx("buy")
-		_fish.bounce()
-		# every fifth level she protests that she is NOT fat
-		var fat := Game.total_levels() % 5 == 0
-		_fish.play("not_fat" if fat else "happy")
-		Audio.vo("fish_not_fat" if fat else "fish_happy", 1, 1.0 if fat else [0.0, 0.25, 0.5][Game.emotion()])   # 嘿嘿 only once she has feelings
-		_flash_at = p
-		_flash_time = 0.3
+		_refresh_detail()
 		return true
 	Audio.sfx("deny", -6.0)
-	if _fish.clip != "broke":
-		_fish.play("broke")
-		Audio.vo("fish_broke", 1)
 	return false
 
 
 func _process(delta: float) -> void:
-	_respec_armed = maxf(_respec_armed - delta, 0.0)
-	_flash_time = maxf(_flash_time - delta, 0.0)
-	queue_redraw()
+	_respec_armed = maxf(0, _respec_armed - delta)
+	_flash_time = maxf(0, _flash_time - delta)
+	_notice.text = _flash_text if _flash_time > 0 else tr("拖动查看路线 · 滚轮缩放\n方向键选节点 · Enter / A 升级 · G / Y 开饭")
+	_refresh_detail()
+	_board.queue_redraw()
+
+
+func _blocked() -> bool:
+	return is_instance_valid(_planner) or is_instance_valid(_book) or get_children().any(func(c): return c is SettingsPanel)
+
+
+func _input(event: InputEvent) -> void:
+	# Releasing over a toolbar/button still ends a map drag even when that control consumes it.
+	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and not event.pressed:
+		_dragging = false
 
 
 func _unhandled_input(event: InputEvent) -> void:
-	if is_instance_valid(_planner) or get_children().any(func(c): return c is SettingsPanel or c is RecipeBook):
+	if _blocked():
 		return
 	if event.is_action_pressed("pause"):
 		get_viewport().set_input_as_handled()
@@ -328,260 +419,173 @@ func _unhandled_input(event: InputEvent) -> void:
 		get_viewport().set_input_as_handled()
 		start_run.emit()
 	elif event.is_action_pressed("deliver") or (event is InputEventJoypadButton and event.pressed and event.button_index == JOY_BUTTON_A):
-		if _hover != "":
+		if get_viewport().gui_get_focus_owner() == _board:
 			get_viewport().set_input_as_handled()
 			try_buy(_hover)
 	else:
 		for d in [["ui_left", Vector2.LEFT], ["ui_right", Vector2.RIGHT], ["ui_up", Vector2.UP], ["ui_down", Vector2.DOWN]]:
-			if event.is_action_pressed(d[0]):
+			if event.is_action_pressed(d[0]) and get_viewport().gui_get_focus_owner() == _board:
 				get_viewport().set_input_as_handled()
 				_step(d[1])
 				return
 
 
-## Gamepad cursor: the nearest visible node roughly in direction `dir` from the current one,
-## and pan so it stays on screen.
+func _map_input(event: InputEvent) -> void:
+	if _blocked():
+		return
+	for d in [["ui_left", Vector2.LEFT], ["ui_right", Vector2.RIGHT], ["ui_up", Vector2.UP], ["ui_down", Vector2.DOWN]]:
+		if event.is_action_pressed(d[0]):
+			_board.accept_event()
+			_step(d[1])
+			return
+	if event.is_action_pressed("ui_accept") or event.is_action_pressed("deliver"):
+		_board.accept_event()
+		try_buy(_hover)
+
+
 func _step(dir: Vector2) -> void:
 	if _hover == "":
 		_hover = "start"
-	else:
-		var from := _pos(Game.node(_hover))
-		var best := ""
-		var best_d := INF
-		for n in Game.nodes:
-			if not Game.is_visible(n["id"]) or n["id"] == _hover:
-				continue
-			var v := _pos(n) - from
-			if v.normalized().dot(dir) < 0.5:
-				continue
-			var d := v.length() * (2.0 - v.normalized().dot(dir))
-			if d < best_d:
-				best_d = d
-				best = n["id"]
-		if best != "":
-			_hover = best
-			Audio.sfx("ui_hover", -10.0)
+	var origin := _pos(Game.node(_hover))
+	var best := ""
+	var score := INF
+	for n in Game.nodes:
+		if not Game.is_visible(n.id) or n.id == _hover:
+			continue
+		var delta := _pos(n) - origin
+		var facing := delta.normalized().dot(dir)
+		if facing < 0.5:
+			continue
+		var distance := delta.length() * (2.0 - facing)
+		if distance < score:
+			score = distance
+			best = n.id
+	if best != "":
+		_hover = best
+		Audio.sfx("ui_hover", -10)
 	var at := _at(Game.node(_hover))
-	if not Rect2(300, 200, 1320, 640).has_point(at):
-		_pan += (Vector2(960, 520) - at) * 0.6
+	if not BOARD.grow(-140).has_point(at):
+		_pan += BOARD.get_center() - at
+	_refresh_detail()
+
+
+func _change_zoom(factor: float, at: Vector2) -> void:
+	var nz := clampf(_zoom * factor, ZOOM.x, ZOOM.y)
+	_pan += (at - center()) * (1.0 - nz / _zoom)
+	_zoom = nz
+	_zoom_label.text = "%d%%" % roundi(_zoom * 100)
 
 
 func _gui_input(event: InputEvent) -> void:
-	if is_instance_valid(_planner):
+	if _blocked():
 		return
-	if event is InputEventMouseButton and event.pressed and event.button_index in [MOUSE_BUTTON_WHEEL_UP, MOUSE_BUTTON_WHEEL_DOWN]:
-		var nz := clampf(_zoom * (1.1 if event.button_index == MOUSE_BUTTON_WHEEL_UP else 1.0 / 1.1), ZOOM.x, ZOOM.y)
-		_pan = (_pan + Vector2(960, 540) - event.position) * (nz / _zoom) + event.position - Vector2(960, 540)   # zoom around the cursor
-		_zoom = nz
-		return
-	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_RIGHT and event.pressed:
-		var rid := node_at(event.position)   # right click: refund this node
-		if rid != "" and Game.level(rid) > 0:
-			var back := Game.refund(rid)
-			if back > 0.0:
-				_flash_text = tr("退掉「%s」：返还 %s token") % [tr(Game.node(rid)["name"]), Game.fmt(back)]
-				Audio.sfx("buy", -6.0)
-		return
-	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
-		if event.pressed:
-			_dragging = true
-			_drag_from = event.position
-			_drag_moved = 0.0
-		else:
-			_dragging = false
-			if _drag_moved < 8.0:
-				var id := node_at(event.position)
-				if id != "":
-					try_buy(id)
-	elif event is InputEventMouseMotion:
-		if _dragging:
-			_pan += event.relative
-			_drag_moved += event.relative.length()
-		_hover = node_at(event.position)
-
-
-func _pos(n: Dictionary) -> Vector2:
-	return Vector2(float(n["pos"][0]), float(n["pos"][1]))
+	if event is InputEventMouseButton:
+		if not BOARD.has_point(event.position):
+			return
+		if event.pressed and event.button_index in [MOUSE_BUTTON_WHEEL_UP, MOUSE_BUTTON_WHEEL_DOWN]:
+			_change_zoom(1.1 if event.button_index == MOUSE_BUTTON_WHEEL_UP else 1.0 / 1.1, event.position)
+		elif event.button_index == MOUSE_BUTTON_LEFT:
+			if event.pressed:
+				_dragging = true
+				_drag_moved = 0
+				_board.grab_focus()
+			else:
+				_dragging = false
+				if _drag_moved < 8.0:
+					var id := node_at(event.position)
+					if id != "":
+						_hover = id
+						_refresh_detail()
+		elif event.pressed and event.button_index == MOUSE_BUTTON_RIGHT:
+			var id := node_at(event.position)
+			if id != "":
+				_hover = id
+				_refund_selected()
+	elif event is InputEventMouseMotion and _dragging:
+		_pan += event.relative
+		_drag_moved += event.relative.length()
 
 
 func _draw() -> void:
-	# the 饭票软木板: cork, red yarn between the tickets, a pin on each, a red stamp once bought
-	if _tex.has("cork_bg"):
-		draw_texture_rect(_tex.cork_bg, Rect2(Vector2.ZERO, size), false)
-	else:
-		draw_texture(preload("res://assets/canteen/bg_wall.png"), Vector2.ZERO, Color(0.55, 0.5, 0.46))
-	draw_rect(Rect2(Vector2.ZERO, size), Color(0.08, 0.04, 0.02, 0.18))
+	draw_rect(Rect2(Vector2.ZERO, Vector2(1920, 1080)), NAVY)
+	draw_line(Vector2(32, 157), Vector2(1888, 157), BRASS, 2)
+	draw_style_box(UiKit.box(Color("eee7d5"), BRASS, 1, 16, 1), BOARD)
+	draw_style_box(UiKit.box(PAPER, BRASS, 1, 16, 1), DETAIL)
+	draw_line(Vector2(32, 924), Vector2(1888, 924), Color("47606a"), 1)
+
+
+func _draw_board() -> void:
 	var font := ThemeDB.fallback_font
-	var z := _zoom
+	# Use only the cork interior. The source's wooden frame is never stretched into this map.
+	_board.draw_texture_rect_region(CORK_ART, Rect2(2, 74, BOARD.size.x - 4, BOARD.size.y - 76),
+		Rect2(80, 80, 1760, 920), Color(1, 1, 1, 0.20))
 	for n in Game.nodes:
-		if not Game.is_visible(n["id"]):
+		if not Game.is_visible(n.id):
 			continue
-		for p in n["parents"]:
-			if not Game.is_visible(p):
+		for parent in n.parents:
+			if not Game.is_visible(parent):
 				continue
-			var a := _at(Game.node(p))
-			var b := _at(n)
-			var owned := Game.level(n["id"]) > 0
-			# red yarn pinned at both tickets, hanging slack: it sags more the longer it runs
-			var sag := 14.0 * z + a.distance_to(b) * 0.18
-			var mid := (a + b) * 0.5 + Vector2(0, sag * 2.0)
-			var pts := PackedVector2Array()
-			for i in 17:
-				var t := i / 16.0
-				pts.append(a.lerp(mid, t).lerp(mid.lerp(b, t), t))
-			draw_polyline(pts, Color(0.78, 0.1, 0.1, 0.95) if owned else Color(0.6, 0.15, 0.12, 0.45), (4.0 if owned else 2.5) * z, true)
+			var a := _at(Game.node(parent)) - BOARD.position
+			var b := _at(n) - BOARD.position
+			var highlight: bool = n.id == _hover or parent == _hover
+			_board.draw_line(a, b, BRASS if highlight else Color("8b9c92"), 4.0 if highlight else 2.0, true)
 	for n in Game.nodes:
-		var id: String = n["id"]
-		if not Game.is_visible(id):
+		if not Game.is_visible(n.id):
 			continue
-		var c := _at(n)
-		var lv := Game.level(id)
-		var ticket: bool = n.get("kind", "") == "ticket"
-		var sz := TICKET * z
-		var r := Rect2(c - sz * 0.5, sz)
-		var tex: Texture2D = _tex.get("ticket_gold" if n.get("key", false) else "ticket", null)
-		var tint := Color.WHITE
-		if ticket:
-			tint = Color(1.0, 0.62, 0.55)   # a release ticket: pink paper
-		if not Game.can_buy(id) and lv == 0:
-			tint = tint * Color(0.8, 0.76, 0.7)   # can't buy yet: a little faded
-		if n.get("locked", false):
-			tint = tint * Color(0.72, 0.7, 0.68)   # locked: greyer still, and a padlock (below)
-		if id == _hover:
-			r = r.grow(4.0 * z)
-		if Game.can_buy(id):   # affordable: a warm glow behind the ticket
-			var pulse := 0.5 + 0.5 * sin(Time.get_ticks_msec() / 250.0)
-			var gs := r.size * (1.45 + 0.05 * pulse)
-			draw_texture_rect(UiKit.glow(), Rect2(r.get_center() - gs * 0.5, gs), false, Color(1.0, 0.85, 0.4, 0.45 + 0.2 * pulse))
-		if tex != null:
-			draw_texture_rect(tex, r, false, tint)
-		else:
-			draw_rect(r, Color(0.95, 0.9, 0.78) * tint)
-		# Keep names and progress inside the paper's safe area. The stub is reserved for
-		# a small completion stamp; a partly purchased skill must never look completed.
-		var fs := int(21 * z)
-		var label := _name_lines(font, tr(n["name"]), fs, sz.x * 0.70)
-		var y := r.position.y + sz.y * 0.34
-		for line in label:
-			var tw := font.get_string_size(line, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
-			draw_string(font, Vector2(r.position.x + sz.x * 0.44 - tw * 0.5, y), line, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, Color(0.3, 0.17, 0.08))
-			y += fs * 1.2
-		var lvtext: String = tr("门票") if ticket else "%d/%d" % [lv, int(n["max"])]
-		var ls := int(16 * z)
-		draw_string(font, r.position + Vector2(16 * z, sz.y - 24 * z), lvtext, HORIZONTAL_ALIGNMENT_LEFT, -1, ls, Color(0.45, 0.25, 0.12))
-		var track := Rect2(r.position + Vector2(16 * z, sz.y - 16 * z), Vector2(sz.x - 64 * z, 5 * z))
-		draw_rect(track, Color(0.48, 0.3, 0.16, 0.22))
-		var fraction := clampf(float(lv) / maxf(1.0, float(n["max"])), 0.0, 1.0)
-		if fraction > 0.0:
-			draw_rect(Rect2(track.position, Vector2(track.size.x * fraction, track.size.y)), Color(0.6, 0.31, 0.1))
-		if Game.is_maxed(id) and _tex.has("stamp"):
-			var ss := 34.0 * z
-			var sc := r.position + Vector2(sz.x - 23 * z, sz.y - 28 * z)
-			draw_set_transform(sc, -0.25, Vector2.ONE)
-			draw_texture_rect(_tex.stamp, Rect2(-Vector2(ss, ss) * 0.5, Vector2(ss, ss)), false, Color(1, 1, 1, 0.8))
-			draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
-		if _tex.has("pin"):
-			var ps := 30.0 * z
-			draw_texture_rect(_tex.pin, Rect2(Vector2(c.x - ps * 0.5, r.position.y - ps * 0.55), Vector2(ps, ps)), false)
-		if n.get("locked", false):   # not yet: a padlock hung on the ticket
-			var ls2 := sz.y * 0.62
-			if _tex.has("icon_lock"):
-				draw_texture_rect(_tex.icon_lock, Rect2(r.get_center() + Vector2(sz.x * 0.28, -sz.y * 0.05) - Vector2(ls2, ls2) * 0.5, Vector2(ls2, ls2)), false)
-	if _flash_time > 0.0 and _tex.has("fx_burst"):   # bought: a burst and stars
-		var q := 1.0 - _flash_time / 0.3
-		var bs := NODE_R * 2.0 * (1.0 + 1.2 * q) * _zoom
-		draw_set_transform(_flash_at, q * 0.6, Vector2.ONE)
-		draw_texture_rect(_tex.fx_burst, Rect2(-Vector2(bs, bs) * 0.5, Vector2(bs, bs)), false, Color(1, 1, 1, 1.0 - q * q))
-		draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
-		if _tex.has("fx_star"):
-			for j in 5:
-				var at := _flash_at + Vector2.from_angle(j * TAU / 5.0 + 0.3) * bs * (0.35 + 0.3 * q)
-				var ss := 34.0 * (1.0 - 0.5 * q)
-				draw_texture_rect(_tex.fx_star, Rect2(at - Vector2(ss, ss) * 0.5, Vector2(ss, ss)), false, Color(1, 1, 1, 1.0 - q))
-	# header, on a small chalkboard so it reads on the cork
-	UiKit.nine(self, _tex.get("ui_chalkboard", null), Rect2(24, 14, 580, 290 if Game.open_trial() == "" else 350), 60.0, 0.7)
-	draw_string_outline(font, Vector2(60, 80), "token %s" % Game.fmt(Game.tokens), HORIZONTAL_ALIGNMENT_LEFT, -1, 52, 10, Color(0.1, 0.05, 0.02))
-	draw_string(font, Vector2(60, 80), "token %s" % Game.fmt(Game.tokens), HORIZONTAL_ALIGNMENT_LEFT, -1, 52, Color(1.0, 0.93, 0.72))
-	draw_string(font, Vector2(60, 125), tr("第 %d 顿饭 · 累计吐出 %s token") % [Game.runs + 1, Game.fmt(Game.total_tokens)], HORIZONTAL_ALIGNMENT_LEFT, -1, 26, Color(0.95, 0.85, 0.7))
-	if _flash_text != "":
-		draw_string(font, Vector2(60, 300), _flash_text, HORIZONTAL_ALIGNMENT_LEFT, -1, 26, Color(1.0, 0.85, 0.5))
-	var sigs: Array = []
-	for id in Game.active_signatures():
-		sigs.append(tr(CanteenRun.NAMES[CanteenRun.KIND[id]]))
-	if Game.stat("sig_slots") > 0.0:
-		draw_string(font, Vector2(60, 255), tr("招牌菜：%s") % ("、".join(sigs) if not sigs.is_empty() else tr("（无）")), HORIZONTAL_ALIGNMENT_LEFT, -1, 24, Color(1.0, 0.9, 0.7))
-	var bt := Game.open_trial()
-	if bt != "":
-		draw_string(font, Vector2(60, 340), tr("最好的一顿 %s / 评测目标 %s") % [Game.fmt(Game.best_run), Game.fmt(Game.trial_target(bt))], HORIZONTAL_ALIGNMENT_LEFT, -1, 24, Color(1.0, 0.8, 0.6))
-	CanteenRun.load_menu()
-	draw_string(font, Vector2(60, 215), tr("菜谱图鉴 %d / %d") % [Game.recipes.size(), CanteenRun.RECIPES.size()], HORIZONTAL_ALIGNMENT_LEFT, -1, 26, Color(1.0, 0.88, 0.55))
-	draw_string(font, Vector2(60, 175), tr(Game.plate()), HORIZONTAL_ALIGNMENT_LEFT, -1, 40, Color(1.0, 0.8, 0.45))
-	if _hover != "":
-		_draw_tooltip(font, Game.node(_hover))
+		var id: String = n.id
+		var rect := Rect2(_at(n) - BOARD.position - TICKET * _zoom * 0.5, TICKET * _zoom)
+		var owned := Game.level(id) > 0
+		var selected := id == _hover
+		var maxed := Game.is_maxed(id)
+		var tint := Color(0.92, 1.0, 0.95) if maxed else Color.WHITE if owned or Game.can_buy(id) else Color(0.88, 0.90, 0.88)
+		var border := NAVY if selected else BRASS if Game.can_buy(id) else Color("a7b0a1")
+		_board.draw_style_box(UiKit.box(Color(0.15, 0.20, 0.18, 0.13), Color.TRANSPARENT, 0, 5), Rect2(rect.position + Vector2(0, 2), rect.size))
+		# A real paper ticket with an intact perforated stub. Only its blank centre stretches.
+		UiKit.nine(_board, TICKET_ART, rect, 24, minf(0.5 * _zoom, 0.5), tint)
+		if selected or Game.can_buy(id):
+			_board.draw_style_box(UiKit.box(Color.TRANSPARENT, border, 3 if selected else 1, 5, 3 if selected else 1), rect)
+		if maxed and _zoom >= 0.85:
+			var seal := 24 * _zoom
+			_board.draw_texture_rect(STAMP_ART, Rect2(rect.end - Vector2(seal + 12, seal + 8), Vector2.ONE * seal), false, Color(0.80, 0.88, 0.87, 0.80))
+		if selected:
+			_board.draw_rect(Rect2(rect.position + Vector2(12, 10), Vector2(5, rect.size.y - 20)), BRASS)
+		var fs := maxi(19, roundi(23 * _zoom))
+		var lines := _name_lines(font, tr(n.name), fs, rect.size.x - 34)
+		if _zoom < 0.85 and lines.size() > 1:
+			lines = [lines[0]]
+		var y := rect.position.y + maxf(24, 29 * _zoom)
+		for line in lines:
+			_board.draw_string(font, Vector2(rect.position.x + 18, y), line, HORIZONTAL_ALIGNMENT_LEFT, rect.size.x - 32, fs, INK)
+			y += fs * 1.16
+		var lv := "%d / %d" % [Game.level(id), int(n.max)]
+		if maxed:
+			lv = "✓ " + lv
+		elif n.get("locked", false):
+			lv = "○ " + lv
+		_board.draw_string(font, rect.position + Vector2(18, rect.size.y - 13), lv, HORIZONTAL_ALIGNMENT_LEFT, -1, maxi(17, roundi(19 * _zoom)), SOFT)
+	_board.draw_rect(Rect2(0, 0, BOARD.size.x, 72), Color("eee7d5"))
+	_board.draw_line(Vector2(18, 72), Vector2(BOARD.size.x - 18, 72), Color("cec7b4"), 1)
 
 
-## A node's name in at most two lines of max_w px (English names are long): split at spaces,
-## or anywhere for Chinese, and cut the rest with "…".
 func _name_lines(font: Font, text: String, fs: int, max_w: float) -> Array:
-	var fits := func(t: String) -> bool: return font.get_string_size(t, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x <= max_w
-	if fits.call(text):
-		return [text]
-	if text.contains("："):   # 「System Prompt：今日菜单」: the meme on top, the plain name below
-		var parts := text.split("：", true, 1)
-		return [_name_lines(font, parts[0], fs, max_w)[0], _name_lines(font, parts[1], fs, max_w)[0]]
-	var words: Array = Array(text.split(" ")) if text.contains(" ") else Array(text.split(""))
-	var sep := " " if text.contains(" ") else ""
-	var first := ""
-	var i := 0
-	while i < words.size() and fits.call((first + sep + words[i]) if first != "" else words[i]):
-		first = (first + sep + words[i]) if first != "" else words[i]
-		i += 1
-	var rest := sep.join(words.slice(i))
-	while rest.length() > 1 and not fits.call(rest):
-		rest = rest.left(rest.length() - 2) + "…"
-	return [first, rest] if first != "" else [rest]
-
-
-func _draw_tooltip(font: Font, n: Dictionary) -> void:
-	var id: String = n["id"]
-	var lines := [[tr(n["name"]), 34, Color.WHITE], [tr(n["desc"]), 24, Color(0.95, 0.88, 0.75)]]
-	var need := int(n.get("need_levels", 0))
-	var have := Game.ring_levels(int(n.get("ring", 0)))
-	if n.get("locked", false):
-		lines.append([tr("敬请期待"), 26, Color(0.6, 0.6, 0.65)])
-	elif n.get("kind", "") == "ticket" and Game.is_maxed(id):
-		lines.append([tr("已提交：点右下角红色按钮开始评测") if Game.open_trial() != "" else tr("已发布"), 26, Color(0.95, 0.82, 0.45)])
-	elif Game.is_maxed(id):
-		lines.append([tr("已满级"), 26, Color(0.95, 0.82, 0.45)])
-	else:
-		if n.get("key", false):
-			lines.append([tr("新的赚钱方式"), 24, Color(1.0, 0.75, 0.3)])
-		if Game.level(id) > 0:
-			lines.append([tr("右键退掉这个技能（全额退款）"), 22, Color(0.8, 0.75, 0.7)])
-		if need > have:
-			lines.append([tr("要先在这一环升满 %d 级（现在 %d 级）") % [need, have], 26, Color(1.0, 0.7, 0.5)])
-		var afford := Game.tokens >= Game.cost(id)
-		lines.append([tr("花费 %s token") % Game.fmt(Game.cost(id)), 26, Color(0.75, 1.0, 0.8) if afford else Color(1.0, 0.55, 0.5)])
-	const WRAP := 640.0
-	var w := 0.0
-	var h := 40.0
-	for l in lines:
-		var sz := font.get_multiline_string_size(l[0], HORIZONTAL_ALIGNMENT_LEFT, WRAP, l[1])
-		w = maxf(w, sz.x)
-		h += sz.y + 10.0
-	var pos := _at(n) + Vector2(TICKET.x * _zoom * 0.5 + 16, -60)
-	pos.x = clampf(pos.x, 20.0, size.x - w - 60)
-	pos.y = clampf(pos.y, 20.0, size.y - h - 20.0)
-	# Child controls draw above this board. Keep the complete explanation clear of both
-	# lunch and trial actions, including the chalkboard's painted frame.
-	for action in [_start, _trial]:
-		if action.visible:
-			var blocked: Rect2 = action.get_rect().grow(18.0)
-			if Rect2(pos, Vector2(w + 40, h)).grow(10.0).intersects(blocked):
-				pos.y = maxf(20.0, blocked.position.y - h - 10.0)
-	_tooltip_bounds = Rect2(pos, Vector2(w + 40, h)).grow(10.0)
-	UiKit.nine(self, _tex.get("ui_chalkboard", null), _tooltip_bounds, 60.0, 0.6)
-	var y := pos.y + 20
-	for l in lines:
-		draw_multiline_string(font, Vector2(pos.x + 20, y + l[1]), l[0], HORIZONTAL_ALIGNMENT_LEFT, WRAP, l[1], -1, l[2])
-		y += font.get_multiline_string_size(l[0], HORIZONTAL_ALIGNMENT_LEFT, WRAP, l[1]).y + 10.0
+	var lines: Array[String] = []
+	var current := ""
+	var words := text.split(" ") if text.contains(" ") else text.split("")
+	var separator := " " if text.contains(" ") else ""
+	for word in words:
+		var candidate := current + (separator if current != "" else "") + word
+		if font.get_string_size(candidate, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x > max_w and current != "":
+			lines.append(current)
+			current = word
+		else:
+			current = candidate
+	if current != "":
+		lines.append(current)
+	if Settings.is_english() and not text.contains(" ") and lines.size() > 1:
+		lines = [text]  # Truncate a long English word instead of leaving a one-letter second line.
+	if lines.size() > 2:
+		lines = [lines[0], lines[1] + "…"]
+	for i in lines.size():
+		while lines[i].length() > 1 and font.get_string_size(lines[i], HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x > max_w:
+			lines[i] = lines[i].left(lines[i].length() - 2) + "…"
+	return lines
