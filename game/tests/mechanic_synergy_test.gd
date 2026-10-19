@@ -141,6 +141,27 @@ func _ready() -> void:
 	var roomy := heated._new_basin(Vector2.ZERO)
 	heated._catch(roomy, leg, false)
 	_check(CanteenRun.K(roomy.items.back()) == CanteenRun.KIND.burger and not heated._pack(roomy.items).is_empty(), "a larger replacement is still allowed when it fits")
+	var rerolled := heated._new_basin(Vector2.ZERO)
+	rerolled.items = [leg, leg, leg, leg]
+	heated.regen = 1.0 # branch fixture: the real arrival path must respect capacity too
+	heated._serve(rerolled)
+	_check(heated._queue.has(rerolled) and heated._space(rerolled) == 4 and not heated._pack(rerolled.items).is_empty(), "regenerate cannot overfill a full delivered box")
+	_check(rerolled.items.all(func(it): return CanteenRun.K(it) == CanteenRun.KIND.leg and CanteenRun.grade(it) == 1 and CanteenRun.is_hot(it)), "blocked rerolls improve original dishes instead of expanding them")
+	var sparse := heated._new_basin(Vector2.ZERO)
+	sparse.items = [leg, leg]
+	heated._serve(sparse)
+	_check(sparse.items.all(func(it): return CanteenRun.K(it) == CanteenRun.KIND.burger) and heated._space(sparse) == 4 and not heated._pack(sparse.items).is_empty(), "successive rerolls reserve space for remaining dishes")
+	heated.box_n = 3
+	var fragmented := heated._new_basin(Vector2.ZERO)
+	fragmented.items = [leg, leg, leg]
+	heated._serve(fragmented)
+	_check(heated._space(fragmented) == 5 and not heated._pack(fragmented.items).is_empty(), "six-cell box does not admit three two-cell dishes across two three-cell rows")
+	_check(CanteenRun.K(fragmented.items.back()) == CanteenRun.KIND.leg, "row fragmentation preserves the final original dish")
+	var immune := heated._new_basin(Vector2.ZERO)
+	immune.items = [CanteenRun.make(CanteenRun.KIND.egg_veg), CanteenRun.make(CanteenRun.KIND.leg, 0, true, true)]
+	var originals: Array = immune.items.duplicate()
+	heated._serve(immune)
+	_check(immune.items == originals, "reroll leaves existing recipes and ghost bites untouched")
 	heated.free()
 	_check(FileAccess.get_file_as_bytes(Settings.PATH) == settings_before, "mechanic validation preserves player settings")
 	print("MECHANIC_SYNERGY_TEST: %d checks, %d failures" % [_checks, _failures])

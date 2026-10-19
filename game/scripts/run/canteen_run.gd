@@ -1449,17 +1449,30 @@ func _serve(b: Dictionary) -> void:
 	_note_served(b)
 	_award_helper_relay(b)
 	if regen > 0.0 and not b.get("crew", false) and randf() < regen:
-		for i in b.items.size():
-			var it: int = b.items[i]
-			if not IS_SET[K(it)] and not is_ghost(it):
-				var up := _upgrade(K(it))
-				if up >= 0:
-					b.items[i] = with_hot(make(up, grade(it)))
+		_reroll_box(b)
 		_chip(Vector2(1600, 860), "dice")
 	if warm and best_of_n and (_warm == null or _box_worth(b) > _box_worth(_warm)):
 		_put_warm(b)
 		return
 	_queue.append(b)
+
+
+## Rerolling happens after delivery rules are frozen. It does not run recipe merges;
+## every replacement must fit the actual two-row grid alongside the remaining food.
+func _reroll_box(b: Dictionary) -> void:
+	for i in b.items.size():
+		var it: int = b.items[i]
+		if IS_SET[K(it)] or is_ghost(it):
+			continue
+		var up := _upgrade(K(it))
+		if up < 0:
+			continue
+		var candidate: Array = b.items.duplicate()
+		candidate[i] = with_hot(make(up, grade(it)))
+		if not _pack(candidate).is_empty():
+			b.items[i] = candidate[i]
+		else:
+			b.items[i] = with_hot(with_grade(it, grade(it) + 1))
 
 
 ## KV Cache 保温箱: this box waits until closing time (a box already in it goes to the queue).
