@@ -84,7 +84,8 @@ func _ready() -> void:
 	check(is_instance_valid(book), "pause book opens through keyboard confirmation")
 	book._tabs[3].grab_focus()
 	await key(KEY_ENTER)
-	check(book._page == "rules" and book._leaves.size() == 10 and book._page_count == 5, "handbook preserves ten explained mechanics over five true spreads")
+	var section_count := book._leaves.size()
+	check(book._page == "rules" and section_count >= 12, "handbook includes the original mechanics plus crew and automation guidance")
 	var visible_sections := 0
 	for page in book._page_count:
 		check(book._spread == page and book._entry_controls.size() == 2, "each handbook spread exposes two full sections")
@@ -94,9 +95,9 @@ func _ready() -> void:
 			await capture("handbook_first_spread")
 		if page + 1 < book._page_count:
 			await key(KEY_PAGEDOWN)
-	check(visible_sections == 10 and book._next.disabled, "keyboard reaches all ten sections and the final page boundary")
+	check(visible_sections == section_count and book._next.disabled, "keyboard reaches every explained section and the final page boundary")
 	await key(KEY_PAGEDOWN)
-	check(book._spread == 4, "extra page input cannot pass the final spread")
+	check(book._spread == book._page_count - 1, "extra page input cannot pass the final spread")
 	await capture("handbook_last_spread")
 	await key(KEY_ESCAPE)
 	check(get_tree().paused and not is_instance_valid(run._pause._book), "closing handbook returns to paused parent")

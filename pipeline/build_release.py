@@ -102,8 +102,21 @@ def main() -> None:
             "Local achievements are included. Steam integration is not yet configured.\n",
             encoding="utf-8")
         shutil.make_archive(str(output / f"FatFish-{version}-{folder}"), "zip", target)
+    # Importers may normalize sidecar metadata (e.g. a BMFont owns its PNG atlas
+    # and marks that image's separate importer as skip). Record both the copied
+    # inputs and the actual exported source; do not claim those bytes are equal.
+    export_source_hashes = {str(p.relative_to(stage)).replace("\\", "/"): sha(p)
+                            for p in sorted(stage.rglob("*"))
+                            if p.is_file() and ".godot" not in p.relative_to(stage).parts}
+    import_changes = {name: {"before": source_hashes.get(name), "after": export_source_hashes.get(name)}
+                      for name in sorted(source_hashes.keys() | export_source_hashes.keys())
+                      if source_hashes.get(name) != export_source_hashes.get(name)}
+    unexpected_changes = [name for name in import_changes if not name.endswith(".import")]
+    if unexpected_changes:
+        raise RuntimeError(f"Export changed non-import source files: {unexpected_changes}")
     manifest = {
         "version": version, "created_utc": stamp, "source_sha256": source_hashes,
+        "export_source_sha256": export_source_hashes, "import_changes": import_changes,
         "tooling_excluded": ["addons/", "tests/", "_mcp_game_helper", "editor_plugins"],
         "artifacts": {str(p.relative_to(output)).replace("\\", "/"): {"sha256": sha(p), "bytes": p.stat().st_size}
                       for p in output.rglob("*") if p.is_file() and p.suffix in {".zip", ".exe"}},

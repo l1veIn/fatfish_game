@@ -50,6 +50,9 @@ def main() -> None:
         ("focus", "focus_recovery_test", "focus_recovery", "FOCUS_RECOVERY_TEST failures=0"),
         ("controls", "canteen_controls_test", "canteen_controls", '"ok":true'),
         ("mechanics", "mechanic_synergy_test", "mechanic_synergy", "MECHANIC_SYNERGY_TEST:"),
+        ("helper-strategy", "helper_strategy_test", "helper_strategy", "HELPER_STRATEGY_TEST:"),
+        ("helper-shift", "helper_shift_test", "helper_shift", "HELPER_SHIFT_TEST PASS failures=0"),
+        ("crew-planner", "crew_planner_test", "crew_planner", "CREW_PLANNER_TEST PASS failures=0"),
         ("planner", "meal_planner_test", "meal_planner_release", "MEAL_PLANNER_TEST PASS failures=0"),
         ("service-ui", "canteen_presentation_test", "canteen_presentation_release", '"failures":[]'),
         ("collections", "collection_presentation_test", "collection_presentation", "COLLECTION_PRESENTATION_TEST: 0 failures"),
@@ -94,6 +97,14 @@ def main() -> None:
                     if small and name in {"service", "tree"}:
                         command.append("--small")
                     execute(key, command, marker)
+                crew_size = "960x540" if small else "1920x1080"
+                key = f"crew-planner-{locale}-{crew_size}"
+                command = [str(ENGINE), "--path", str(ROOT / "game"), "--resolution", crew_size,
+                           "res://tests/crew_planner_test.tscn", "--", "--test-profile=crew_planner",
+                           f"--lang={locale}", f"--out={out / key}"]
+                if small:
+                    command.append("--small")
+                execute(key, command, "CREW_PLANNER_TEST PASS failures=0")
         for locale in ["zh_CN", "en"]:
             shots = out / f"visual-{locale}"
             execute(f"ending-{locale}", [str(ENGINE), "--path", str(ROOT / "game"), "--resolution", "1280x720",
@@ -111,6 +122,14 @@ def main() -> None:
         execute("settings-visual", [str(ENGINE), "--path", str(ROOT / "game"), "--resolution", "1280x720",
                 "res://tests/settings_release_test.tscn", "--", "--test-profile=settings-release",
                 f"--settings-shots={out / 'settings-visual'}"], "SETTINGS_RELEASE_TEST failures=0")
+        for locale, small in [("zh_CN", False), ("en", True)]:
+            key = f"helper-shift-{locale}"
+            command = [str(ENGINE), "--path", str(ROOT / "game"),
+                       "res://tests/helper_shift_test.tscn", "--", "--test-profile=helper_shift",
+                       f"--lang={locale}", f"--out={out / key}"]
+            if small:
+                command.append("--small")
+            execute(key, command, "HELPER_SHIFT_TEST PASS failures=0", 180)
     if args.runs > 0:
         execute("pacing", [str(ENGINE), "--headless", "--path", str(ROOT / "game"), "--", "--autotest",
                 f"--test-profile=release_pacing_{stamp}", f"--runs={args.runs}"], "AUTOTEST OK:", 1800)

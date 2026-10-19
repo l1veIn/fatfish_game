@@ -167,7 +167,9 @@ static func numerals() -> Font:
 		var d: Font = load("res://assets/ui/ZCOOLKuaiLe.ttf") if ResourceLoader.exists("res://assets/ui/ZCOOLKuaiLe.ttf") else ThemeDB.fallback_font
 		if ResourceLoader.exists("res://assets/ui/numerals.fnt"):
 			var f: FontFile = load("res://assets/ui/numerals.fnt")
-			f.fallbacks = [d]
+			# Keep the painted digits, then resolve status symbols such as the grok tick
+			# from our bundled UI font instead of showing a missing-glyph box.
+			f.fallbacks = [d, load("res://assets/ui/ui_font.tres")]
 			_numerals = f
 		else:
 			_numerals = d

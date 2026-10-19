@@ -101,6 +101,17 @@ func _ready() -> void:
 	run.critic = 0.2
 	run.cache_bonus = 0.25
 	run._cache_ready = true
+	run.crew_relay = 0.3
+	run._helper_relay = {"sweep": true, "recipe": true, "nutrition": true}
+	check(run._nfont.has_char(0x2713), "grok completion checkmark resolves from a bundled font")
+	# Use the real numeral atlas, both badge densities and the maximum bounce. Long
+	# localized labels must leave room for the number's visible black outline.
+	for compact in [false, true]:
+		for pair in [["接力", "+90%"], ["流式", "×100.0"], ["缓存", "+25%"]]:
+			var badge: Dictionary = run._badge_layout(Vector2(1730, 600), "chain", pair[1], tr(pair[0]), 1900.0, compact, 1.12)
+			check(Rect2(0, 0, 1920, 1080).encloses(badge.bounds), "animated badge stays inside screen: %s / %s" % [pair[0], compact])
+			check(badge.value_ink_span.y <= badge.safe_span.y and badge.value_ink_span.x >= badge.safe_span.x, "outlined number stays inside enamel: %s / %s" % [pair[0], compact])
+			check(badge.label_span.y < badge.value_ink_span.x, "badge label and outlined number do not overlap: %s / %s" % [pair[0], compact])
 	run._shown = 999999999
 	run._banners.clear()
 	await shot("late_shift")
