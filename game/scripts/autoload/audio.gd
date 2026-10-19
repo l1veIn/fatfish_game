@@ -73,11 +73,19 @@ var _cutoff := 20000.0
 ## Character voices (pipeline/gen_voice.py): res://assets/audio/voice/<role>_<cue>_v<n>.ogg, one
 ## designed voice per character, one player per character.
 const VO_DIR := "res://assets/audio/voice"
+## Eating reactions share a real-time budget, even when meals or tests run faster.
+## Purchase/pat feedback (happy / not_fat) and key story/gameplay cues stay immediate.
+const FISH_NORMAL_CUES := ["fish_dig_in", "fish_bang", "fish_hmph", "fish_wait", "fish_grimace",
+	"fish_bliss", "fish_savor", "fish_munch", "fish_crit"]
+const FISH_VOICE_COOLDOWN := 4.0       # minimum seconds between ordinary line starts
+const FISH_VOICE_GAP := 0.65           # quiet after her last line finishes or is interrupted
 var _mouth: AudioStreamPlayer
 var _mouth_free := 0.0                 # ticks clock (s) when her mouth can chomp again
 var _vo := {}                          # "fish_spit" -> [streams]
 var _vo_player := {}                   # role -> AudioStreamPlayer
 var _vo_prio := {}                     # role -> priority of what it is saying
+var _fish_last_normal := -100.0        # ticks clock; a rejected request never extends it
+var _fish_quiet_until := 0.0
 
 
 func _ready() -> void:
@@ -351,19 +359,26 @@ func voice_playing() -> bool:
 
 
 ## A character noise: "fish_savor", "auntie_care" ... A random variant, the pitch a little off.
-## One line at a time across all characters: `priority` decides. A line cuts off whatever anyone
-## is saying at the same or a lower priority, and is skipped while a higher one plays
-## (0 = filler like munching: never interrupts, skipped while anyone speaks).
-## `chance`: frequent moments don't always speak.
+## One line at a time across all characters. Ordinary eating reactions never interrupt a line,
+## and share a 4s start cooldown plus a 0.65s breathing gap after her voice ends. Other cues keep
+## the existing priority rule: equal/higher may interrupt, 0 never interrupts. Priority 3+
+## explicitly marks an important event (including the receipt's fish_savor), bypassing the CD.
+## `chance` remains the caller's probability; skipped requests are discarded, never queued.
 func vo(cue: String, priority := 1, chance := 1.0, volume_db := 0.0) -> void:
 	var variants: Array = _vo.get(cue, [])
-	if variants.is_empty() or randf() > chance:
+	if variants.is_empty() or chance <= 0.0 or randf() > chance:
+		return
+	var normal := cue in FISH_NORMAL_CUES and priority < 3
+	var now := Time.get_ticks_msec() / 1000.0
+	if normal and (now < _fish_last_normal + FISH_VOICE_COOLDOWN or now < _fish_quiet_until):
 		return
 	for r in _vo_player:
 		var other: AudioStreamPlayer = _vo_player[r]
-		if other.playing and (priority == 0 or int(_vo_prio.get(r, 0)) > priority):
+		if other.playing and (normal or priority == 0 or int(_vo_prio.get(r, 0)) > priority):
 			return
 	for r in _vo_player:
+		if r == "fish" and _vo_player[r].playing:
+			_fish_quiet_until = maxf(_fish_quiet_until, now + FISH_VOICE_GAP)
 		_vo_player[r].stop()
 	var role := cue.get_slice("_", 0)
 	if role == "fish":
@@ -372,6 +387,7 @@ func vo(cue: String, priority := 1, chance := 1.0, volume_db := 0.0) -> void:
 		var p := AudioStreamPlayer.new()
 		p.bus = "Voice"
 		add_child(p)
+		p.finished.connect(_vo_finished.bind(role))
 		_vo_player[role] = p
 	var player: AudioStreamPlayer = _vo_player[role]
 	var pick := randi() % variants.size()
@@ -383,3 +399,10 @@ func vo(cue: String, priority := 1, chance := 1.0, volume_db := 0.0) -> void:
 	player.pitch_scale = randf_range(0.96, 1.04)
 	player.play()
 	_vo_prio[role] = priority
+	if normal:
+		_fish_last_normal = now
+
+
+func _vo_finished(role: String) -> void:
+	if role == "fish":
+		_fish_quiet_until = Time.get_ticks_msec() / 1000.0 + FISH_VOICE_GAP
