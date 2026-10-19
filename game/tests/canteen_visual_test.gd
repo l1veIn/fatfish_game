@@ -248,7 +248,7 @@ func _ready() -> void:
 	key_down(true)
 	await wait_real(0.18)
 	check(run._thinking and Input.is_action_pressed("think"), "real Space press enters deep thought")
-	await shot("10_think_prediction", "Real held input activates thought; pale blue marks predict the current box catch height")
+	await shot("10_think_active", "Real held input activates thought with the energy gauge and no landing markers")
 	# PNG encoding can stall the render thread; engine delta need not track the
 	# wall-clock screenshot cost. Observe exhaustion itself with a bounded wait.
 	var depletion_deadline := Time.get_ticks_msec() + 3000

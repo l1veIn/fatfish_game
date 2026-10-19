@@ -15,9 +15,8 @@ extends Node2D
 ##                Space / Shift / B / RB / RT think, Esc / P / Start pause (PauseMenu)
 ## A shift ends at 吃饱了 (stomach full) or 食堂关门 (the meal clock runs out); then a result
 ## card, then `finished`. All numbers come from Game.stat() (the skill tree).
-##   Space / RMB  深度思考 (from R1): the world slows down and every
-##                piece of food shows where it will cross the basin's height; a gauge limits it
-## Later versions add 混合思考 (V3.1: good food always shows where it lands) and DSA (V3.2: the
+##   Space / RMB  深度思考 (from R1): the world slows down; energy and cooldown limit it.
+## Later versions add DSA (V3.2: the
 ## magnet only pulls good food, greens bounce off, golden 「极」 hop around in normal shifts).
 ## `trial` = a 评测: an ordinary shift that must earn `target` tokens (docs/core_design_v4.md).
 ## The old special trial rules below hang on `legacy`, which is never set any more:
@@ -38,6 +37,7 @@ const GRAVITY := 900.0
 const FLOOR_Y := 1010.0
 const SLOTS := 8                      # most tentacles 梁阿姨 can have
 const STALL_ORDER := ["dim", "wok", "main", "fry", "sweet"]   # the five windows, 主食 in the middle
+var stall_order: Array = STALL_ORDER.duplicate() # identities occupying the five fixed slots
 ## One long canteen counter (counter_long.png at COUNTER_RECT): its food pans, by window, as x
 ## centres; a window's dishes sit in its pans, a closed window has a shutter over them.
 const COUNTER_RECT := Rect2(35, 34, 1420, 474)
@@ -380,7 +380,6 @@ var can_think := false
 var think_time := 2.5
 var think_slow := 0.35
 var think_regen := 0.4
-var hybrid := false                   # 混合思考 (V3.1): good food always shows where it lands
 var dsa := false                      # DSA (V3.2): the magnet ignores greens and 「极」, greens bounce off
 var crit_mult := 2.0
 var app_rate := 0.0                   # takeout boxes per minute (帮我做个 App)
@@ -583,6 +582,15 @@ func _ready() -> void:
 	_service_ui = SERVICE_UI.new()
 	_service_ui.run = self
 	add_child(_service_ui)
+	_maybe_stall_layout_intro()
+
+
+func _maybe_stall_layout_intro() -> void:
+	if autotest or trial != "" or _learning() or not Game.stall_layout_intro_due():
+		return
+	_banner("档口也能换位置", tr("按 Esc → 档口指南，把常接的菜摆在一起"), "box")
+	Game.seen_buttons["intro_stall_layout"] = true
+	Game.save_game()
 
 
 func _setup_coach() -> void:
@@ -690,7 +698,7 @@ func _read_stats() -> void:
 	think_time = Game.stat("think_time")
 	think_slow = Game.stat("think_slow")
 	think_regen = Game.stat("think_regen")
-	hybrid = Game.version >= 2
+	stall_order = Game.active_stall_order()
 	dsa = Game.version >= 3
 	crit_mult = Game.stat("crit_mult")
 	app_rate = 0.0
@@ -756,8 +764,8 @@ func _load_art() -> void:
 
 func _setup_arms() -> void:
 	_arms.clear()
-	# five fixed windows (STALL_ORDER); the tentacles go round the open ones, and a window with
-	# several tentacles spreads them across its width. Closed windows have their shutter down.
+	# Allocate by stable identity order, independently of where the stalls were moved.
+	# Swapping windows must not increase any stall's supply or reset its preparation.
 	var open: Array = []
 	for id in STALL_ORDER:
 		if stall_lv.get(id, 0) > 0:
@@ -772,7 +780,7 @@ func _setup_arms() -> void:
 		var n: int = per[st]
 		var k: int = seen.get(st, 0)
 		seen[st] = k + 1
-		var x := _win_x(STALL_ORDER.find(st)) + (k - (n - 1) * 0.5) * minf(70.0, _win_span(st) / maxf(n - 1, 1))
+		var x := _win_x(stall_slot(st)) + (k - (n - 1) * 0.5) * minf(70.0, _win_span(st) / maxf(n - 1, 1))
 		var t0 := randf_range(0.3, 2.0)
 		_arms.append({"x": x, "t": t0, "t0": t0, "raise": 0.0, "stall": st, "ladle": k + 1})
 	for a in _arms:
@@ -837,7 +845,7 @@ func _update_arm_art() -> void:
 		_arm_ladles[i].rotation = (pose[2] as Vector2).angle() - LADLE_AXIS
 
 
-## The middle of window i (STALL_ORDER) along the counter.
+## The middle of physical counter slot i; the counter artwork never moves.
 func _win_x(i: int) -> float:
 	var p: Array = PANS[STALL_ORDER[i]]
 	return (p[0] + p[p.size() - 1]) * 0.5
@@ -845,8 +853,42 @@ func _win_x(i: int) -> float:
 
 ## How far a window's tentacles may spread.
 func _win_span(st: String) -> float:
-	var p: Array = PANS[st]
+	var p := stall_pans(st)
 	return float(p[p.size() - 1]) - float(p[0])
+
+
+func stall_slot(id: String) -> int:
+	return stall_order.find(id)
+
+
+func stall_pans(id: String) -> Array:
+	var slot := stall_slot(id)
+	return PANS[STALL_ORDER[slot]].duplicate() if slot >= 0 else []
+
+
+## An in-place pause edit. Existing arms retain their timers, dish, lift and allocation.
+func apply_stall_order(order: Array) -> bool:
+	if not is_inside_tree() or not is_node_ready() or not get_tree().paused or _ended or not Game._valid_stall_order(order):
+		return false
+	if not Game.set_stall_order(order):
+		return false
+	stall_order = Game.active_stall_order()
+	var per := {}
+	for a in _arms:
+		per[a.stall] = int(per.get(a.stall, 0)) + 1
+	var seen := {}
+	for a in _arms:
+		var n: int = per[a.stall]
+		var k: int = seen.get(a.stall, 0)
+		seen[a.stall] = k + 1
+		a.x = _win_x(stall_slot(a.stall)) + (k - (n - 1) * 0.5) * minf(70.0, _win_span(a.stall) / maxf(n - 1, 1))
+	_update_arm_art()
+	if is_instance_valid(_front):
+		_front.queue_redraw()
+	if is_instance_valid(_service_ui):
+		_service_ui.queue_redraw()
+	queue_redraw()
+	return true
 
 
 func _new_basin(at: Vector2) -> Dictionary:
@@ -1986,27 +2028,6 @@ func _time_to(i: int, y: float) -> float:
 	return (-v.y + sqrt(v.y * v.y + 2.0 * g * (y - p.y))) / g
 
 
-## Predict at the box's current catching height, with the same local steering as live food.
-## The box can move afterwards; helpers may deflect a dish, so this is refreshed every frame.
-func _landing_prediction(i: int, y: float) -> Dictionary:
-	var duration := _time_to(i, y)
-	if not is_finite(duration) or duration < 0.0 or duration > 2.0 or K(_fk[i]) in HOPPY:
-		return {}
-	var p := _fp[i]
-	var v := _fv[i]
-	var elapsed := 0.0
-	while elapsed < duration:
-		var dt := minf(1.0 / 90.0, duration - elapsed)
-		var initial_vy := v.y
-		v.y += _fg[i] * dt
-		v = _steer_food(p, v, _fk[i], dt, _t + elapsed)
-		if not _crew.is_empty():
-			v = _crew_tricks(p, v, _fk[i], dt, false)
-		p += Vector2(v.x * dt, initial_vy * dt + 0.5 * _fg[i] * dt * dt)
-		elapsed += dt
-	return {"position": Vector2(p.x, y), "time": duration}
-
-
 ## Full boxes wait right of the empty stack, slightly overlapping when there are many.
 func _table_slot(i: int) -> Vector2:
 	return FULL_AT + Vector2(0, -11.0 * i)
@@ -3112,8 +3133,8 @@ func _draw_front() -> void:
 		_front.draw_texture(_counter, COUNTER_AT)
 	else:
 		_front.draw_texture_rect(_counter_long, COUNTER_RECT, false)
-	for id in STALL_ORDER:
-		var pans: Array = PANS[id]
+	for id in stall_order:
+		var pans := stall_pans(id)
 		var lv: int = stall_lv.get(id, 0)
 		if lv <= 0:   # not serving yet: empty pans, a little darker
 			var x0: float = pans[0] - PAN_W * 0.5
@@ -3211,22 +3232,6 @@ func _draw() -> void:
 		_draw_food(int(_pile_k[i]), _pile[i], 0.0, 0.9)
 	for i in _fp.size():
 		_draw_item(_fk[i], _fp[i], _fr[i], 1.0)
-	if (_thinking or hybrid) and _hand != null:
-		# 深度思考: where each piece of food will cross the basin's height; 混合思考 always marks
-		# the good food (a 「极」 hops, so it is never marked)
-		var hy: float = _hand.pos.y
-		for i in _fp.size():
-			var p := _fp[i]
-			var k := K(_fk[i])
-			if p.y > hy or (PICKY[k] and not _wanted(_fk[i])) or k in HOPPY or not (_thinking or _is_good(_fk[i])):
-				continue
-			var prediction := _landing_prediction(i, hy)
-			if not prediction.is_empty():
-				var land: Vector2 = prediction.position
-				var mark := Color(0.62, 0.86, 1.0, 0.8)
-				_glow(self, land, 38.0, Color(mark, 0.35), 0.3)
-				draw_line(land + Vector2(-12, 0), land + Vector2(12, 0), mark, 2.0, true)
-				draw_line(land + Vector2(0, -8), land, mark, 2.0, true)
 	if _busy_t > 0.0:
 		draw_rect(Rect2(TABLE.position + Vector2(20, -70), Vector2(330, 54)), Color(0.85, 0.2, 0.2, 0.9))
 		_label(font, TABLE.position + Vector2(36, -32), tr("服务器繁忙，请稍后重试"), HORIZONTAL_ALIGNMENT_LEFT, -1, 26, Color.WHITE)
@@ -3582,8 +3587,6 @@ func _draw_hud(font: Font) -> void:
 		_fit_write(font, think_panel.position + Vector2(111, 44), tr("深度思考"), 24, 213, PAPER)
 		_fit_write(_nfont, think_panel.position + Vector2(340, 44), "%.1fs" % _think, 21, 84, PAPER)
 		_fit_write(font, think_panel.position + Vector2(111, 85), _think_hint(), 20, 313, PAPER)
-		if _thinking or hybrid:
-			_fit_write(font, think_panel.position + Vector2(111, 119), tr("蓝线：饭盒高度的预计落点"), 18, 313, Color(0.72, 0.86, 0.91))
 	# B: the cash register and the 主 / 荤 / 素 tray
 	var b := Rect2(1530, 14, 370, 92)
 	_piece("ui_paper", b)

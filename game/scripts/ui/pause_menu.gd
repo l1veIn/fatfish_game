@@ -94,7 +94,7 @@ func _has_child_panel() -> bool:
 func _open_stalls() -> void:
 	if _has_child_panel() or not is_instance_valid(stall_guide):
 		return
-	stall_guide.open_guide(2, self)
+	stall_guide.open_guide(-1, self)
 
 
 func _open_book() -> void:

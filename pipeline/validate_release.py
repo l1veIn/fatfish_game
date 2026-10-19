@@ -58,6 +58,9 @@ def main() -> None:
         ("collections", "collection_presentation_test", "collection_presentation", "COLLECTION_PRESENTATION_TEST: 0 failures"),
         ("shell", "presentation_shell_test", "presentation_shell_release", "PRESENTATION_SHELL_TEST PASS"),
         ("tree-layout", "tree_presentation_test", "tree_presentation_release", '"failures":[]'),
+        ("progression-layout", "progression_layout_test", "progression_layout", "PROGRESSION_LAYOUT_TEST: 99 checks, 0 failures"),
+        ("tree-dependency", "tree_dependency_test", "tree_dependency_release", "TREE_DEPENDENCY_TEST PASS failures=0"),
+        ("stall-layout", "stall_layout_ui_test", "stall_layout_ui", "STALL_LAYOUT_UI_TEST PASS"),
     ]
 
     def execute(name: str, command: list[str], marker: str, timeout=120):
@@ -89,12 +92,14 @@ def main() -> None:
                 for name, scene, profile, marker in [
                         ("service", "canteen_presentation_test", "canteen_presentation_release", '"failures":[]'),
                         ("tree", "tree_presentation_test", "tree_presentation_release", '"failures":[]'),
+                        ("tree-dependency", "tree_dependency_test", "tree_dependency_release", "TREE_DEPENDENCY_TEST PASS failures=0"),
+                        ("stall-layout", "stall_layout_ui_test", "stall_layout_ui", "STALL_LAYOUT_UI_TEST PASS"),
                         ("shell", "presentation_shell_test", "presentation_shell_release", "PRESENTATION_SHELL_TEST PASS")]:
                     key = f"{name}-{locale}-{size}"
                     command = [str(ENGINE), "--path", str(ROOT / "game"), "--resolution", size,
                                f"res://tests/{scene}.tscn", "--", f"--test-profile={profile}",
                                f"--lang={locale}", f"--out={out / key}", f"--render-size={size}"]
-                    if small and name in {"service", "tree"}:
+                    if small and name in {"service", "tree", "tree-dependency", "stall-layout"}:
                         command.append("--small")
                     execute(key, command, marker)
                 crew_size = "960x540" if small else "1920x1080"

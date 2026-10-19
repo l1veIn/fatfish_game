@@ -114,7 +114,7 @@ const VERSIONS := [
 	{"plate": "大肥鱼 R1", "trial": "spring", "trial_name": "春节前夜·服务器繁忙", "target": 2000.0,
 		"reward": "深度思考、上下文 64K（流式、连击和招牌菜的成长上限提高）、饭点延长"},
 	{"plate": "大肥鱼 V3.1", "trial": "hybrid", "trial_name": "嗯，用户想要……", "target": 20000.0,
-		"reward": "混合思考（好菜自动标出落点）、上下文 128K（成长上限提高）、饭点延长"},
+		"reward": "上下文 128K（成长上限提高）、饭点延长"},
 	{"plate": "大肥鱼 V3.2", "trial": "ji", "trial_name": "V3.1-Terminus 终于不再冒「极」字了", "target": 60000.0,
 		"reward": "DSA 稀疏注意力（未学顿悟时避开青菜）、上下文 256K（成长上限提高）、饭点延长"},
 	{"plate": "大肥鱼 V4", "trial": "v4", "trial_name": "下周一定", "target": 400000.0,
@@ -135,6 +135,8 @@ var signatures: Array = []  # 招牌菜 picked by the player (food ids); see act
 var struck: Array = []      # 今日菜单: dishes struck off (food ids), up to stat menu_cut
 const HELPER_IDS := ["wen", "pu", "g", "ke", "zi", "ge"]
 const AUTOMATION_KEYS := ["auto_push", "auto_return", "fuse3", "temp", "regen", "overfit"]
+const DEFAULT_STALL_ORDER := ["dim", "wok", "main", "fry", "sweet"]
+var stall_order: Array = DEFAULT_STALL_ORDER.duplicate()
 var helper_plan: Dictionary = {}  # optional schema-3 selections; missing entries keep the old team
 var automation: Dictionary = {}   # missing entries preserve the purchased skill's enabled behavior
 var _helper_recipe_cache_key := ""
@@ -533,6 +535,50 @@ func set_automation(key: String, enabled: bool) -> bool:
 	return true
 
 
+func _valid_stall_order(value: Variant) -> bool:
+	if not value is Array or value.size() != DEFAULT_STALL_ORDER.size():
+		return false
+	var seen: Array = []
+	for id in value:
+		if not id is String or not DEFAULT_STALL_ORDER.has(id) or seen.has(id):
+			return false
+		seen.append(id)
+	return true
+
+
+func active_stall_order() -> Array:
+	return stall_order.duplicate() if _valid_stall_order(stall_order) else DEFAULT_STALL_ORDER.duplicate()
+
+
+func set_stall_order(order: Array) -> bool:
+	if not _valid_stall_order(order):
+		return false
+	var before := stall_order.duplicate()
+	var had_intro := seen_buttons.has("intro_stall_layout")
+	var prior_intro: Variant = seen_buttons.get("intro_stall_layout", false)
+	stall_order = order.duplicate()
+	seen_buttons["intro_stall_layout"] = true
+	if not save_game():
+		stall_order = before
+		if had_intro:
+			seen_buttons["intro_stall_layout"] = prior_intro
+		else:
+			seen_buttons.erase("intro_stall_layout")
+		return false
+	changed.emit()
+	return true
+
+
+func stall_layout_intro_due() -> bool:
+	if runs < 3 or bool(seen_buttons.get("intro_stall_layout", false)):
+		return false
+	var open := 0
+	for id in DEFAULT_STALL_ORDER:
+		if stat("stall_" + id) > 0:
+			open += 1
+	return open >= 2
+
+
 ## A recipe must have a feasible collection order, including intermediate auto-merges and
 ## the real two-row packing rule. These pure previews never discover recipes or spend food.
 func helper_recipe_options() -> Array:
@@ -725,7 +771,7 @@ func save_game() -> bool:
 	f.store_string(JSON.stringify({"version": SAVE_VERSION, "tokens": tokens, "total_tokens": total_tokens,
 		"runs": runs, "best_run": best_run, "levels": levels, "fish_version": version,
 		"trial_fails": trial_fails, "recipes": recipes, "signatures": signatures, "struck": struck,
-		"helper_plan": helper_plan, "automation": automation,
+		"helper_plan": helper_plan, "automation": automation, "stall_order": active_stall_order(),
 		"seen_buttons": seen_buttons, "achievements": achievements, "lifetime": lifetime,
 		"ending_seen": ending_seen, "saved_at": Time.get_unix_time_from_system()}, "\t"))
 	f.flush()
@@ -843,6 +889,8 @@ func load_game() -> void:
 	signatures = _food_list(d.get("signatures", []))
 	struck = _food_list(d.get("struck", []))
 	_load_helper_preferences(d)
+	var saved_order: Variant = d.get("stall_order", null)
+	stall_order = saved_order.duplicate() if _valid_stall_order(saved_order) else DEFAULT_STALL_ORDER.duplicate()
 	seen_buttons = {}
 	for id in d.get("seen_buttons", {}):
 		if d.seen_buttons[id] is bool:
@@ -926,6 +974,7 @@ func reset_save() -> void:
 	helper_plan = {}
 	automation = {}
 	seen_buttons = {}
+	stall_order = DEFAULT_STALL_ORDER.duplicate()
 	achievements = {}
 	lifetime = {"eaten": 0, "full_boxes": 0}
 	ending_seen = false

@@ -88,10 +88,10 @@ func _ready() -> void:
 		Game.levels[n.id] = 1
 	var skill := ""
 	for n in Game.nodes:
-		if n.get("kind", "") != "ticket" and int(n.max) >= 3 and float(n.growth) != 1.0 and float(n.cost) < 1000:
+		if n.get("kind", "") != "ticket" and int(n.max) >= 3 and float(n.growth) != 1.0 and float(n.cost) < 1000 and Game.refund_dependents(n.id).is_empty():
 			skill = n.id
 			break
-	check(not skill.is_empty(), "refund fixture has a scaling-price skill")
+	check(not skill.is_empty(), "full-refund fixture has a scaling-price skill with no purchased dependents")
 	Game.levels.erase(skill)
 	Game._recompute()
 	var before := Game.tokens

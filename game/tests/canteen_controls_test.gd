@@ -143,21 +143,17 @@ func _ready() -> void:
 	check(run._hand.items.size() == 1 and helper_box.items.is_empty(), "earliest player contact wins before lower helper in long frame")
 	run._crew.clear()
 	clear_food(run)
-	# Prediction matches exact ballistic gravity and shares skill steering.
+	# Helpers use exact ballistic time; thinking attraction still reaches real box contact.
 	run._add_item(Vector2(600, 350), Vector2(40, -120), RUN.make(RUN.I.BALL, 2))
 	run._fg[0] = 900.0
-	var prediction := run._landing_prediction(0, 700)
 	var duration := run._time_to(0, 700)
-	close_enough(prediction.position.x, 600.0 + 40.0 * duration, "unforced marker x matches trajectory")
-	close_enough(prediction.position.y, 700.0, "marker sits at the box catching height")
+	close_enough(350.0 - 120.0 * duration + 0.5 * 900.0 * duration * duration, 700.0, "helper intercept time matches ballistic gravity")
+	check(not is_finite(run._time_to(0, 300)), "no intercept above food already below catching height")
 	clear_food(run)
 	run._thinking = true
 	run.diverge = 200.0
 	run._add_item(Vector2(750, 600), Vector2(0, 100), RUN.make(RUN.I.BALL, 2))
 	run._fg[0] = 900.0
-	prediction = run._landing_prediction(0, 700)
-	check(prediction.position.x > 750.0, "marker includes the same local skill attraction")
-	check(run._landing_prediction(0, 500).is_empty(), "no marker above food already below the catching height")
 	run._hand.items = [RUN.I.BALL, RUN.I.BALL, RUN.I.BALL, RUN.I.BALL]
 	var bounced := false
 	for i in 120:
@@ -166,9 +162,9 @@ func _ready() -> void:
 			break
 		if run._fv[0].y < 0.0:
 			bounced = true
-			check(absf(run._fp[0].x - prediction.position.x) < 8.0, "live attracted flight contacts within opening tolerance of predicted x")
+			check(run._fp[0].x > 750.0 and run._fp[0].x <= 800.0, "thinking gently attracts nearby gold food toward the real box")
 			break
-	check(bounced, "prediction fixture reaches a real full-box collision")
+	check(bounced, "attracted food reaches a real full-box collision")
 	check(RUN._grade_rim(1, true, 0.0).a > 0.8 and RUN._grade_rim(2, true, 0.0).a > 0.8, "silver and gold retain persistent boxed outlines")
 	check(RUN._grade_rim(0, true, 0.0).a == 0.0, "ordinary food has no grade outline")
 	clear_food(run)
