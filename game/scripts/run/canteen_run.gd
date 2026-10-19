@@ -72,6 +72,7 @@ const TABLE := Rect2(1300, 842, 605, 150)  # the table top (click area for takin
 const FISH_POS := Vector2(1600, 990)      # her spot (popups are placed from here); she sits in the middle
 const MAX_ITEMS := 160
 const COACH_UI = preload("res://scripts/ui/run_coach.gd")
+const SERVICE_UI = preload("res://scripts/ui/canteen_overlay.gd")
 const MEAL_RULES = preload("res://scripts/run/meal_rules.gd")
 
 ## Q = a 难题 (hybrid trial), JI = the 「极」 glitch (ji trial: it spoils a whole box), JI_GOLD = the
@@ -412,6 +413,7 @@ var _arm_ladles: Array = []           # Sprite2D per arm
 var _shaky_t := 0.0                   # she just flung with shaky hands
 
 var _arms: Array = []                 # {slot, t, raise}
+var _service_ui: Control
 var _peak_on := false
 var _peak_t := 0.0
 var _hand = null                      # Dictionary or null: {items: Array, pos, vel, slosh}
@@ -587,6 +589,9 @@ func _ready() -> void:
 	Audio.ambience("amb_canteen", -20.0)
 	Audio.sfx("shift_start", -4.0)
 	_setup_coach()
+	_service_ui = SERVICE_UI.new()
+	_service_ui.run = self
+	add_child(_service_ui)
 
 
 func _setup_coach() -> void:
@@ -1236,7 +1241,7 @@ func _unhandled_input(event: InputEvent) -> void:
 
 
 func pause(from_focus := false) -> void:
-	if is_instance_valid(_pause) or _ended:
+	if is_instance_valid(_pause) or _ended or get_tree().paused:
 		return
 	_interrupt_thinking()
 	_pause = PauseMenu.new()
@@ -2756,9 +2761,6 @@ func _bot() -> void:
 
 func _draw_back() -> void:
 	_back.draw_texture(_bg, Vector2.ZERO)
-	var tex: Texture2D = _auntie[_mood()]
-	var bob := sin(_t * 3.0) * 4.0
-	_back.draw_texture(tex, AUNTIE_AT + Vector2(-tex.get_width() * 0.5, bob - tex.get_height()))
 
 
 ## A trial is close to failing: the floor pile, the users' patience or the spoiled boxes.
@@ -2777,6 +2779,11 @@ func _draw_front() -> void:
 		_front.draw_texture(_counter, COUNTER_AT)
 	else:
 		_front.draw_texture_rect(_counter_long, COUNTER_RECT, false)
+	# Her expression is foreground theatre, clear of the counter's opaque glass frame.
+	var tex: Texture2D = _auntie[_mood()]
+	var bob := 0.0 if Settings.reduced_motion else sin(_t * 3.0) * 3.0
+	var portrait_size := tex.get_size() * (270.0 / tex.get_height())
+	_front.draw_texture_rect(tex, Rect2(Vector2(AUNTIE_AT.x - portrait_size.x * 0.5, 26 + bob), portrait_size), false)
 	for id in STALL_ORDER:
 		var pans: Array = PANS[id]
 		var lv: int = stall_lv.get(id, 0)
@@ -2804,31 +2811,9 @@ func _draw_front() -> void:
 				for p in 2:
 					var ph := fmod(_t * 0.5 + j * 0.37 + p * 0.5 + id.length() * 0.13, 1.0)
 					_sprite(_front, "fx_steam", Vector2(x + sin(ph * 6.0 + j) * 8.0, PAN_Y - 24.0 - ph * 60.0), 24.0 + ph * 26.0, sin(ph * 4.0 + j) * 0.2, Color(1, 1, 1, 0.42 * (1.0 - ph) * minf(ph * 5.0, 1.0)))
-	# each tentacle's cooking bar on the counter front, right under where its food will fly from
-	var ladles := {}
-	for arm in _arms:
-		ladles[arm.stall] = int(ladles.get(arm.stall, 0)) + 1
-	var bar_font := ThemeDB.fallback_font
-	for id in ladles:
-		var label := tr("出菜 ×%d") % int(ladles[id])
-		var width := bar_font.get_string_size(label, HORIZONTAL_ALIGNMENT_LEFT, -1, 20).x
-		_front.draw_string_outline(bar_font, Vector2(_win_x(STALL_ORDER.find(id)) - width * 0.5, 361), label, HORIZONTAL_ALIGNMENT_LEFT, -1, 20, 4, PAPER)
-		_front.draw_string(bar_font, Vector2(_win_x(STALL_ORDER.find(id)) - width * 0.5, 361), label, HORIZONTAL_ALIGNMENT_LEFT, -1, 20, INK)
-	for a in _arms:
-		var x: float = a.x
-		var r := Rect2(x - 24.0, 392.0, 48.0, 10.0)
-		var done := 1.0 if a.raise > 0.0 else clampf(1.0 - a.t / maxf(a.t0, 0.01), 0.0, 1.0)
-		var col := Color(1.0, 0.35, 0.25) if _peak_on else Color(0.95, 0.6, 0.2)
-		if a.raise > 0.0 and not Settings.reduced_motion:
-			col = col.lerp(Color.WHITE, 0.5 + 0.5 * sin(_t * 40.0))
-		_front.draw_style_box(_bar_bg, r.grow(2.0))
-		if done > 0.05:
-			_bar_fill.bg_color = col
-			_front.draw_style_box(_bar_fill, Rect2(r.position, Vector2(r.size.x * done, r.size.y)))
-		var number := str(a.get("ladle", 1))
-		_front.draw_string(bar_font, Vector2(x - 5, 385), number, HORIZONTAL_ALIGNMENT_LEFT, -1, 14, INK)
-	_front.draw_string_outline(bar_font, Vector2(65, 432), tr("每条进度是一把勺子 · 满格后抛菜"), HORIZONTAL_ALIGNMENT_LEFT, -1, 18, 3, PAPER)
-	_front.draw_string(bar_font, Vector2(65, 432), tr("每条进度是一把勺子 · 满格后抛菜"), HORIZONTAL_ALIGNMENT_LEFT, -1, 18, INK)
+	if is_instance_valid(_service_ui):
+		_service_ui.draw_stalls(_front)
+		_service_ui.draw_announcement(_front)
 
 
 ## 梁阿姨's face for the moment.
@@ -2927,8 +2912,8 @@ func _draw() -> void:
 		draw_texture_rect(UiKit.vignette(), Rect2(0, 0, 1920, 1080), false, Color(0.22, 0.12, 0.42, 0.75))
 		if _hand != null:
 			_label(font, _hand.pos + Vector2(-90, -110), tr("嗯，用户想要") + "……".repeat(1 + int(_t * 3.0) % 3), HORIZONTAL_ALIGNMENT_LEFT, -1, 26, Color(0.9, 0.85, 1.0))
-	if not _checkout:   # the receipt tells the numbers now (the register would give the total away)
-		_draw_hud(font)
+	if _show_stats and not _checkout:
+		_label(font, Vector2(410, 80), "FPS %d / Items %d" % [Engine.get_frames_per_second(), _fp.size()], HORIZONTAL_ALIGNMENT_LEFT, 550, 22, Color.WHITE)
 
 
 ## Text with a dark outline, readable on the busy canteen art.
@@ -3221,111 +3206,6 @@ func _piece(name: String, r: Rect2, col := Color.WHITE) -> void:
 		draw_rect(r, Color(0.1, 0.07, 0.05, 0.6) * col)
 
 
-func _draw_hud(font: Font) -> void:
-	# A: the chalkboard
-	var a := Rect2(24, 14, 372, 196)
-	_piece("ui_chalkboard", a)
-	var left := maxf(meal_time - _meal_elapsed(), 0.0)
-	var urgent := left <= 10.0 and not _ended
-	var pulse := 1.0 + (0.08 * sin(_t * 12.0) if urgent and not Settings.reduced_motion else 0.0)
-	if _learning():
-		_write(font, a.position + Vector2(40, 50), tr("第一次来，慢慢学"), 23, Color(0.92, 0.95, 0.9), Color.TRANSPARENT)
-		_write(font, a.position + Vector2(40, 82), tr("计时未开始"), 22, Color(1.0, 0.85, 0.5), Color.TRANSPARENT)
-	else:
-		_write(font, a.position + Vector2(40, 58), tr("食堂关门还剩"), 22, Color(0.92, 0.95, 0.9), Color(0, 0, 0, 0))
-		var num := "%d" % int(ceil(left))
-		_write(_nfont, a.position + Vector2(196, 74), num, int(54 * pulse), Color(1.0, 0.45, 0.4) if urgent else Color(0.98, 0.98, 0.92), Color(0, 0, 0, 0))
-		_write(font, a.position + Vector2(206 + _dfont.get_string_size(num, HORIZONTAL_ALIGNMENT_LEFT, -1, 54).x, 70), tr("秒"), 22, Color(0.92, 0.95, 0.9), Color(0, 0, 0, 0))
-	var line2 := tr(Game.plate())
-	if trial != "":
-		line2 = tr("评测：本顿要到 %s") % Game.fmt(target)
-		var pr := Rect2(a.position + Vector2(40, 128), Vector2(292, 12))
-		draw_rect(pr, Color(1, 1, 1, 0.18))
-		draw_rect(Rect2(pr.position, Vector2(pr.size.x * clampf(earned / maxf(target, 1.0), 0.0, 1.0), pr.size.y)), GOLD_C if earned < target else Color(0.55, 0.9, 0.5))
-	_write(font, a.position + Vector2(40, 112), line2, 20, Color(0.85, 0.9, 0.82), Color(0, 0, 0, 0))
-	if peaks:
-		_icon("bell", a.position + Vector2(52, 166), 30, 1.0 if _peak_on else 0.45)
-		_write(font, a.position + Vector2(74, 174), (tr("高峰 %d 秒") if _peak_on else tr("谷时 %d 秒")) % int(ceil(_peak_t)), 20, Color(1.0, 0.6, 0.5) if _peak_on else Color(0.8, 0.85, 0.8), Color(0, 0, 0, 0))
-	if can_think:
-		var think_panel := Rect2(408, 14, 340, 132)
-		_piece("ui_chalkboard", think_panel)
-		_write(font, think_panel.position + Vector2(26, 35), tr("深度思考"), 23, PAPER, Color.TRANSPARENT)
-		_write(_nfont, think_panel.position + Vector2(258, 35), "%.1fs" % _think, 21, PAPER, Color.TRANSPARENT)
-		var tr_ := Rect2(think_panel.position + Vector2(26, 49), Vector2(288, 10))
-		draw_rect(tr_, Color(1, 1, 1, 0.15))
-		draw_rect(Rect2(tr_.position, Vector2(tr_.size.x * _think / maxf(think_time, 0.01), tr_.size.y)), Color(0.75, 0.68, 1.0))
-		_write(font, think_panel.position + Vector2(26, 84), _think_hint(), 20, Color(0.9, 0.84, 1.0), Color.TRANSPARENT)
-		if _thinking or hybrid:
-			_write(font, think_panel.position + Vector2(26, 111), tr("蓝线：饭盒高度的预计落点"), 16, Color(0.62, 0.86, 1.0), Color.TRANSPARENT)
-	# B: the cash register and the 主 / 荤 / 素 tray
-	var b := Rect2(1530, 14, 370, 92)
-	_piece("ui_paper", b)
-	_icon("token", b.position + Vector2(46, 46), 52)
-	_write(_nfont, b.position + Vector2(84, 62), Game.fmt(_shown), 46, Color(0.86, 0.6, 0.12), Color(1, 1, 1, 0.9))
-	_write(font, b.position + Vector2(268, 62), tr("token"), 20, INK, Color(0, 0, 0, 0))
-	var tray := Rect2(1545, 112, 340, 101)
-	_piece("ui_tray", tray)
-	var tot: float = _cat["主"] + _cat["荤"] + _cat["素"]
-	var goal := {"主": 0.4, "荤": 0.3, "素": 0.3}
-	var i := 0
-	for cn in ["主", "荤", "素"]:
-		var cx := tray.position.x + tray.size.x * (0.18 + 0.32 * i)
-		var share: float = float(_cat[cn]) / tot if tot > 0.0 else 0.0
-		var fill := clampf(share / goal[cn], 0.0, 1.0)
-		var cell := Rect2(cx - 44, tray.position.y + 22, 88, 58)
-		draw_rect(Rect2(cell.position.x, cell.end.y - cell.size.y * fill, cell.size.x, cell.size.y * fill), Color(CAT_COL[cn], 0.55))
-		_write(font, Vector2(cx, cell.position.y + 30), tr(cn), 22, INK, Color(1, 1, 1, 0.8), true)
-		_write(font, Vector2(cx, cell.position.y + 52), "%d%%" % int(round(share * 100)), 16, INK, Color(1, 1, 1, 0.8), true)
-		i += 1
-	_badge(Vector2(1715, 246), "", tr("均衡 ×%.2f") % balance_mult(), "balance", balance_mult())
-	# C: her badges
-	var y := 300.0
-	var rows: Array = []
-	# [icon, name, value, id, number]: the name says which multiplier it is (the icons alone
-	# didn't), right-aligned under the tray
-	if stream > 0.0:
-		rows.append(["flame", tr("流式"), "×%.2f" % _stream_mult(), "stream", _stream_mult()])
-	if crave > 0.0:
-		rows.append(["drool", tr("馋"), "×%.2f" % _crave_x(_crave_t if _eating == null else 0.0), "crave", _crave_x(_crave_t)])
-	if combo > 0.0:
-		rows.append(["chain", tr("连击"), "%d" % _combo_n, "combo", float(_combo_n)])
-	if grok:
-		rows.append(["leaf", tr("顿悟"), "✓" if _grokked else "%d/%d" % [_grok_n, grok_need], "grok", float(_grok_n)])
-	if critic > 0.0:
-		rows.append(["crown", tr("评鉴"), tr("%d 种") % _kinds_eaten.size(), "critic", float(_kinds_eaten.size())])
-	if cache_bonus > 0.0 and _cache_ready:
-		rows.append(["box", tr("缓存"), "+%d%%" % int(round(cache_bonus * 100)), "cache", cache_bonus])
-	for r in rows:
-		_badge(Vector2(0, y), r[0], r[2], r[3], r[4], r[1], 1890.0)
-		y += 64.0
-	# E: the banner
-	if not _banners.is_empty():
-		var bn: Dictionary = _banners[0]
-		var t: float = bn.t
-		var k := 1.0
-		var alpha := 1.0
-		if t < BANNER_T[0]:
-			k = lerpf(1.6, 1.0, t / BANNER_T[0])
-			alpha = t / BANNER_T[0]
-		elif t > BANNER_T[0] + BANNER_T[1]:
-			alpha = 1.0 - (t - BANNER_T[0] - BANNER_T[1]) / BANNER_T[2]
-		var c := Vector2(960, 470)
-		var sz := Vector2(620, 161) * k
-		_piece("ui_banner", Rect2(c - sz * 0.5, sz), Color(1, 1, 1, alpha))
-		if bn.icon != "":
-			_icon(bn.icon, c + Vector2(-sz.x * 0.33, -sz.y * 0.08), 56 * k, alpha)
-		_write(_dfont, c + Vector2(0, (6 if bn.sub == "" else -4) * k), bn.title, int(46 * k), Color(1, 0.97, 0.88, alpha), Color(0.45, 0.06, 0.04, alpha), true)
-		if bn.sub != "":
-			_write(font, c + Vector2(0, 34 * k), bn.sub, int(22 * k), Color(1, 0.92, 0.75, alpha), Color(0.45, 0.06, 0.04, alpha), true)
-	if _show_stats:
-		var lines := [
-			tr("FPS %d · 掉落物 %d") % [Engine.get_frames_per_second(), _fp.size()],   # notr
-			tr("接住率 %d%% · 晃出 %d · 掉地上 %d") % [int(catch_rate() * 100), spilled, wasted],   # notr
-			tr("她空等 %.1f 秒") % fish_wait,   # notr
-		]
-		draw_rect(Rect2(420, 20, 460, 34 * lines.size() + 16), Color(0, 0, 0, 0.45))
-		for j in lines.size():
-			_label(font, Vector2(436, 52 + 34 * j), lines[j], HORIZONTAL_ALIGNMENT_LEFT, -1, 22, Color(0.85, 0.92, 1.0))
 
 
 ## One enamel badge, centred at `c` (or with its right edge at `right`): an icon, the
@@ -3385,24 +3265,20 @@ func _draw_floaters(font: Font) -> void:
 		var k := 1.0 + 0.5 * maxf(0.0, 1.0 - t / 0.15)
 		_icon(c.icon, c.pos + Vector2(0, -40.0 * t), 46.0 * k, 1.0 - maxf(0.0, (t - 0.5) / 0.4))
 	if _bark_t > 0.0:   # her speech bubble, its tail pointing down at her
-		_bubble(Vector2(1300, 420), _bark, true)
+		_bubble(Vector2(1040, 510), _bark, true)
 	if _abark_t > 0.0:   # 梁阿姨's, by her hat
 		_bubble(Vector2(860, 8), _abark, false)
 
 
 func _bubble(at: Vector2, text: String, flip: bool) -> void:
-	var font := ThemeDB.fallback_font
-	var w := maxf(font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, 26).x + 70.0, 200.0)
-	var r := Rect2(at, Vector2(w, w * 0.42))
-	var t: Texture2D = _ui.get("ui_bubble", null)
-	if t != null:
-		if flip:   # tail on the right
-			draw_set_transform(Vector2(r.end.x, r.position.y), 0.0, Vector2(-1, 1))
-			draw_texture_rect(t, Rect2(Vector2.ZERO, r.size), false)
-			draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
-		else:
-			draw_texture_rect(t, r, false)
-	_write(font, Vector2(r.position.x + r.size.x * 0.5, r.position.y + r.size.y * 0.5 + 6), text, 26, INK, Color(0, 0, 0, 0), true)
+	var font: Font = load("res://assets/ui/ui_font.tres")
+	var width := minf(390, maxf(180, font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, 26).x))
+	var measured := font.get_multiline_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, width, 26)
+	var r := Rect2(at, Vector2(width + 36, measured.y + 30))
+	draw_style_box(UiKit.box(PAPER, Color("213c47"), 2, 16), r)
+	var tail := r.position + Vector2(r.size.x - 35 if flip else 32, r.size.y - 1)
+	draw_colored_polygon(PackedVector2Array([tail, tail + Vector2(24, 0), tail + Vector2(20 if flip else -10, 22)]), PAPER)
+	draw_multiline_string(font, r.position + Vector2(18, 15 + font.get_ascent(26)), text, HORIZONTAL_ALIGNMENT_LEFT, width, 26, -1, Color("213c47"))
 
 
 ## D: the box in hand — capacity pips and the 套餐 it is on its way to, as ingredient icons.
