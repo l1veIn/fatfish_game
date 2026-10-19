@@ -347,7 +347,12 @@ var _grok_n := 0
 var _grokked := false
 var _kinds_eaten := {}                # 套餐 kinds eaten (美食评鉴)
 var _box_vals: Array = []             # tokens of every box eaten (梯度裁剪)
-var _fc_kind := -1                    # 点单: the 套餐 the helpers work towards
+var _fc_kind := -1                    # retained for old debug fixtures; orders are per helper
+var _helper_configs := {}              # effective roles frozen when the shift starts
+var _helper_recipe_cache := {}
+var crew_relay := 0.0
+var _helper_relay := {}                # one stored hand-off per useful role
+var _helper_feedback_at := -10.0
 var _score := {}                      # result card lines: name -> tokens / multiplier
 var _care_t := 0.0                    # 阿姨的关心: her last 「多吃点菜！」
 const WARM_AT := Vector2(1190, 905)   # the 保温箱, left of the table
@@ -516,7 +521,7 @@ const CREW := {
 	"g": {"name": "小G", "stat": "crew_g", "trick": "jump"},       # hops up for food (catches higher)
 	"ke": {"name": "克劳", "stat": "crew_ke", "trick": "floor"},   # picks food up off the floor
 	"zi": {"name": "双子", "stat": "crew_zi", "trick": "fast"},    # runs faster
-	"ge": {"name": "格格", "stat": "crew_ge", "trick": "swat"},    # swats bok choy and 「极」 away
+	"ge": {"name": "格格", "stat": "crew_ge", "trick": "swat"},    # protects useful food by swatting only 「极」
 }
 
 
@@ -542,24 +547,9 @@ func _ready() -> void:
 	_empty = basins_total
 	_hand = null
 	_fish.play("basin")
-	if fc:   # 点单: the best 套餐 the open stalls can make
-		for r in RECIPES:
-			if _can_make(r.result) and (_fc_kind < 0 or VALUE[r.result] > VALUE[_fc_kind]):
-				_fc_kind = r.result
 	_crew_layer = Node2D.new()
 	_crew_layer.z_index = 1
-	_crew_layer.draw.connect(func():
-		var font := ThemeDB.fallback_font
-		for c in _crew:
-			if c.box != null:
-				_draw_basin_on(_crew_layer, c.box.pos, c.box, 0.6)
-			elif c.spr.texture == c.sleep:
-				var h: float = c.sleep.get_height() * c.spr.scale.y
-				for j in 3:   # z z Z drifting up
-					var ph := fmod(_t * 0.6 + j / 3.0 + c.rest * 0.001, 1.0)
-					var at := Vector2(c.x + 20.0 + ph * 40.0, FLOOR_Y + 40 - h - 10.0 - ph * 60.0)
-					_crew_layer.draw_string_outline(font, at, "z" if j < 2 else "Z", HORIZONTAL_ALIGNMENT_LEFT, -1, 18 + j * 6, 4, Color(0.1, 0.06, 0.04, 1.0 - ph))
-					_crew_layer.draw_string(font, at, "z" if j < 2 else "Z", HORIZONTAL_ALIGNMENT_LEFT, -1, 18 + j * 6, Color(0.85, 0.9, 1.0, 1.0 - ph)))
+	_crew_layer.draw.connect(_draw_crew_layer)
 	add_child(_crew_layer)
 	var i := 0
 	for id in hired:
@@ -572,7 +562,8 @@ func _ready() -> void:
 		add_child(spr)
 		var x := STACK_AT.x - 140.0 - i * 90.0
 		spr.position = Vector2(x, FLOOR_Y + 40)
-		_crew.append({"id": id, "spr": spr, "box": null, "state": "fetch", "x": x, "hop": 0.0,
+		var config: Dictionary = _helper_configs.get(id, {"role": "sweep", "recipe": ""})
+		_crew.append({"id": id, "role": config.role, "recipe": int(KIND.get(str(config.recipe), -1)), "spr": spr, "box": null, "state": "fetch", "x": x, "hop": 0.0,
 			"wait": 0.0, "rest": 1180.0 - i * 150.0, "awake": spr.texture, "sleep": load("res://assets/crew/%s_sleep.png" % id),
 			"run_tex": _maybe("res://assets/crew/%s_run.png" % id), "cheer_tex": _maybe("res://assets/crew/%s_cheer.png" % id), "seen": 0, "cheer": 0.0})
 		i += 1
@@ -623,10 +614,11 @@ func _read_stats() -> void:
 	box_n = clampi(int(Game.stat("box_n")), 2, 4)   # columns
 	basins_total = int(Game.stat("basins"))
 	mat_level = clampi(int(Game.stat("material")), 0, MATERIALS.size() - 1)
-	hired = []
-	for id in CREW:   # 招募小助手: one more per level, in this order
-		if hired.size() < int(Game.stat("helper")):
-			hired.append(id)
+	hired = Game.active_helpers().duplicate()
+	_helper_configs.clear()
+	for id in hired:
+		_helper_configs[id] = Game.helper_config(id).duplicate(true)
+	crew_relay = Game.stat("crew_relay")
 	helper_speed = Game.stat("helper_speed")
 	eat_rate = Game.stat("eat_rate")
 	meal_time = MEAL_TIME[mini(Game.version, MEAL_TIME.size() - 1)]
@@ -635,19 +627,19 @@ func _read_stats() -> void:
 	g_good = Game.stat("sft")
 	g_gold = Game.stat("dpo")
 	gold_x = 5.0 if Game.stat("fp32") > 0.0 else 4.0
-	temp = Game.stat("temp")
+	temp = Game.stat("temp") if Game.automation_enabled("temp") else 0.0
 	hot_x = 1.5 + Game.stat("hot")
 	halluc = Game.stat("halluc")
-	regen = Game.stat("regen")
+	regen = Game.stat("regen") if Game.automation_enabled("regen") else 0.0
 	emerge = Game.stat("emerge") > 0.0
-	overfit = Game.stat("overfit") > 0.0
+	overfit = Game.automation_enabled("overfit")
 	batch = Game.stat("batch")
 	box_bonus = Game.stat("box_bonus")
 	fill_bonus = Game.stat("fill_bonus")
 	tier_up = [0.0, Game.stat("tier1"), Game.stat("tier2"), Game.stat("tier3"), Game.stat("tier4")]
 	inject = Game.stat("inject") > 0.0
 	compress = int(Game.stat("compress"))
-	fuse3 = Game.stat("fuse3") > 0.0
+	fuse3 = Game.automation_enabled("fuse3")
 	hodge = Game.stat("hodge") > 0.0
 	cot = Game.stat("cot")
 	rag = Game.stat("rag")
@@ -710,8 +702,8 @@ func _read_stats() -> void:
 	_g = MATERIALS[mat_level].mult   # 全局 (a release raises the caps and the meal time instead)
 	balance_max = Game.stat("balance_max")
 	stream = Game.stat("stream")
-	auto_push = Game.stat("auto_push") > 0.0
-	auto_return = Game.stat("auto_return") > 0.0
+	auto_push = Game.automation_enabled("auto_push")
+	auto_return = Game.automation_enabled("auto_return")
 	for id in Game.active_signatures():
 		_sigs[KIND[id]] = SIG[KIND[id]]
 	for id in STALLS:
@@ -1042,6 +1034,11 @@ func _merge(b: Dictionary, show: bool) -> void:
 			if K(b.items[i]) == I.VEG and not is_ghost(b.items[i]):
 				v = i
 				break
+		if v >= 0 and b.get("crew_role", "") == "recipe":
+			var without_green: Array = b.items.duplicate()
+			without_green.remove_at(v)
+			if int(_helper_recipe_missing({"items": without_green}, int(b.get("crew_recipe", -1))).get(I.VEG, 0)) > 0:
+				v = -1   # keep the green reserved for this order
 		if v >= 0:
 			var veg: int = b.items[v]
 			b.items.remove_at(v)
@@ -1050,14 +1047,30 @@ func _merge(b: Dictionary, show: bool) -> void:
 			if show:
 				_chip(b.pos, "leaf")
 	if spec > 0.0 and randf() < spec:
-		var close := _closest_recipe(b.items)
-		if not close.is_empty() and close[1].size() == 1:
-			b.items.append(with_hot(make(close[1][0])))
-			if show:
-				_chip(b.pos, "bolt")
-			_merge(b, show)
+		if b.get("crew_role", "") == "recipe":
+			var target_kind := int(b.get("crew_recipe", -1))
+			var missing := _helper_recipe_missing(b, target_kind)
+			var guessed := -1
+			for kind in missing:
+				var candidate := with_hot(make(int(kind)))
+				if int(missing[kind]) > 0 and _helper_accepts({"role": "recipe", "recipe": target_kind, "box": b}, candidate):
+					guessed = candidate
+					break
+			if guessed >= 0:
+				b.items.append(guessed)
+				_merge(b, show)
+			else:
+				b.items.append(make(I.BALL, 0, true, true))
 		else:
-			b.items.append(make(I.BALL, 0, true, true))   # a snack for her
+			var close := _closest_recipe(b.items)
+			if not close.is_empty() and close[1].size() == 1:
+				b.items.append(with_hot(make(close[1][0])))
+				if show:
+					_chip(b.pos, "bolt")
+				_merge(b, show)
+			else:
+				b.items.append(make(I.BALL, 0, true, true))
+
 	for r in made:
 		var first := Game.find_recipe(r.id)
 		if show or first:
@@ -1073,9 +1086,22 @@ func _merge(b: Dictionary, show: bool) -> void:
 ## it into a better dish (never an ingredient the box is collecting), 过拟合 may turn it green,
 ## 幻觉 may add a ghost bite, 模型融合 fuses three alike, the 套餐 merge, then 涌现 and 大杂烩.
 func _catch(b: Dictionary, it: int, show: bool) -> void:
+	# 格格 inspects the first eligible ordinary dish in each of her own boxes.
+	# Already graded food keeps the inspection available for a later plain ingredient.
+	if b.get("crew", false) and b.get("crew_id", "") == "ge" and not b.get("crew_inspected", false) and grade(it) == 0 and not is_ghost(it) and not IS_SET[K(it)] and K(it) != I.JI:
+		it = with_grade(it, 1)
+		b["crew_inspected"] = true
+		_helper_feedback(b.get("pos", FULL_AT), "质检：升为银牌")
+	var ordered: bool = b.get("crew_role", "") == "recipe"
+	if b.get("crew_role", "") == "nutrition":
+		var needed := _nutrition_lacking()
+		var nutrients := _item_nutrition(it)
+		var tracked: Dictionary = b.get("crew_needed", {})
+		tracked[needed] = float(tracked.get(needed, 0.0)) + float(nutrients.get(needed, 0.0))
+		b["crew_needed"] = tracked
 	var k := K(it)
 	if not IS_SET[k] and not is_ghost(it):
-		if temp > 0.0 and randf() < temp:
+		if not ordered and temp > 0.0 and randf() < temp:
 			var close := _closest_recipe(b.items)
 			if close.is_empty() or not close[1].has(k):
 				var up := _upgrade(k)
@@ -1089,7 +1115,7 @@ func _catch(b: Dictionary, it: int, show: bool) -> void:
 				else:
 					it = with_hot(with_grade(it, grade(it) + 1))
 				k = K(it)
-		if overfit and _grokked and k != I.VEG and randf() < 0.15:
+		if not ordered and overfit and _grokked and k != I.VEG and randf() < 0.15:
 			it = with_hot(make(I.VEG))
 			k = I.VEG
 	b.items.append(it)
@@ -1099,7 +1125,7 @@ func _catch(b: Dictionary, it: int, show: bool) -> void:
 		b.items.append(make(_stall_kind(STALL[k]), 0, true, true))
 		if show:
 			_chip(b.pos, "dice")
-	if fuse3 and not IS_SET[k] and grade(it) < 2:
+	if not ordered and fuse3 and not IS_SET[k] and grade(it) < 2:
 		var same: Array = []
 		for i in b.items.size():
 			if b.items[i] & 0x7FF == it & 0x7FF and not is_ghost(b.items[i]):   # same dish, grade and 高温
@@ -1111,7 +1137,7 @@ func _catch(b: Dictionary, it: int, show: bool) -> void:
 			if show:
 				_chip(b.pos, "bolt")
 	_merge(b, show)
-	if emerge:
+	if emerge and not ordered:
 		var hot: Array = []
 		for i in b.items.size():
 			var x: int = b.items[i]
@@ -1125,7 +1151,7 @@ func _catch(b: Dictionary, it: int, show: bool) -> void:
 			b.items.append(make(KIND["emerge_stew"], 0, true, false, 0, raw))
 			_banner("涌现！", tr("神级乱炖"), "dice")
 			Audio.sfx("version_up", -6.0)
-	if hodge and _space(b) >= _cap():
+	if hodge and not ordered and _space(b) >= _cap():
 		var close2 := _closest_recipe(b.items)
 		if close2.is_empty() or close2[1].size() > 1:
 			var pick: Array = []
@@ -1373,6 +1399,7 @@ func _serve(b: Dictionary) -> void:
 	if not b.has("full"):
 		b["full"] = _space(b) >= _cap()
 	_note_served(b)
+	_award_helper_relay(b)
 	if regen > 0.0 and not b.get("crew", false) and randf() < regen:
 		for i in b.items.size():
 			var it: int = b.items[i]
@@ -1403,13 +1430,14 @@ func _note_served(b: Dictionary) -> void:
 	if b.get("crew", false) or b.get("takeout", false) or b.items.is_empty() or b.get("run_counted", false):
 		return
 	b["run_counted"] = true
+	_consume_helper_relay(b)
 	var rule := _plan_box(b)
 	b["meal_rule"] = rule
 	_previous_mono_kind = int(rule.next_mono_kind)
 	_cache_ready = bool(rule.cache_ready)
 	_commit_delivery_chain(b, bool(rule.combo_eligible))
 	if rule.cache_primed:
-		_float(b.pos + Vector2(-70, -130), "缓存已备好", "mult")
+		_float(b.pos + Vector2(-70, -130), "缓存接力" if rule.get("cache_bridge", false) else "缓存已备好", "mult")
 	elif float(rule.add_bonus) > 0.0:
 		_float(b.pos + Vector2(-70, -130), tr("搭配 +%d%%") % int(round(float(rule.add_bonus) * 100)), "mult")
 	if b.get("full", false):
@@ -1795,13 +1823,14 @@ func _update_hand(delta: float) -> void:
 
 ## Local skill attraction: only descending food just above the box, with tapered strength.
 ## It nudges toward a bounded target speed instead of accumulating unlimited sideways speed.
-func _steer_food(p: Vector2, v: Vector2, k: int, delta: float, clock: float) -> Vector2:
+func _steer_food(p: Vector2, v: Vector2, it: int, delta: float, clock: float) -> Vector2:
+	var k := K(it)
 	if PICKY[k] and v.y > 60.0:
 		v.x += sin(clock * 5.0 + p.y * 0.02) * 90.0 * delta
 	if _hand == null or v.y <= 0.0:
 		return v
 	var pull := clampf(_magnet() + (diverge if _thinking else 0.0), 0.0, PULL_MAX_RANGE)
-	var ignored := (dsa and not grok and (k == I.VEG or k == I.JI)) or (_thinking and converge and not _wanted(k))
+	var ignored := (dsa and not grok and (k == I.VEG or k == I.JI)) or (_thinking and converge and not _wanted(it))
 	var dx: float = _hand.pos.x - p.x
 	var dy: float = _hand.pos.y - p.y
 	if pull > 0.0 and not ignored and absf(dx) < pull and dy > 0.0 and dy < PULL_HEIGHT:
@@ -1845,18 +1874,18 @@ func _update_items(delta: float) -> void:
 		var k := K(it)
 		var initial_vy := v.y
 		v.y += _fg[i] * delta
-		v = _steer_food(p, v, k, delta, _t)
+		v = _steer_food(p, v, it, delta, _t)
 		if k in HOPPY and randf() < ji_hop * delta:
 			v.x = randf_range(-280.0, 280.0)   # 「极」 hops about
 			v.y = minf(v.y, randf_range(-160.0, 40.0))
 		if not _crew.is_empty():
-			v = _crew_tricks(p, v, k, delta)
+			v = _crew_tricks(p, v, it, delta)
 		var np := p + v * delta
 		if k not in HOPPY and is_equal_approx(v.y, initial_vy + _fg[i] * delta):
 			np.y = p.y + initial_vy * delta + 0.5 * _fg[i] * delta * delta
 		_fr[i] += delta * v.x * 0.01
 		var contact := -1.0
-		var pass_through := _thinking and converge and not _wanted(k)
+		var pass_through := _thinking and converge and not _wanted(it)
 		if _hand != null and v.y > 0.0 and not pass_through:
 			contact = _swept_opening(p, np, _hand.get("previous_pos", _hand.pos), _hand.pos, w * 0.47 + 8.0)
 		# A long frame may cross both boxes; the earliest physical contact wins.
@@ -1891,7 +1920,7 @@ func _update_items(delta: float) -> void:
 		if np.y >= FLOOR_Y or np.x < -40 or np.x > 1960:
 			if np.y >= FLOOR_Y:
 				Audio.sfx("floor", -14.0)
-				if _is_good(k) and _eating == null and _fish.clip != "surprised":
+				if _is_good(it) and _eating == null and _fish.clip != "surprised":
 					_fish.play("surprised")   # 啊！ the good stuff hit the floor
 			if k != I.VEG and k != I.JI:
 				wasted += 1
@@ -1910,10 +1939,11 @@ func _update_items(delta: float) -> void:
 
 
 ## Can this dish be of use (收敛思维 lets the rest fall through)? Greens only once she likes them.
-func _wanted(k: int) -> bool:
+func _wanted(it: int) -> bool:
+	var k := K(it)
 	if k == I.VEG:
-		return _grokked or inject
-	return USEFUL.has(k) or VALUE[k] >= 4.0
+		return grok or _grokked or inject
+	return k != I.JI and (USEFUL.has(k) or _helper_item_value(it) >= 4.0)
 
 
 ## The landing sound of item `it` in a box: by what the food is (menu.json snd: soft rice, crisp
@@ -1927,8 +1957,8 @@ func _catch_sound(it: int, quieter := 0.0) -> void:
 		Audio.sfx("catch_gold", -9.0 + quieter)
 
 
-func _is_good(k: int) -> bool:
-	return k == I.Q or VALUE[k] >= 5.0
+func _is_good(it: int) -> bool:
+	return K(it) == I.Q or _helper_item_value(it) >= 5.0
 
 
 func _add_item(p: Vector2, v: Vector2, it: int) -> void:
@@ -1969,9 +1999,9 @@ func _landing_prediction(i: int, y: float) -> Dictionary:
 		var dt := minf(1.0 / 90.0, duration - elapsed)
 		var initial_vy := v.y
 		v.y += _fg[i] * dt
-		v = _steer_food(p, v, K(_fk[i]), dt, _t + elapsed)
+		v = _steer_food(p, v, _fk[i], dt, _t + elapsed)
 		if not _crew.is_empty():
-			v = _crew_tricks(p, v, K(_fk[i]), dt, false)
+			v = _crew_tricks(p, v, _fk[i], dt, false)
 		p += Vector2(v.x * dt, initial_vy * dt + 0.5 * _fg[i] * dt * dt)
 		elapsed += dt
 	return {"position": Vector2(p.x, y), "time": duration}
@@ -1993,10 +2023,250 @@ func _update_flying(delta: float) -> void:
 	_flying = _flying.filter(func(f): return f.t < 1.0)
 
 
+## One item policy is used by planning, magnets, jumping, floor pickups and the player guide.
+## Training greens have future value even before their first token is earned.
+func _helper_item_value(it: int) -> float:
+	var k := K(it)
+	if k == I.JI:
+		return 0.0
+	if k == I.VEG:
+		if grok or _grokked:
+			return maxf(veg_x, 4.0) * _grade_x(it) * (hot_x if is_hot(it) else 1.0)
+		return _part_value(it) if inject else 0.0
+	return maxf(_item_value(it), 0.0)
+
+
+func _helper_recipe_missing(b: Dictionary, target_kind: int) -> Dictionary:
+	var missing := {}
+	if target_kind < 0 or target_kind >= NAMES.size():
+		return missing
+	for kind in _ingredients(target_kind):
+		missing[kind] = int(missing.get(kind, 0)) + 1
+	for it in b.items:
+		if is_ghost(it):
+			continue
+		for kind in _ingredients(K(it)):
+			if missing.has(kind):
+				missing[kind] = maxi(int(missing[kind]) - 1, 0)
+	return missing
+
+
+## A candidate must leave an actual assembly route, not just a matching ingredient count.
+## Cache per cargo/candidate; the search runs only when a box's contents change.
+func _helper_recipe_reachable(items: Array, target_kind: int) -> bool:
+	var key := JSON.stringify([target_kind, items])
+	if _helper_recipe_cache.has(key):
+		return bool(_helper_recipe_cache[key])
+	var missing := _helper_recipe_missing({"items": items}, target_kind)
+	var remaining: Array = []
+	for kind in missing:
+		for i in int(missing[kind]):
+			remaining.append(int(kind))
+	var can_finish := Game._helper_recipe_route(self, target_kind, items, remaining, {})
+	if _helper_recipe_cache.size() > 2048:
+		_helper_recipe_cache.clear()
+	_helper_recipe_cache[key] = can_finish
+	return can_finish
+
+
+func _item_nutrition(it: int) -> Dictionary:
+	var k := K(it)
+	if k == I.JI or (PICKY[k] and not grok and not _grokked):
+		return {}
+	var cats: Dictionary = CATS[k].duplicate()
+	if k == I.VEG and drift and _grokked:
+		cats = {"素": 0.5, "荤": 0.5}
+	cats["素"] = float(cats.get("素", 0.0)) + injected(it)
+	return cats
+
+
+func _add_projected_item(projected: Dictionary, it: int) -> void:
+	var cats := _item_nutrition(it)
+	for category in ["主", "荤", "素"]:
+		projected[category] = float(projected.get(category, 0.0)) + float(cats.get(category, 0.0))
+
+
+## Include food already committed to the meal, without counting an aliased box twice.
+func _projected_nutrition() -> Dictionary:
+	var projected := _cat.duplicate()
+	var boxes: Array = []
+	for b in [_hand, _eating, _warm] + _queue:
+		if b != null:
+			boxes.append(b)
+	for flight in _flying:
+		if flight.basin != null:
+			boxes.append(flight.basin)
+	for c in _crew:
+		if c.box != null:
+			boxes.append(c.box)
+	var seen: Array = []
+	for b in boxes:
+		if seen.any(func(other): return is_same(other, b)):
+			continue
+		seen.append(b)
+		for it in b.items:
+			_add_projected_item(projected, it)
+	return projected
+
+
+func _nutrition_lacking(projected: Dictionary = {}) -> String:
+	if projected.is_empty():
+		projected = _projected_nutrition()
+	var total := maxf(float(projected.get("主", 0)) + float(projected.get("荤", 0)) + float(projected.get("素", 0)), 1.0)
+	var best := "主"
+	var largest := -INF
+	for pair in [["主", 0.4], ["荤", 0.3], ["素", 0.3]]:
+		var deficit: float = pair[1] - float(projected.get(pair[0], 0)) / total
+		if deficit > largest:
+			largest = deficit
+			best = pair[0]
+	return best
+
+
+func _helper_accepts(c: Dictionary, it: int, projected: Dictionary = {}) -> bool:
+	if c.get("box") == null or K(it) == I.JI or not _accepts(c.box, it):
+		return false
+	var role := str(c.get("role", "sweep"))
+	if role == "recipe":
+		var target_kind := int(c.get("recipe", -1))
+		if target_kind < 0 or find_kind(c.box.items, target_kind) >= 0:
+			return false
+		var missing := _helper_recipe_missing(c.box, target_kind)
+		if int(missing.get(K(it), 0)) <= 0:
+			return false
+		var next: Array = c.box.items.duplicate()
+		next.append(it)
+		_merge_items(next)
+		return _helper_recipe_reachable(next, target_kind)
+	if _helper_item_value(it) <= 0.0:
+		return false
+	if role == "nutrition":
+		return float(_item_nutrition(it).get(_nutrition_lacking(projected), 0.0)) > 0.0
+	return true
+
+
+func _helper_player_column(x: float) -> bool:
+	return _hand != null and absf(x - _hand.pos.x) < _width() * 0.8 + 12.0
+
+
+## Every helper box keeps its reservation from first collection until eating begins.
+func _helper_box_count() -> int:
+	var boxes: Array = []
+	for c in _crew:
+		if c.get("box") != null:
+			boxes.append(c.box)
+	for b in _queue + [_warm]:
+		if b != null and b.get("crew", false):
+			boxes.append(b)
+	for flight in _flying:
+		if flight.basin != null and flight.basin.get("crew", false):
+			boxes.append(flight.basin)
+	var unique: Array = []
+	for b in boxes:
+		if not unique.any(func(other): return is_same(other, b)):
+			unique.append(b)
+	return unique.size()
+
+
+func _helper_box_budget() -> int:
+	return maxi(3, hired.size())
+
+
+func _pop_next_box() -> Dictionary:
+	if _queue.is_empty():
+		return {}
+	if async_feed:
+		for i in _queue.size():
+			if not _queue[i].get("crew", false) and not _queue[i].get("takeout", false):
+				var player_box: Dictionary = _queue[i]
+				_queue.remove_at(i)
+				return player_box
+	return _queue.pop_front()
+
+
+func _award_helper_relay(b: Dictionary) -> bool:
+	if crew_relay <= 0.0 or not b.get("crew", false) or b.get("relay_checked", false):
+		return false
+	b["relay_checked"] = true
+	var role := str(b.get("crew_role", "sweep"))
+	var useful := 0
+	var nutrition := {}
+	for it in b.items:
+		if is_ghost(it):
+			continue
+		if _helper_item_value(it) > 0.0 and (not PICKY[K(it)] or grok or _grokked):
+			useful += maxi(_ingredients(K(it)).size(), 1)
+		_add_projected_item(nutrition, it)
+	var valid := role == "sweep" and useful >= 2
+	if role == "recipe":
+		valid = int(b.get("crew_recipe", -1)) >= 0 and b.items.any(func(it): return K(it) == int(b.crew_recipe) and not is_ghost(it))
+	elif role == "nutrition":
+		var supplied := 0.0
+		var needed: Dictionary = b.get("crew_needed", {})
+		for category in needed:
+			supplied += minf(float(needed[category]), float(nutrition.get(category, 0.0)))
+		valid = supplied >= 2.0
+	if not valid or _helper_relay.has(role):
+		return false
+	_helper_relay[role] = true
+	_helper_feedback(b.get("pos", FULL_AT), {"sweep": "补漏接力已备好", "recipe": "配餐接力已备好", "nutrition": "营养接力已备好"}[role])
+	return true
+
+
+func _consume_helper_relay(b: Dictionary) -> float:
+	if b.get("crew", false) or b.get("takeout", false) or b.items.is_empty() or b.get("relay_consumed", false):
+		return 0.0
+	b["relay_consumed"] = true
+	var bonus := _helper_relay.size() * crew_relay
+	b["crew_relay_bonus"] = bonus
+	_helper_relay.clear()
+	if bonus > 0.0:
+		_helper_feedback(b.get("pos", FULL_AT), tr("接力 +%d%%") % int(round(bonus * 100.0)))
+	return bonus
+
+
+func _helper_feedback(at: Vector2, message: String) -> void:
+	if _t - _helper_feedback_at >= 2.5:
+		_helper_feedback_at = _t
+		_float(Vector2(clampf(at.x - 70, 60, 1730), clampf(at.y - 110, 550, 920)), message, "info")
+
+
+func _helper_status(c: Dictionary) -> String:
+	if c.state == "return":
+		return tr("送餐中")
+	if c.state == "fetch":
+		return tr("等空位")
+	return tr({"sweep": "补漏", "recipe": "配餐", "nutrition": "补营养"}.get(c.get("role", "sweep"), "补漏"))
+
+
+func _draw_crew_layer() -> void:
+	var font := ThemeDB.fallback_font
+	for c in _crew:
+		if c.box != null:
+			_draw_basin_on(_crew_layer, c.box.pos, c.box, 0.6)
+		elif c.spr.texture == c.sleep:
+			var height: float = c.sleep.get_height() * c.spr.scale.y
+			for j in 3:
+				var phase := fmod(_t * 0.6 + j / 3.0 + c.rest * 0.001, 1.0)
+				var at := Vector2(c.x + 20.0 + phase * 40.0, FLOOR_Y + 40 - height - 10.0 - phase * 60.0)
+				_crew_layer.draw_string_outline(font, at, "z" if j < 2 else "Z", HORIZONTAL_ALIGNMENT_LEFT, -1, 18 + j * 6, 4, Color(0.1, 0.06, 0.04, 1.0 - phase))
+				_crew_layer.draw_string(font, at, "z" if j < 2 else "Z", HORIZONTAL_ALIGNMENT_LEFT, -1, 18 + j * 6, Color(0.85, 0.9, 1.0, 1.0 - phase))
+		var task := _helper_status(c)
+		var px := 22
+		while px > 13 and font.get_string_size(task, HORIZONTAL_ALIGNMENT_LEFT, -1, px).x > 126:
+			px -= 1
+		var text_at := Vector2(c.x - font.get_string_size(task, HORIZONTAL_ALIGNMENT_LEFT, -1, px).x * 0.5, 1072)
+		_crew_layer.draw_string_outline(font, text_at, task, HORIZONTAL_ALIGNMENT_LEFT, -1, px, 5, UiKit.WOOD_DARK)
+		_crew_layer.draw_string(font, text_at, task, HORIZONTAL_ALIGNMENT_LEFT, -1, px, UiKit.CREAM)
+		if c.get("role", "sweep") == "recipe" and int(c.get("recipe", -1)) >= 0:
+			var icon: Texture2D = _food_tex[int(c.recipe)]
+			_crew_layer.draw_texture_rect(icon, Rect2(c.x + 38, 1026, 36, 36), false)
+
+
 ## A helper's box catches food crossing its rim line (only boxes in the "catch" state).
 func _crew_catch(p: Vector2, np: Vector2, v: Vector2, it: int, before := INF):
 	var k := K(it)
-	if v.y <= 0.0 or (k == I.VEG and not _grokked and not inject) or k == I.JI:
+	if v.y <= 0.0 or k == I.JI or _helper_player_column(np.x):
 		return null
 	var first = null
 	var earliest := before
@@ -2007,7 +2277,7 @@ func _crew_catch(p: Vector2, np: Vector2, v: Vector2, it: int, before := INF):
 		var hw := _width() * 0.6 * 0.47 * (1.5 if trick == "wide" else 1.0)
 		var y: float = c.box.pos.y - (70.0 if trick == "jump" else 0.0)   # 小G hops up for it
 		var contact := _swept_opening(p, np, Vector2(c.x, y), Vector2(c.x, y), hw + 5.0)
-		if contact >= 0.0 and contact < earliest and _accepts(c.box, it):
+		if contact >= 0.0 and contact < earliest and _helper_accepts(c, it):
 			earliest = contact
 			first = c
 	if first != null:
@@ -2018,7 +2288,10 @@ func _crew_catch(p: Vector2, np: Vector2, v: Vector2, it: int, before := INF):
 
 
 ## Helper tricks that act on food in the air (谱谱 pulls food in, 格格 swats the bad stuff away).
-func _crew_tricks(p: Vector2, v: Vector2, k: int, delta: float, feedback := true) -> Vector2:
+func _crew_tricks(p: Vector2, v: Vector2, it: int, delta: float, feedback := true) -> Vector2:
+	var k := K(it)
+	if _helper_player_column(p.x):
+		return v
 	for c in _crew:
 		if c.state != "catch" or c.box == null:
 			continue
@@ -2026,11 +2299,12 @@ func _crew_tricks(p: Vector2, v: Vector2, k: int, delta: float, feedback := true
 		var dx: float = c.x - p.x
 		match CREW[c.id].trick:
 			"magnet":
-				if k != I.VEG and k != I.JI and absf(dx) < 150.0 and p.y < by and by - p.y < 140.0 and v.y > 0.0:
+				if absf(dx) < 150.0 and p.y < by and by - p.y < 140.0 and v.y > 0.0 and _helper_accepts(c, it):
 					var strength: float = (1.0 - absf(dx) / 150.0) * (1.0 - (by - p.y) / 140.0)
 					v.x = move_toward(v.x, clampf(dx * 3.0, -PULL_MAX_SPEED, PULL_MAX_SPEED), PULL_ACCEL * strength * delta)
 			"swat":
-				if (k == I.VEG or k == I.JI) and absf(dx) < 80.0 and p.y < by and by - p.y < 60.0 and v.y > 0.0:
+				# Greens are also recipe and training ingredients. Never bat them out of a build.
+				if k == I.JI and absf(dx) < 80.0 and p.y < by and by - p.y < 60.0 and v.y > 0.0:
 					v = Vector2(-signf(dx + 0.01) * 380.0, -420.0)
 					if feedback:
 						c.hop = 0.3
@@ -2038,12 +2312,12 @@ func _crew_tricks(p: Vector2, v: Vector2, k: int, delta: float, feedback := true
 	return v
 
 
-## 克劳 picks food up off the floor near her, if her box has room. Returns true if she took it.
+## Floor pickups follow the same role/admission policy as airborne catches.
 func _crew_floor(x: float, it: int) -> bool:
-	if K(it) == I.VEG or K(it) == I.JI:
+	if _helper_player_column(x):
 		return false
 	for c in _crew:
-		if CREW[c.id].trick == "floor" and c.state == "catch" and c.box != null and absf(x - c.x) < 110.0 and _accepts(c.box, it):
+		if CREW[c.id].trick == "floor" and c.state == "catch" and c.box != null and absf(x - c.x) < 110.0 and _helper_accepts(c, it):
 			_catch(c.box, it, false)
 			c.hop = 0.25
 			return true
@@ -2054,6 +2328,23 @@ func _crew_floor(x: float, it: int) -> bool:
 ## floor under where food will land, and brings the box back to the queue when it is full.
 func _update_crew(delta: float) -> void:
 	var floor_y := FLOOR_Y + 40
+	var waiting: Array = _crew.filter(func(c): return c.state == "fetch" and c.box == null)
+	for c in waiting:
+		c.wait += delta
+	waiting.sort_custom(func(a, b): return float(a.wait) > float(b.wait))
+	for c in waiting:
+		if float(c.wait) <= 0.6 or _helper_box_count() >= _helper_box_budget():
+			continue
+		c.wait = 0.0
+		c.box = _new_basin(Vector2(c.x, floor_y - HELPER_BOX_Y))
+		c.box["crew"] = true
+		c.box["crew_id"] = c.id
+		c.box["crew_role"] = c.get("role", "sweep")
+		c.box["crew_recipe"] = c.get("recipe", -1)
+		c.box["crew_needed"] = {}
+		c.state = "catch"
+		c["still"] = 0.0
+		c["n"] = 0
 	var plan := _plan_crew(floor_y - HELPER_BOX_Y)
 	for c in _crew:
 		var speed := HELPER_SPEED * helper_speed * (1.6 if CREW[c.id].trick == "fast" else 1.0)
@@ -2063,14 +2354,6 @@ func _update_crew(delta: float) -> void:
 				# helpers bring their own boxes (they never take yours); with a long queue on the
 				# table there is no hurry: she naps at her spot
 				goal = c.rest
-				c.wait += delta
-				if _queue.size() < 3 and c.wait > 0.6:
-					c.wait = 0.0
-					c.box = _new_basin(Vector2(c.x, floor_y - HELPER_BOX_Y))
-					c.box["crew"] = true
-					c.state = "catch"
-					c["still"] = 0.0
-					c["n"] = 0
 			"catch":
 				goal = float(plan.get(c.id, c.x))
 				if c.box.items.size() != int(c.n):
@@ -2078,8 +2361,10 @@ func _update_crew(delta: float) -> void:
 					c.still = 0.0
 				c.still = float(c.still) + delta
 				# full, or half full with nothing coming her way for a while: take it to the table
-				if _space(c.box) >= _cap() or (_space(c.box) * 2 >= _cap() and c.still > 4.0) or (not c.box.items.is_empty() and c.still > 9.0):
+				if _helper_ready_to_deliver(c):
 					c.state = "return"
+					if c.get("role", "sweep") == "recipe":
+						_helper_feedback(c.box.pos, "订单完成")
 			"return":
 				goal = FULL_AT.x - 60
 				if absf(c.x - goal) < 8.0:
@@ -2094,7 +2379,7 @@ func _update_crew(delta: float) -> void:
 		var moving := minf(absf(step) / maxf(speed * delta, 0.001), 1.0)
 		var lift: float = absf(sin(_t * 14.0 + c.x * 0.01)) * 7.0 * moving + sin(c.hop / 0.35 * PI) * 46.0 * float(c.hop > 0.0)
 		var spr: Sprite2D = c.spr
-		var asleep: bool = c.state == "fetch" and c.box == null and _queue.size() >= 3 and absf(c.x - c.rest) < 8.0
+		var asleep: bool = c.state == "fetch" and c.box == null and _helper_box_count() >= _helper_box_budget() and absf(c.x - c.rest) < 8.0
 		if c.box != null and int(c.box.get("made", 0)) > int(c.get("seen", 0)):
 			c.seen = int(c.box.made)
 			c.cheer = 0.7   # her box made a 套餐
@@ -2131,93 +2416,81 @@ func _plan_crew(y: float) -> Dictionary:
 	var plan := {}
 	if helpers.is_empty():
 		return plan
-	var gap := _width() * 0.6 + 12.0                      # one helper box apart
-	var mine := _width() * 0.5 + gap * 0.5                # the player's column, kept clear
-	var hx: float = _hand.pos.x if _hand != null else -9999.0
-	# the pieces they could catch: (landing x, time, value weight)
+	var gap := _width() * 0.6 + 12.0
 	var food: Array = []
 	for i in _fp.size():
 		var p := _fp[i]
-		var k := K(int(_fk[i]))
-		if p.y > y or (k == I.VEG and not _grokked) or k == I.JI:
+		var it := int(_fk[i])
+		if p.y > y or K(it) == I.JI:
 			continue
-		var t := _time_to(i, y)
-		var x := p.x + _fv[i].x * t
-		if t > 1.6 or x < 60.0 or x > 1400.0 or absf(x - hx) < mine:
+		var time := _time_to(i, y)
+		var x := p.x + _fv[i].x * time
+		if not is_finite(time) or time > 1.6 or x < 60.0 or x > 1400.0 or _helper_player_column(x):
 			continue
-		var w: float = VALUE[k] + 0.5
-		if nutri and CATS[k].has(_lacking()):
-			w *= 2.5   # 营养师: what this meal is short of
-		if _fc_kind >= 0 and _ingredients(_fc_kind).has(k):
-			w *= 3.0   # 点单: the ordered 套餐's ingredients
-		food.append([x, t, w])
-	# greedy: the best (helper, piece) pair first; a helper then also covers what lands in her box,
-	# and the next helper has to stand at least a box away from the ones already placed
+		food.append({"x": x, "time": time, "item": it, "index": i})
 	var taken: Array = []
 	var free: Array = helpers.duplicate()
+	var projected := _projected_nutrition()
 	while not free.is_empty() and not food.is_empty():
-		var best := [-1.0, null, null]
+		var best_score := -1.0
+		var selected: Dictionary = {}
+		var dish: Dictionary = {}
 		for c in free:
 			var speed := HELPER_SPEED * helper_speed * (1.6 if CREW[c.id].trick == "fast" else 1.0)
 			for f in food:
-				if (f[1] + 0.1) * speed < absf(float(f[0]) - c.x):
-					continue   # can't get there in time
-				if taken.any(func(tx): return absf(tx - float(f[0])) < gap):
+				if (float(f.time) + 0.1) * speed < absf(float(f.x) - c.x):
 					continue
-				var score: float = f[2] / (1.0 + absf(float(f[0]) - c.x) / speed)
-				if score > best[0]:
-					best = [score, c, f]
-		if best[1] == null:
+				if taken.any(func(tx): return absf(tx - float(f.x)) < gap) or not _helper_accepts(c, int(f.item), projected):
+					continue
+				var worth := _helper_item_value(int(f.item)) + 0.5
+				if c.get("role", "sweep") == "recipe":
+					worth += 10.0
+				elif c.get("role", "sweep") == "nutrition":
+					worth += 6.0
+				var score: float = worth / (1.0 + absf(float(f.x) - c.x) / speed)
+				if score > best_score:
+					best_score = score
+					selected = c
+					dish = f
+		if selected.is_empty():
 			break
-		var x: float = best[2][0]
-		plan[best[1].id] = x
-		taken.append(x)
-		free.erase(best[1])
-		food = food.filter(func(f): return absf(float(f[0]) - x) >= gap * 0.5)
-	# the rest wait under the windows that throw next, spread out and out of the player's way
-	if not free.is_empty() and not _arms.is_empty():
-		var arms: Array = _arms.duplicate()
-		arms.sort_custom(func(a, b): return a.t < b.t)
+		plan[selected.id] = float(dish.x)
+		taken.append(float(dish.x))
+		free.erase(selected)
+		_add_projected_item(projected, int(dish.item))
+		food = food.filter(func(f): return absf(float(f.x) - float(dish.x)) >= gap * 0.5)
+	# Idle helpers may wait beneath a relevant window, but never exchange the assigned
+	# catch positions to preserve left/right order. Each goal stays with its own recipe.
+	for c in free:
+		var pick: float = c.x
+		var nearest := INF
 		var spots: Array = []
-		for a in arms:
-			for off in [0.0, gap, -gap]:
-				spots.append(float(a.x) + off)
-		for c in free:
-			var pick: float = c.x
-			var best_d := INF
-			for sx in spots:
-				var x := clampf(sx, 60.0, 1400.0)
-				if absf(x - hx) < mine or taken.any(func(tx): return absf(tx - x) < gap):
-					continue
-				var d := absf(x - c.x) + spots.find(sx) * 40.0   # prefer the next window, then the nearest
-				if d < best_d:
-					best_d = d
-					pick = x
-			plan[c.id] = pick
-			taken.append(pick)
-	# keep them apart and out from under the player's box: the spots left of the box pack into
-	# the room on its left, the rest on its right, a box apart; then the spots go out in the order
-	# the helpers stand in, so nobody runs through anybody
-	var goals: Array = plan.values()
-	var lo := 60.0
-	var hi := 1400.0
-	var left: Array = goals.filter(func(gx): return gx < hx)
-	var right: Array = goals.filter(func(gx): return gx >= hx)
-	if _hand == null:
-		left = []
-		right = goals
-	elif hx - mine - lo < gap * (left.size() - 1):     # no room on the left: all go right
-		right.append_array(left)
-		left = []
-	elif hi - (hx + mine) < gap * (right.size() - 1):  # ...or the other way round
-		left.append_array(right)
-		right = []
-	goals = _spread(left, lo, hx - mine, gap) + _spread(right, hx + mine if _hand != null else lo, hi, gap)
-	var order: Array = helpers.filter(func(c): return plan.has(c.id))
-	order.sort_custom(func(a, b): return a.x < b.x)
-	for i in order.size():
-		plan[order[i].id] = goals[i]
+		for arm in _arms:
+			if arm.has("dish") and _helper_accepts(c, int(arm.dish), projected):
+				for offset in [0.0, gap, -gap]:
+					spots.append([clampf(float(arm.x) + offset, 60.0, 1400.0), maxf(float(arm.t), 0.0) * 60.0])
+		spots.append([c.x, 500.0])
+		for slot in 10:
+			spots.append([60.0 + slot * (1340.0 / 9.0), 600.0])
+		for spot in spots:
+			var x: float = spot[0]
+			if _helper_player_column(x) or taken.any(func(tx): return absf(tx - x) < gap):
+				continue
+			var distance: float = absf(x - c.x) + float(spot[1])
+			if distance < nearest:
+				nearest = distance
+				pick = float(x)
+		plan[c.id] = pick
+		taken.append(pick)
 	return plan
+
+
+func _helper_ready_to_deliver(c: Dictionary) -> bool:
+	if c.box.items.is_empty():
+		return false
+	if c.get("role", "sweep") == "recipe":
+		return find_kind(c.box.items, int(c.get("recipe", -1))) >= 0
+	return _space(c.box) >= _cap() or (_space(c.box) * 2 >= _cap() and float(c.get("still", 0.0)) > 4.0) or float(c.get("still", 0.0)) > 9.0
 
 
 ## Spots `xs` moved as little as possible to lie within lo..hi and at least `gap` apart, sorted.
@@ -2246,7 +2519,7 @@ func _update_fish(wdt: float, delta: float) -> void:
 	_chew_pause = maxf(_chew_pause - delta, 0.0)
 	_fish.belly = 0.12 * (1.0 - exp(-float(eaten) / 160.0))   # rounder and rounder, no limit
 	if _eating == null and not _queue.is_empty():
-		_eating = _queue.pop_back()   # the top of the full stack
+		_eating = _pop_next_box()
 		_start_box(_eating)
 		Audio.vo("fish_dig_in", 1, 0.35)
 		_dig_in = 0.55
@@ -2391,7 +2664,7 @@ func _start_box(b: Dictionary) -> void:
 		m += fill_bonus
 	m += cot * mini(int(b.get("chains", 0)), 3)
 	var rule_add := _box_rule_bonus(b)
-	m += rule_add
+	m += rule_add + float(b.get("crew_relay_bonus", 0.0))
 	b["rule_share"] = rule_add / m
 	var h := 1.0
 	var crew_box: bool = b.get("crew", false)
@@ -2894,7 +3167,7 @@ func _draw() -> void:
 		for i in _fp.size():
 			var p := _fp[i]
 			var k := K(_fk[i])
-			if p.y > hy or (PICKY[k] and not _grokked) or k in HOPPY or not (_thinking or _is_good(k) or grade(_fk[i]) > 0):
+			if p.y > hy or (PICKY[k] and not _wanted(_fk[i])) or k in HOPPY or not (_thinking or _is_good(_fk[i])):
 				continue
 			var prediction := _landing_prediction(i, hy)
 			if not prediction.is_empty():
@@ -3289,13 +3562,15 @@ func _draw_hud(font: Font) -> void:
 	if stream > 0.0:
 		rows.append(["flame", tr("流式"), "×%.2f" % _stream_mult(), "stream", _stream_mult()])
 	if crave > 0.0:
-		rows.append(["drool", tr("馋"), "×%.2f" % _crave_x(_crave_t if _eating == null else 0.0), "crave", _crave_x(_crave_t)])
+		rows.append(["drool", tr("馋"), "×%.2f" % _crave_x(_crave_t), "crave", _crave_x(_crave_t)])
 	if combo > 0.0:
 		rows.append(["chain", tr("连击"), "%d" % _combo_n, "combo", float(_combo_n)])
 	if grok:
 		rows.append(["leaf", tr("顿悟"), "✓" if _grokked else "%d/%d" % [_grok_n, grok_need], "grok", float(_grok_n)])
 	if critic > 0.0:
 		rows.append(["crown", tr("评鉴"), tr("%d 种") % _kinds_eaten.size(), "critic", float(_kinds_eaten.size())])
+	if crew_relay > 0.0:
+		rows.append(["box", tr("下盒接力"), "%d/3 +%d%%" % [_helper_relay.size(), int(round(_helper_relay.size() * crew_relay * 100))], "crew_relay", float(_helper_relay.size())])
 	if cache_bonus > 0.0 and _cache_ready:
 		rows.append(["box", tr("缓存"), "+%d%%" % int(round(cache_bonus * 100)), "cache", cache_bonus])
 	for r in rows:
