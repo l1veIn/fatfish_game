@@ -8,7 +8,7 @@ signal finished
 const PAPER := preload("res://assets/canteen/ui_paper.png")
 const WALL := preload("res://assets/canteen/bg_wall.png")
 const STAR := preload("res://assets/canteen/fx_star.png")
-const INK_SOFT := Color(0.45, 0.31, 0.2)
+const INK_SOFT := Color(0.36, 0.42, 0.41)
 
 var replay := false
 var _page := 0
@@ -58,6 +58,12 @@ func _ready() -> void:
 	var hint := UiKit.label(tr("按自己的节奏翻页 · Esc / B 返回技能树"), 22, Color(0.94, 0.85, 0.68), 4)
 	hint.position = Vector2(150, 1007)
 	add_child(hint)
+	for button in [_previous, _next, _skip]:
+		button.add_theme_stylebox_override("normal", UiKit.box(Color(0.96, 0.94, 0.86), Color(0.70, 0.59, 0.39), 1, 10, 2))
+		button.add_theme_stylebox_override("hover", UiKit.box(Color(0.96, 0.86, 0.63), Color(0.70, 0.59, 0.39), 2, 10, 2))
+		button.add_theme_stylebox_override("pressed", UiKit.box(Color(0.88, 0.76, 0.52), Color(0.70, 0.59, 0.39), 2, 10))
+		for state in ["font_color", "font_hover_color", "font_pressed_color", "font_focus_color"]:
+			button.add_theme_color_override(state, Color(0.11, 0.24, 0.29))
 	Audio.music("bgm_title")
 	Audio.ambience("")
 	_show_page(0)
@@ -77,20 +83,22 @@ func _process(delta: float) -> void:
 
 
 func _draw() -> void:
-	draw_texture_rect(WALL, Rect2(0, 0, 1920, 1080), false, Color(0.68, 0.56, 0.43))
-	draw_rect(Rect2(0, 0, 1920, 1080), Color(0.12, 0.06, 0.02, 0.3))
-	draw_texture_rect(UiKit.glow(), Rect2(1050, 80, 900, 900), false, Color(1.0, 0.76, 0.36, 0.42))
-	UiKit.nine(self, PAPER, Rect2(96, 142, 1080, 720), 80.0)
-	draw_line(Vector2(150, 300), Vector2(1120, 300), Color(0.47, 0.29, 0.12, 0.3), 2.0)
-	for i in 7:
-		var p := Vector2(1240 + (i * 97) % 510, 180 + (i * 139) % 590)
-		var a := 0.3 + sin(_t * 0.8 + i) * 0.13
-		draw_texture_rect(STAR, Rect2(p, Vector2(22, 22)), false, Color(1, 0.87, 0.53, a))
-	draw_texture_rect(UiKit.vignette(), Rect2(0, 0, 1920, 1080), false, Color(0.12, 0.06, 0.01, 0.3))
+	draw_texture_rect(WALL, Rect2(0, 0, 1920, 1080), false, Color(0.52, 0.56, 0.53))
+	draw_rect(Rect2(0, 0, 1920, 1080), Color(0.04, 0.13, 0.19, 0.67))
+	draw_texture_rect(UiKit.glow(), Rect2(1080, 120, 850, 900), false, Color(1.0, 0.80, 0.45, 0.4))
+	var r := Rect2(96, 142, 1080, 720)
+	draw_style_box(UiKit.box(Color(0, 0, 0, 0.22), Color.TRANSPARENT, 0, 16), Rect2(r.position + Vector2(8, 14), r.size))
+	draw_style_box(UiKit.box(Color(0.97, 0.95, 0.88), Color(0.72, 0.62, 0.42), 2, 14), r)
+	draw_line(Vector2(150, 292), Vector2(1120, 292), Color(0.61, 0.53, 0.35, 0.45), 2)
+	draw_circle(Vector2(150, 292), 4, Color(0.68, 0.54, 0.31))
+	for i in 5:
+		var p := Vector2(1270 + (i * 97) % 510, 210 + (i * 139) % 590)
+		var a := 0.22 + sin(_t * 0.8 + i) * 0.08
+		draw_texture_rect(STAR, Rect2(p, Vector2(16, 16)), false, Color(1, 0.87, 0.53, a))
 
 
 func _label(text: String, at: Vector2, font_size: int, color := UiKit.INK, width := 950.0) -> Label:
-	var l := UiKit.label(text, font_size, color)
+	var l := UiKit.label(text, font_size, Color(0.11, 0.24, 0.29) if color == UiKit.INK else color)
 	l.position = at
 	l.size.x = width
 	l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -135,9 +143,9 @@ func _show_page(page: int) -> void:
 			_label(tr("送给每一个认真接住生活里那一口热饭的人。"), Vector2(0, 410), 25, INK_SOFT)
 			_label(tr("角色原型「溟月」：上善无形\n女仆版「蓝色大肥鱼」：ZipZipPipe\n免费、非商用粉丝作品 · CC BY-NC-SA 4.0\n与 DeepSeek 官方无关"), Vector2(0, 490), 21, INK_SOFT)
 			_make_fish(false)
-			var note := UiKit.label(tr("明天，还在这里。"), 33, UiKit.CREAM, 8)
-			note.position = Vector2(1280, 765)
-			note.size.x = 480
+			var note := UiKit.label(tr("明天，还在这里。"), 30, UiKit.CREAM)
+			note.position = Vector2(1260, 940)
+			note.size.x = 500
 			note.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 			_cast.add_child(note)
 	_wire_focus()

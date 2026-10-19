@@ -1,13 +1,9 @@
 class_name CheckoutReceipt
 extends Control
-## 关门结账 (docs/settlement_design.md): a meal-ticket receipt prints out over the dimmed canteen
-## (she lies flat on the table on the right) and plays the shift's closing back one step at a
-## time: what she ate, the leftovers (eaten in her dreams with 我去睡了, or "wasted"), the 保温箱,
-## the <EOS> last bite in a spotlight, 梯度裁剪, the subtotal, then the multipliers stamped into a
-## row of five slots one by one (each stamp multiplies the total there and then, each one a step
-## higher in pitch), and the result stamps. Earned tokens have no hidden overflow deduction.
-## All the numbers were counted in CanteenRun._end() already: this is only the show. A click
-## plays it 4x faster, Esc / Enter jumps to the end; the button goes back to the skill tree.
+## A closing ledger: itemized income on cream paper, earned multipliers and the final
+## total in a separate navy column. All amounts were calculated by CanteenRun._end().
+## Click accelerates the reveal; Enter/A skips to the result. The final action reports
+## completion to the main flow and retains its label override for the AGI ending.
 
 signal closed
 
@@ -27,12 +23,12 @@ var sleeping := false      # Zzz over her while she eats the leftovers in her dr
 var fast := false          # (autotest) straight to the end
 
 const SLOTS := 5
-const PAPER := Rect2(560, 30, 620, 0)     # the receipt (its height follows what is on it)
+const PAPER := Rect2(170, 78, 1580, 922)
 const LINE_H := 46.0
-const INK := Color(0.29, 0.16, 0.08)
+const INK := Color(0.11, 0.24, 0.29)
 const GOLDEN := Color(0.62, 0.36, 0.06)
 const RED := Color(0.78, 0.2, 0.16)
-const GREY := Color(0.62, 0.55, 0.47)
+const GREY := Color(0.40, 0.43, 0.41)
 
 var _font: Font
 var _dfont: Font
@@ -54,6 +50,8 @@ var _need_h := 120.0
 var _t := 0.0
 var _done := false
 var _back: Button
+var _closed := false
+var _detail_font_size := 27
 
 
 func _ready() -> void:
@@ -62,20 +60,25 @@ func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_STOP
 	_font = ThemeDB.fallback_font
 	_dfont = load("res://assets/ui/ZCOOLKuaiLe.ttf") if ResourceLoader.exists("res://assets/ui/ZCOOLKuaiLe.ttf") else _font
-	_nfont = UiKit.numerals()
+	_nfont = UiKit.bold(700)
 	for n in ["ui_paper", "stamp_ring", "icon_token", "icon_box", "icon_clock", "icon_crown", "icon_shield", "icon_bolt", "fx_burst", "fx_star"]:
 		var f := "res://assets/canteen/%s.png" % n
 		if ResourceLoader.exists(f):
 			_tex[n] = load(f)
-	_stamp_t.resize(SLOTS)
+	_stamp_t.resize(maxi(SLOTS, mults.size()))
 	_stamp_t.fill(-1.0)
-	_back = UiKit.button(tr("回技能树"), 32, Vector2(280, 80))
-	_back.position = Vector2(PAPER.get_center().x - 140, 980)
+	_back = UiKit.button(tr("回技能树"), 32, Vector2(540, 74))
+	_back.position = Vector2(1110, 900)
 	_back.modulate.a = 0.0
 	_back.disabled = true
-	_back.pressed.connect(func(): closed.emit())
+	_back.pressed.connect(_close)
+	_back.add_theme_stylebox_override("normal", UiKit.box(Color(0.09, 0.25, 0.32), Color(0.68, 0.57, 0.37), 2, 12, 3))
+	_back.add_theme_stylebox_override("hover", UiKit.box(Color(0.15, 0.34, 0.40), Color(0.79, 0.67, 0.43), 2, 12, 3))
+	_back.add_theme_stylebox_override("pressed", UiKit.box(Color(0.065, 0.20, 0.27), Color(0.79, 0.67, 0.43), 2, 12))
+	for state in ["font_color", "font_hover_color", "font_pressed_color", "font_focus_color"]:
+		_back.add_theme_color_override(state, Color(0.97, 0.94, 0.84))
 	add_child(_back)
-	if fast:
+	if fast or Settings.reduced_motion:
 		_speed = 1000.0
 	_play()
 
@@ -90,6 +93,16 @@ func _unhandled_input(event: InputEvent) -> void:
 	if not _done and (event.is_action_pressed("ui_cancel") or event.is_action_pressed("ui_accept")):
 		_speed = 1000.0
 		get_viewport().set_input_as_handled()
+	elif _done and (event.is_action_pressed("ui_cancel") or event.is_action_pressed("pause")):
+		get_viewport().set_input_as_handled()
+		_close()
+
+
+func _close() -> void:
+	if _closed or not _done:
+		return
+	_closed = true
+	closed.emit()
 
 
 func _wait(seconds: float) -> void:
@@ -174,14 +187,17 @@ func _play() -> void:
 	_done = true
 	_speed = 1.0
 	_back.disabled = false
-	create_tween().tween_property(_back, "modulate:a", 1.0, 0.25)
+	if Settings.reduced_motion:
+		_back.modulate.a = 1.0
+	else:
+		create_tween().tween_property(_back, "modulate:a", 1.0, 0.25)
 	_back.grab_focus.call_deferred()
 
 
 func _process(delta: float) -> void:
 	_t += delta
 	_total_pop = maxf(_total_pop - delta * 6.0, 0.0)
-	for i in SLOTS:
+	for i in _stamp_t.size():
 		if _stamp_t[i] >= 0.0:
 			_stamp_t[i] += delta * maxf(_speed, 1.0)
 	for r in _results:
@@ -200,123 +216,85 @@ func _goal_height() -> float:
 
 
 func _draw() -> void:
-	draw_rect(Rect2(Vector2.ZERO, size), Color(0.04, 0.02, 0.01, 0.5))
-	var r := Rect2(PAPER.position, Vector2(PAPER.size.x, _paper_h))
-	draw_rect(Rect2(r.position + Vector2(10, 14), r.size), Color(0, 0, 0, 0.35))   # its shadow
-	UiKit.nine(self, _tex.get("ui_paper", null), r, 40.0, 0.8)
-	var x0 := r.position.x + 48.0
-	var x1 := r.end.x - 48.0
-	var y := r.position.y + 70.0
-	_text(_dfont, Vector2(r.get_center().x, y), heading, 34, RED, true)
-	y += 34.0
-	_text(_font, Vector2(r.get_center().x, y), sub, 18, GREY, true)
-	y += 14.0
-	_dashes(x0, x1, y)
-	y += 12.0
+	draw_rect(Rect2(Vector2.ZERO, size), Color(0.025, 0.075, 0.10, 0.83))
+	draw_style_box(UiKit.box(Color(0, 0, 0, 0.25), Color.TRANSPARENT, 0, 18), Rect2(PAPER.position + Vector2(10, 16), PAPER.size))
+	draw_style_box(UiKit.box(Color(0.97, 0.95, 0.89), Color(0.65, 0.55, 0.35), 2, 18), PAPER)
+	# A bound ledger: separate numeric columns, a narrow brass rule and a navy total block.
+	draw_line(Vector2(1050, 136), Vector2(1050, 942), Color(0.66, 0.58, 0.41, 0.44), 2)
+	draw_style_box(UiKit.box(Color(0.07, 0.20, 0.27), Color(0.65, 0.55, 0.35), 1, 14), Rect2(1092, 138, 576, 728))
+	_text(_font, Vector2(236, 168), heading, 38, INK)
+	_paragraph(sub, Rect2(238, 186, 780, 64), 24, GREY)
+	_dashes(238, 1006, 264)
+	_detail_font_size = 27
+	var heights: Array[float] = []
+	for st in steps:
+		var copy: String = str(st.get("note", st.get("text", "")))
+		if st.has("mark"):
+			copy += "  " + str(st.mark)
+		var measured := _font.get_multiline_string_size(copy, HORIZONTAL_ALIGNMENT_LEFT, 540, _detail_font_size).y
+		heights.append(maxf(62.0, measured + 20.0))
+	var total_height := 0.0
+	for height in heights:
+		total_height += height
+	var row_scale := minf(1.0, 530.0 / maxf(total_height, 1.0))
+	if row_scale < 0.9:
+		_detail_font_size = 24
+	var y := 286.0
 	for i in mini(_shown, steps.size()):
-		var st: Dictionary = steps[i]
-		y += LINE_H
-		_line(st, x0, x1, y)
+		var h: float = heights[i] * row_scale
+		_ledger_line(steps[i], Rect2(238, y, 768, h))
+		y += h
 	if _sub_on:
-		y += 20.0
-		_dashes(x0, x1, y)
-		y += 44.0
-		_text(_font, Vector2(x0, y), tr("小计"), 24, INK)
-		_text(_nfont, Vector2(x1, y), Game.fmt(_sub_val), 38, Color(1.0, 0.96, 0.88), false, true)
-	if _slots_on:
-		y += 24.0
-		_slots(x0, x1, y)
-		y += 112.0
-	# the total, once there is a subtotal to multiply
-	_need_h = y - r.position.y + (130.0 if _sub_on else 30.0)
-	if _sub_on:
-		var ty := y + 96.0
-		_dashes(x0, x1, ty - 58.0)
-		_text(_font, Vector2(x0, ty - 6.0), tr("合计 token"), 24, INK)
-		var k := 1.0 + 0.18 * _total_pop
-		_text(_nfont, Vector2(x1, ty), Game.fmt(_total_val), int(64 * k), Color(1.0, 0.42, 0.32), false, true)
-	# the result stamps, right of the receipt
-	var sy := 140.0
-	for res in _results:
-		_result_stamp(Vector2(r.end.x + 150.0, sy), res[0], res[1], res[2])
-		sy += 110.0
+		_text(_font, Vector2(1132, 196), tr("小计"), 25, Color(0.74, 0.82, 0.82))
+		_text(_nfont, Vector2(1628, 250), Game.fmt(_sub_val), 45, Color(0.97, 0.94, 0.82), false, true)
+		if _slots_on:
+			_text(_font, Vector2(1132, 322), tr("本顿加成"), 25, Color(0.74, 0.82, 0.82))
+			for i in mini(_stamped, mults.size()):
+				var my := 372.0 + i * 50.0
+				_text(_font, Vector2(1132, my), str(mults[i][0]), 26, Color(0.93, 0.91, 0.80))
+				_text(_nfont, Vector2(1628, my), "×%.2f" % float(mults[i][1]), 28, Color(0.93, 0.78, 0.48), false, true)
+		draw_line(Vector2(1132, 625), Vector2(1628, 625), Color(0.70, 0.64, 0.46, 0.55), 2)
+		_text(_font, Vector2(1132, 674), tr("合计 token"), 27, Color(0.84, 0.87, 0.80))
+		_text(_nfont, Vector2(1628, 751), Game.fmt(_total_val), 72, Color(0.98, 0.82, 0.51), false, true)
+		var results: PackedStringArray = []
+		for result in _results:
+			results.append(str(result[0]))
+		_paragraph(" · ".join(results), Rect2(1132, 785, 496, 65), 24, Color(0.98, 0.77, 0.62))
+	else:
+		_paragraph(tr("正在结账…"), Rect2(1132, 196, 496, 80), 32, Color(0.95, 0.91, 0.79))
 	if extra != "" and _done:
-		_text(_font, Vector2(r.get_center().x, 960.0), extra, 22, Color(1.0, 0.9, 0.7), true)
-	if sleeping and _shown >= 2 and not _done:
-		for j in 3:   # Zzz over her, while she eats the leftovers in her dreams
-			var ph := fmod(_t * 0.6 + j / 3.0, 1.0)
-			var at := Vector2(1640.0 + ph * 60.0, 760.0 - ph * 90.0)
-			_text(_dfont, at, "Z" if j == 2 else "z", 26 + j * 8, Color(0.85, 0.92, 1.0, 1.0 - ph), false, false, Color(0.1, 0.15, 0.3, 1.0 - ph))
+		_paragraph(extra, Rect2(238, 847, 768, 110), 25, INK)
+	elif not _done:
+		_paragraph(tr("点击加速 · Enter / A 查看结果"), Rect2(238, 912, 768, 52), 24, GREY)
 	if not _spot.is_empty():
 		_spotlight()
 
 
-func _line(st: Dictionary, x0: float, x1: float, y: float) -> void:
-	if st.has("note"):   # a small grey sub-line
-		_text(_font, Vector2(x0 + 44.0, y - 4.0), st.note, 18, GREY)
-		_text(_nfont, Vector2(x1, y - 4.0), Game.fmt(float(st.add)), 22, GREY, false, true)
-		return
+func _ledger_line(st: Dictionary, row: Rect2) -> void:
+	var note := st.has("note")
 	var lost := st.has("lost")
-	var t: Texture2D = _tex.get("icon_" + str(st.get("icon", "")), null)
-	if t != null:
-		var s := 32.0 / maxf(t.get_width(), t.get_height())
-		draw_texture_rect(t, Rect2(Vector2(x0, y - 26.0), t.get_size() * s), false, Color(1, 1, 1, 0.5 if lost else 1.0))
-	var tx := x0 + 44.0
-	_text(_font, Vector2(tx, y), st.text, 22, GREY if lost else INK)
-	if st.has("mark"):   # a small red tag: ×3
-		var tw := _font.get_string_size(st.text, HORIZONTAL_ALIGNMENT_LEFT, -1, 22).x
-		var mw := _dfont.get_string_size(st.mark, HORIZONTAL_ALIGNMENT_LEFT, -1, 20).x + 14.0
-		var mr := Rect2(tx + tw + 10.0, y - 22.0, mw, 26.0)
-		draw_set_transform(mr.get_center(), -0.08, Vector2.ONE)
-		draw_style_box(UiKit.box(RED, Color.TRANSPARENT, 0, 5), Rect2(-mr.size * 0.5, mr.size))
-		draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
-		_text(_dfont, Vector2(mr.get_center().x, y - 2.0), st.mark, 20, Color(1.0, 0.96, 0.88), true)
-	var v := Game.fmt(float(st.get("lost", st.get("add", 0.0))))
+	var copy: String = str(st.get("note", st.get("text", "")))
+	if st.has("mark"):
+		copy += "  " + str(st.mark)
+	var left := row.position.x + (24.0 if note else 0.0)
+	_paragraph(copy, Rect2(left, row.position.y, 540 - (24 if note else 0), row.size.y), _detail_font_size - (2 if note else 0), GREY if note or lost else INK)
+	var amount := Game.fmt(float(st.get("lost", st.get("add", 0.0))))
+	var color := GREY if lost or note else Color(0.11, 0.34, 0.37)
+	_text(_nfont, Vector2(row.end.x, row.position.y + 30), amount if lost or note else "+" + amount, 27 if note else 31, color, false, true)
 	if lost:
-		_text(_nfont, Vector2(x1, y), v, 28, GREY, false, true)
-		var vw := _nfont.get_string_size(v, HORIZONTAL_ALIGNMENT_LEFT, -1, 28).x
-		draw_line(Vector2(x1 - vw - 2.0, y - 9.0), Vector2(x1 + 2.0, y - 9.0), GREY, 2.0)   # struck out
-	else:
-		_text(_nfont, Vector2(x1, y), "+" + v, 30, Color(0.95, 0.72, 0.25), false, true)
+		var w := _nfont.get_string_size(amount, HORIZONTAL_ALIGNMENT_LEFT, -1, 31).x
+		draw_line(Vector2(row.end.x - w, row.position.y + 18), Vector2(row.end.x, row.position.y + 18), GREY, 2)
+	draw_line(Vector2(row.position.x, row.end.y - 10), Vector2(row.end.x, row.end.y - 10), Color(0.65, 0.62, 0.49, 0.16), 1)
 
 
-## Five stamp slots: the multipliers stamped in so far, dashed rings for the ones still to unlock.
-func _slots(x0: float, x1: float, y: float) -> void:
-	var d := 96.0
-	var step := (x1 - x0 - d) / float(SLOTS - 1)
-	for i in SLOTS:
-		var c := Vector2(x0 + d * 0.5 + step * i, y + d * 0.5)
-		if i < mults.size() and i < _stamped:
-			var t: float = _stamp_t[i]
-			var k := 1.0 + 1.3 * maxf(0.0, 1.0 - t / 0.14)   # slams down from big
-			var a := clampf(t / 0.06, 0.0, 1.0)
-			draw_set_transform(c, -0.22, Vector2(k, k))
-			var ring: Texture2D = _tex.get("stamp_ring", null)
-			if ring != null:
-				draw_texture_rect(ring, Rect2(-Vector2(d, d) * 0.55, Vector2(d, d) * 1.1), false, Color(1, 1, 1, a))
-			_text(_font, Vector2(0, -8), mults[i][0], 17, Color(RED, a), true)
-			_text(_nfont, Vector2(0, 22), "×%.2f" % float(mults[i][1]), 23, Color(1.0, 0.42, 0.32, a), true)
-			draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
-		else:
-			for j in 16:   # a dashed ring and a question mark: more to unlock in the skill tree
-				var a0 := j * TAU / 16.0
-				draw_arc(c, d * 0.45, a0, a0 + TAU / 32.0, 4, Color(0.78, 0.66, 0.5), 2.0, true)
-			_text(_dfont, c + Vector2(0, 12), "?", 34, Color(0.78, 0.66, 0.5), true)
-
-
-func _result_stamp(c: Vector2, text: String, col: Color, t: float) -> void:
-	var k := 1.0 + 1.4 * maxf(0.0, 1.0 - t / 0.16)
-	var a := clampf(t / 0.06, 0.0, 1.0)
-	var w := _dfont.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, 40).x + 40.0
-	draw_set_transform(c, -0.16, Vector2(k, k))
-	draw_style_box(UiKit.box(Color(1.0, 0.96, 0.87, 0.92 * a), Color(col, a), 5, 10), Rect2(-w * 0.5, -36, w, 66))
-	_text(_dfont, Vector2(0, 12), text, 40, Color(col, a), true)
-	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+func _paragraph(copy: String, rect: Rect2, font_size: int, color: Color) -> void:
+	draw_multiline_string(_font, rect.position + Vector2(0, font_size), copy, HORIZONTAL_ALIGNMENT_LEFT, rect.size.x, font_size, -1, color)
 
 
 ## The <EOS> last bite: the dish big in the middle under a warm light, then its stamp.
 func _spotlight() -> void:
-	var c := Vector2(870, 470)
+	draw_rect(Rect2(Vector2.ZERO, size), Color(0.025, 0.06, 0.09, 0.86))
+	var c := Vector2(960, 470)
 	var k := minf(_spot.t / 0.3, 1.0)
 	var e := 1.0 - pow(1.0 - k, 3.0)
 	draw_texture_rect(UiKit.glow(), Rect2(c - Vector2(260, 260) * e, Vector2(520, 520) * e), false, Color(1.0, 0.82, 0.4, 0.8))
