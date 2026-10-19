@@ -3,8 +3,8 @@ extends Control
 ## A real two-page cookbook: one fixed spread at a time, never a scrolling page.
 signal closed
 
-const INK := Color("243d49")
-const MUTED := Color("647179")
+const INK := Color("4a2914")
+const MUTED := Color("78604b")
 const PAPER := Color("f6edda")
 const GOLD := Color("b98b46")
 const CHAPTERS := ["index", "sets", "foods", "rules"]
@@ -41,8 +41,9 @@ func _ready() -> void:
 		_return_focus = weakref(focused)
 	CanteenRun.load_menu()
 	_language = TranslationServer.get_locale()
+	_picture(self, "res://assets/canteen/bg_wall.png", Rect2(Vector2.ZERO, size), false)
 	var backdrop := ColorRect.new()
-	backdrop.color = Color(0.055, 0.10, 0.13, 1.0)
+	backdrop.color = Color(0.16, 0.08, 0.03, 0.42)
 	backdrop.size = size
 	backdrop.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(backdrop)
@@ -55,6 +56,8 @@ func _ready() -> void:
 			_panel(self, rect, PAPER, Color("cdbd9b"), 2, 5)
 		_panel(self, Rect2(941, 196, 37, 770), Color("cfbfa0"), Color.TRANSPARENT, 0, 0)
 	_heading = _text(self, "", Rect2(115, 25, 730, 78), 48, Color("fff3d5"))
+	_heading.add_theme_constant_override("outline_size", 8)
+	_heading.add_theme_color_override("font_outline_color", UiKit.WOOD_DARK)
 	_back = _button(self, "", Rect2(1580, 45, 230, 66), true)
 	_back.set_meta("ui_back", true)
 	_back.pressed.connect(_close)
@@ -68,7 +71,11 @@ func _ready() -> void:
 	_next = _button(self, "", Rect2(1530, 994, 240, 62), true)
 	_next.pressed.connect(_turn.bind(1))
 	_position_label = _text(self, "", Rect2(850, 40, 660, 42), 26, Color("fff3d5"), HORIZONTAL_ALIGNMENT_CENTER)
-	_hint = _text(self, "", Rect2(115, 98, 1300, 30), 21, Color("b9c9cc"))
+	_position_label.add_theme_constant_override("outline_size", 5)
+	_position_label.add_theme_color_override("font_outline_color", UiKit.WOOD_DARK)
+	_hint = _text(self, "", Rect2(115, 98, 1300, 30), 21, UiKit.TEXT)
+	_hint.add_theme_constant_override("outline_size", 4)
+	_hint.add_theme_color_override("font_outline_color", UiKit.WOOD_DARK)
 	_content = Control.new()
 	_content.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(_content)
@@ -339,7 +346,7 @@ func _picture(parent: Node, path: String, rect: Rect2, keep: bool, known := true
 	picture.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 	picture.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	if not known:
-		picture.modulate = Color(0.18, 0.25, 0.27, 0.6)
+		picture.modulate = Color(0.22, 0.15, 0.09, 0.65)
 	parent.add_child(picture)
 	picture.position = rect.position
 	picture.size = rect.size
@@ -376,19 +383,19 @@ func _button(parent: Node, text: String, rect: Rect2, dark: bool) -> Button:
 
 
 func _style_button(b: Button, selected: bool, dark: bool) -> void:
-	var fill := Color("d8b977") if selected else (Color("254451") if dark else Color("ebe0c8"))
-	b.add_theme_stylebox_override("normal", UiKit.box(fill, GOLD if selected else Color("8e8975"), 1, 8))
-	b.add_theme_stylebox_override("hover", UiKit.box(Color("e6c98d"), GOLD, 2, 8))
-	b.add_theme_stylebox_override("pressed", UiKit.box(Color("d8b977"), INK, 2, 8))
-	var focus := UiKit.box(Color.TRANSPARENT, Color("de9a52"), 4, 8)
+	var fill := UiKit.CREAM_HI if selected else (UiKit.CREAM if dark else Color("f4e6c6"))
+	b.add_theme_stylebox_override("normal", UiKit.box(fill, UiKit.WOOD, 2, 10, 4))
+	b.add_theme_stylebox_override("hover", UiKit.box(UiKit.CREAM_HI, UiKit.WOOD, 2, 10, 4))
+	b.add_theme_stylebox_override("pressed", UiKit.box(Color("eac785"), UiKit.WOOD_DARK, 2, 10, 2))
+	var focus := UiKit.box(Color.TRANSPARENT, Color("bd6e24"), 4, 10)
 	focus.draw_center = false
 	b.add_theme_stylebox_override("focus", focus)
-	b.add_theme_stylebox_override("disabled", UiKit.box(Color("20343d"), Color("425963"), 1, 8))
+	b.add_theme_stylebox_override("disabled", UiKit.box(Color("c0b39b"), Color("89735b"), 2, 10, 3))
 	for state in ["font_color", "font_focus_color"]:
-		b.add_theme_color_override(state, Color("fff3d5") if dark else INK)
+		b.add_theme_color_override(state, INK)
 	b.add_theme_color_override("font_hover_color", INK)
 	b.add_theme_color_override("font_pressed_color", INK)
-	b.add_theme_color_override("font_disabled_color", Color("7c929a"))
+	b.add_theme_color_override("font_disabled_color", Color("75634f"))
 
 
 func _rules() -> Array:

@@ -33,21 +33,11 @@ func _ready() -> void:
 		DirAccess.make_dir_recursive_absolute(_shots)
 	var settings_before := FileAccess.get_file_as_bytes(Settings.PATH)
 	var player_before := FileAccess.get_file_as_bytes("user://save.json")
-	var extra_path := ProjectSettings.globalize_path("res://../docs/collection-presentation-translations.json")
-	if FileAccess.file_exists(extra_path):
-		var entries: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(extra_path))
-		var translation := Translation.new()
-		translation.locale = "en"
-		for source in entries:
-			translation.add_message(source, entries[source])
-		TranslationServer.add_translation(translation)
 	Settings.reduced_motion = true
 	_report = {"engine": Engine.get_version_info().string, "renderer": DisplayServer.get_name(), "command_line": OS.get_cmdline_args(), "scope": "State fixtures and GUI events; not a full playthrough or physical controller", "source_sha256": {}, "screenshots": []}
-	for path in ["scripts/ui/recipe_book.gd", "scripts/ui/achievements_panel.gd", "scripts/ui/achievement_toast.gd", "tests/collection_presentation_test.gd", "data/i18n/en.json", "assets/ui/premium/recipe_spread.png"]:
+	for path in ["scripts/ui/recipe_book.gd", "scripts/ui/achievements_panel.gd", "scripts/ui/achievement_toast.gd", "scripts/ui/ui_kit.gd", "tests/collection_presentation_test.gd", "data/i18n/en.json", "assets/canteen/bg_wall.png", "assets/ui/premium/recipe_spread.png"]:
 		if FileAccess.file_exists("res://" + path):
 			_report.source_sha256[path] = FileAccess.get_sha256("res://" + path)
-	if FileAccess.file_exists(extra_path):
-		_report.source_sha256["../docs/collection-presentation-translations.json"] = FileAccess.get_sha256(extra_path)
 	for badge in ["meal", "growth", "recipe", "balance", "kitchen", "gold"]:
 		var path := "assets/ui/premium/badge_%s.png" % badge
 		if FileAccess.file_exists("res://" + path):

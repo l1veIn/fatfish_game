@@ -1,11 +1,11 @@
 class_name AchievementsPanel
 extends Control
-## A medal cabinet: categories, six readable medals per tray, and one large detail display.
+## The canteen's warm paper collection: six clear medals and one large character detail.
 signal closed
 
-const INK := Color("233c48")
-const GOLD := Color("d8b673")
-const PAPER := Color("f4ead4")
+const INK := Color("4a2914")
+const GOLD := Color("ffcc6b")
+const PAPER := Color("fff2d6")
 const GROUPS := ["全部奖章", "食堂日常", "成长旅程", "菜谱收藏", "吃饭的学问", "后厨建设"]
 const BADGES := {"食堂日常": "meal", "成长旅程": "growth", "菜谱收藏": "recipe", "吃饭的学问": "balance", "后厨建设": "kitchen"}
 const PAGE_SIZE := 6
@@ -64,12 +64,12 @@ func _ready() -> void:
 		_return_focus = weakref(focused)
 	_language = TranslationServer.get_locale()
 	_catalog = Game.achievement_catalog()
-	_panel(self, Rect2(0, 0, 1920, 1080), Color("101f28"), Color.TRANSPARENT, 0, 0)
-	_panel(self, Rect2(72, 44, 1776, 992), Color("1b3441"), Color("647b7e"), 2, 22)
-	_panel(self, Rect2(96, 217, 1160, 753), Color("132a35"), Color("385663"), 1, 12)
-	_panel(self, Rect2(1278, 217, 542, 753), PAPER, GOLD, 2, 14)
-	_heading = _text(self, "", Rect2(124, 71, 1080, 78), 48, Color("fff3d5"))
-	_subtitle = _text(self, "", Rect2(126, 155, 1080, 44), 25, Color("b7cbd0"))
+	_picture(self, "res://assets/canteen/bg_wall.png", Rect2(0, 0, 1920, 1080), true)
+	_panel(self, Rect2(0, 0, 1920, 1080), Color(0.08, 0.04, 0.02, 0.58), Color.TRANSPARENT, 0, 0)
+	_panel(self, Rect2(72, 44, 1776, 992), Color(0.2, 0.13, 0.08, 0.98), UiKit.WOOD, 4, 22)
+	_panel(self, Rect2(1278, 217, 542, 753), PAPER, UiKit.WOOD, 3, 14)
+	_heading = _text(self, "", Rect2(124, 71, 1080, 78), 48, GOLD)
+	_subtitle = _text(self, "", Rect2(126, 155, 1080, 44), 25, Color("e0c9a8"))
 	_progress = _text(self, "", Rect2(124, 886, 242, 74), 25, GOLD)
 	_back = _button(self, "", Rect2(1570, 92, 224, 66))
 	_back.set_meta("ui_back", true)
@@ -86,7 +86,7 @@ func _ready() -> void:
 	_next = _button(self, "", Rect2(1020, 978, 218, 58))
 	_next.pressed.connect(_turn.bind(1))
 	_page_label = _text(self, "", Rect2(640, 988, 368, 34), 25, PAPER, HORIZONTAL_ALIGNMENT_CENTER)
-	_hint = _text(self, "", Rect2(1286, 984, 526, 48), 21, Color("b7cbd0"), HORIZONTAL_ALIGNMENT_CENTER)
+	_hint = _text(self, "", Rect2(1286, 984, 526, 48), 21, Color("e0c9a8"), HORIZONTAL_ALIGNMENT_CENTER)
 	_grid = Control.new()
 	_grid.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(_grid)
@@ -178,10 +178,11 @@ func _medal(item: Dictionary, rect: Rect2) -> Button:
 	b.position = rect.position
 	b.size = rect.size
 	b.set_meta("achievement_id", item.id)
+	b.set_meta("unlocked", unlocked)
 	_style(b, false)
 	_picture(b, badge_path(item), Rect2(18, 36, 112, 112), unlocked)
-	_text(b, tr(str(item.name)), Rect2(150, 24, 228, 120), 26, PAPER if unlocked else Color("bdc7c8"))
-	_text(b, tr("已达成") if unlocked else tr("待点亮"), Rect2(150, 152, 226, 40), 23, GOLD if unlocked else Color("8ca4af"))
+	_text(b, tr(str(item.name)), Rect2(150, 24, 228, 120), 26, INK)
+	_text(b, tr("已达成") if unlocked else tr("待点亮"), Rect2(150, 152, 226, 40), 23, Color("805221") if unlocked else Color("77634f"))
 	b.focus_entered.connect(_select.bind(str(item.id)))
 	b.pressed.connect(_select.bind(str(item.id)))
 	return b
@@ -202,14 +203,14 @@ func _select(id: String) -> void:
 	if item.is_empty():
 		return
 	var unlocked := Game.achievements.has(id)
-	_text(_detail, tr(str(item.group)), Rect2(1310, 246, 478, 40), 24, Color("647179"), HORIZONTAL_ALIGNMENT_CENTER)
+	_text(_detail, tr(str(item.group)), Rect2(1310, 246, 478, 40), 24, Color("78604b"), HORIZONTAL_ALIGNMENT_CENTER)
 	var art_name: String = SPECIAL_PORTRAITS.get(id, PORTRAITS.get(str(item.group), "fish_achievement_trophy"))
 	var art := "res://assets/portraits/release/%s.png" % art_name
 	_picture(_detail, art, Rect2(1340, 301, 418, 316), true)
 	_text(_detail, tr("已达成") if unlocked else tr("待点亮"), Rect2(1314, 630, 470, 36), 24, Color("8f642d"), HORIZONTAL_ALIGNMENT_CENTER)
 	_text(_detail, tr(str(item.name)), Rect2(1312, 682, 474, 100), 35, INK, HORIZONTAL_ALIGNMENT_CENTER)
 	_text(_detail, tr(str(item.desc)), Rect2(1318, 798, 462, 122), 27, INK, HORIZONTAL_ALIGNMENT_CENTER)
-	_text(_detail, tr("保存在这份存档里的小小里程碑"), Rect2(1318, 923, 462, 32), 20, Color("6b7779"), HORIZONTAL_ALIGNMENT_CENTER)
+	_text(_detail, tr("保存在这份存档里的小小里程碑"), Rect2(1318, 923, 462, 32), 20, Color("78604b"), HORIZONTAL_ALIGNMENT_CENTER)
 
 
 func _wire_focus() -> void:
@@ -294,7 +295,7 @@ func _picture(parent: Node, path: String, rect: Rect2, unlocked: bool) -> Textur
 	picture.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 	picture.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	if not unlocked:
-		picture.modulate = Color(0.44, 0.55, 0.6, 0.8)
+		picture.modulate = Color(0.67, 0.62, 0.54, 0.85)
 	parent.add_child(picture)
 	picture.position = rect.position
 	picture.size = rect.size
@@ -321,13 +322,19 @@ func _button(parent: Node, text: String, rect: Rect2) -> Button:
 
 
 func _style(button: Button, selected: bool) -> void:
-	button.add_theme_stylebox_override("normal", UiKit.box(Color("37525b") if selected else Color("203b47"), GOLD if selected else Color("48616a"), 3 if selected else 1, 9))
-	button.add_theme_stylebox_override("hover", UiKit.box(Color("3d5862"), GOLD, 2, 9))
-	button.add_theme_stylebox_override("pressed", UiKit.box(Color("45616a"), GOLD, 3, 9))
-	button.add_theme_stylebox_override("disabled", UiKit.box(Color("20313b"), Color("3f5058"), 1, 9))
-	var focus := UiKit.box(Color.TRANSPARENT, Color("fff0b6"), 4, 9)
+	var unlocked: bool = button.get_meta("unlocked", true)
+	var paper := UiKit.CREAM if unlocked else Color("c5b89f")
+	button.add_theme_stylebox_override("normal", UiKit.box(Color("f4d591") if selected else paper, GOLD if selected else UiKit.WOOD, 3 if selected else 2, 12, 5))
+	button.add_theme_stylebox_override("hover", UiKit.box(UiKit.CREAM_HI, UiKit.WOOD, 2, 12, 5))
+	button.add_theme_stylebox_override("pressed", UiKit.box(Color("e8c27d"), UiKit.WOOD_DARK, 3, 12, 3))
+	button.add_theme_stylebox_override("disabled", UiKit.box(Color("a89a83"), UiKit.WOOD, 2, 12, 3))
+	var focus := UiKit.box(Color.TRANSPARENT, Color("ffdf87"), 4, 12)
 	focus.draw_center = false
+	focus.expand_margin_left = 4
+	focus.expand_margin_top = 4
+	focus.expand_margin_right = 4
+	focus.expand_margin_bottom = 4
 	button.add_theme_stylebox_override("focus", focus)
 	for key in ["font_color", "font_hover_color", "font_pressed_color", "font_focus_color"]:
-		button.add_theme_color_override(key, PAPER)
-	button.add_theme_color_override("font_disabled_color", Color("7d949f"))
+		button.add_theme_color_override(key, INK)
+	button.add_theme_color_override("font_disabled_color", Color("685542"))

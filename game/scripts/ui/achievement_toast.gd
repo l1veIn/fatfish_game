@@ -21,7 +21,7 @@ func _ready() -> void:
 	_card.position = Vector2(1240, 886)
 	_card.size = Vector2(620, 158)
 	_card.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_card.add_theme_stylebox_override("panel", UiKit.box(Color("17333f"), Color("d8b673"), 2, 12))
+	_card.add_theme_stylebox_override("panel", UiKit.box(UiKit.CREAM, UiKit.WOOD, 3, 16, 7))
 	add_child(_card)
 	_badge = TextureRect.new()
 	_badge.position = Vector2(20, 27)
@@ -31,12 +31,12 @@ func _ready() -> void:
 	_badge.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 	_badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_card.add_child(_badge)
-	_title = UiKit.label(tr("成就达成"), 23, Color("d8b673"))
+	_title = UiKit.label(tr("成就达成"), 23, Color(0.5, 0.32, 0.13))
 	_title.position = Vector2(148, 21)
 	_title.size = Vector2(442, 34)
 	_title.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_card.add_child(_title)
-	_name = UiKit.label("", 30, Color("fff3d5"))
+	_name = UiKit.label("", 30, UiKit.INK)
 	_name.position = Vector2(148, 65)
 	_name.size = Vector2(442, 82)
 	_name.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
