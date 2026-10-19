@@ -1,6 +1,6 @@
 # Steam 发布状态 · 2026-10-19
 
-本页取代旧 `steam_release.md` 中的进度勾选、内容数量、语言状态和云存档匹配建议。当前目标是完整的免费 PC 单机游戏；v0.4.0 是继续验收的候选版本，不等于已通过 Steam 审核。
+本页取代旧 `steam_release.md` 中的进度勾选、内容数量、语言状态和云存档匹配建议。当前目标是完整的免费 PC 单机游戏；v0.4.1 是继续验收的候选版本，不等于已通过 Steam 审核。
 
 ## 已接入的游戏内容
 
@@ -11,10 +11,11 @@
 - 统一图文菜单夹、只在满级出现的技能印章、Esc 暂停内的档口指南、手绘文字招牌和开放柜台；新增大肥鱼主题插画用于菜单与成就。
 - 鼠标直接跟随、扫掠接菜、显式思考冷却、普通语音间隔、入盒品质轮廓与失焦暂停恢复。
 - 删除隐藏的上下文溢出扣款；同菜满盒、缓存下一盒、换菜接力三种联动沿用原技能节点与价格。
+- 六位助手自由轮换，逐人指定补漏、配餐或补营养；职责接力、独立自动行为开关、明确队列与保险范围。
 - 版本 3 存档保留版本 2 进度；备份/临时文件恢复、旧目录恢复、未来版本写保护。
 - Windows 打包脚本从独立源码副本导出，排除测试与 Godot MCP 插件，保留构建日志和 SHA-256 清单。
 
-本轮原风格精修验证见 `docs/presentation-polish-validation.md`；早期功能基线见 `docs/release-validation.md`，对应原始报告保留在 `build/verification-*/report.json`。没有实物手柄、Steam Deck 或低配机实测时，不标记相应兼容性已通过。
+助手更新验证见 `docs/helper-release-validation.md`，原风格精修见 `docs/presentation-polish-validation.md`；早期功能基线见 `docs/release-validation.md`，对应原始报告保留在 `build/verification-*/report.json`。没有实物手柄、Steam Deck 或低配机实测时，不标记相应兼容性已通过。
 
 ## Steamworks 尚待配置
 
