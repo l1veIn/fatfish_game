@@ -40,11 +40,11 @@ func _ready() -> void:
 	add_child(_tree)
 	await _wait(0.1)
 	_tree._hover = "menu"
-	_tree._board.grab_focus()
+	_tree.grab_focus()
 	await _pad(JOY_BUTTON_A)
 	_check(Game.level("menu") == 3, "gamepad A on the map upgrades the selected skill once")
 	await _pad(JOY_BUTTON_DPAD_LEFT)
-	_check(_tree._hover != "menu" and _tree._board.has_focus(), "gamepad direction navigates the map without leaving its focus")
+	_check(_tree._hover != "menu" and _tree.has_focus(), "gamepad direction navigates the map without leaving its focus")
 	Game.levels["menu"] = 2
 	Game._recompute()
 	Game.changed.emit()

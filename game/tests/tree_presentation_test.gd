@@ -87,18 +87,13 @@ func _ready() -> void:
 			Game.levels[n.id] = int(n.max)
 	Game.levels["menu"] = 2
 	Game.levels["prompt"] = 1
-	Game.seen_buttons = {"menu": true, "sigs": true}
+	Game.seen_buttons = {"menu": true, "sigs": true, "menu_card": true, "sigs_card": true}
 	Game._recompute()
 	tree = TreeScreen.new()
 	add_child(tree)
 	await frames(5)
-	check(tree._board.clip_contents, "node map is clipped before fixed UI")
-	check(not tree.BOARD.intersects(tree.DETAIL), "map and long-detail column have independent areas")
-	check(not tree.DETAIL.intersects(tree._start.get_rect()), "details cannot cover the lunch action")
-	check(not tree.DETAIL.intersects(tree._trial.get_rect()), "details cannot cover the review action")
-	check(tree._detail_icon.size == Vector2(64, 64), "detail art remains at its intended small-icon scale")
-	check(not tree._detail_icon.get_rect().intersects(tree._detail_name.get_rect()), "category art leaves the full title area clear")
-	check(not tree._detail_icon.get_rect().intersects(tree._detail_scroll.get_rect()), "category art leaves the full scrolling text area clear")
+	check(tree._tex.has("cork_bg") and tree._tex.has("ui_chalkboard") and is_instance_valid(tree._fish), "original cork, chalkboard and character remain present")
+	check(tree._header_rect().position == Vector2(24, 14) and tree._header_rect().size.x == 580, "original top-left chalkboard layout remains")
 	var overlaps := 0
 	for i in Game.nodes.size():
 		for j in range(i + 1, Game.nodes.size()):
@@ -108,92 +103,100 @@ func _ready() -> void:
 				overlaps += 1
 	check(overlaps == 0, "node cards do not overlap at any authored coordinate pair")
 	tree._hover = "start"
-	tree._board.grab_focus()
+	tree.grab_focus()
 	await key(KEY_RIGHT)
-	check(tree._hover != "start" and tree._board.has_focus(), "real arrows navigate nodes without escaping map focus")
-	# A click selects, then an explicit accept purchases exactly one level.
+	check(tree._hover != "start" and tree.has_focus(), "real arrows navigate nodes without escaping map focus")
+	# Preserve the original click-to-buy interaction and explicit keyboard/controller accept.
 	tree._pan = -tree._pos(Game.node("prompt")) * tree._zoom
+	tree._hover = ""
+	await frames(2)
 	var before := Game.tokens
 	var before_level := Game.level("prompt")
 	await click(tree._at(Game.node("prompt")))
-	check(tree._hover == "prompt" and Game.tokens == before, "mouse click inspects without spending")
+	check(Game.level("prompt") == before_level + 1 and Game.tokens < before, "original mouse click buys exactly one level")
 	await key(KEY_ENTER)
-	check(Game.level("prompt") == before_level + 1, "Enter on the map buys exactly one selected level")
-	check(tree._detail_name.text == tr(Game.node("prompt").name), "purchased skill remains selected in the detail column")
+	check(Game.level("prompt") == before_level + 2, "Enter on the map buys exactly one selected level")
+	await frames(2)
+	before = Game.tokens
+	await click(tree._tooltip_bounds.get_center())
+	check(Game.tokens == before, "floating explanation cannot purchase a ticket behind it")
 	var longest := "start"
-	var longest_count := 0
+	var tallest := 0.0
+	var saved_levels := Game.levels.duplicate()
+	Game.levels = {"start": 1}
+	Game._recompute()
+	tree._trial.visible = true
+	tree._trial.text = tr("提交评测 · 门票 %s") % "100K"
 	for n in Game.nodes:
-		tree._hover = n.id
-		tree._last_detail = ""
-		tree._refresh_detail()
-		await frames(2)
-		check(tree._detail_name.get_rect().end.y <= tree._detail_status.position.y - 4, "full skill title fits its own area: " + n.id)
-		check(tree._detail_scroll.get_rect().end.y < tree._detail_price.position.y, "scrolling detail avoids the purchase row: " + n.id)
-		check(tree._detail_icon.texture != null, "category art is available for " + n.id)
-		check(tree._detail_icon.size == Vector2(64, 64), "texture swap preserves category icon dimensions: " + n.id)
-		var status_width := tree._detail_status.get_theme_font("font").get_string_size(tree._detail_status.text, HORIZONTAL_ALIGNMENT_LEFT, -1, 27).x
-		check(tree._detail_status.position.x + status_width + 16 < tree._detail_icon.position.x, "category art avoids the actual level/status text: " + n.id)
-		var art_path := tree._detail_icon.texture.resource_path
-		report.source_sha256[art_path.trim_prefix("res://")] = FileAccess.get_sha256(art_path)
-		if tr(n.desc).length() > longest_count:
-			longest_count = tr(n.desc).length()
+		var dimensions := Vector2.ZERO
+		for level in [0, maxi(0, int(n.max) - 1), int(n.max)]:
+			Game.levels[n.id] = level
+			var measured := tree._tooltip_size(tree._tooltip_lines(n))
+			dimensions.x = maxf(dimensions.x, measured.x)
+			dimensions.y = maxf(dimensions.y, measured.y)
+		Game.levels.erase(n.id)
+		check(dimensions.y <= 700, "complete authored skill explanation fits without pagination: " + n.id)
+		if dimensions.y > tallest:
+			tallest = dimensions.y
 			longest = n.id
+		for target in [Vector2(1150, 540), Vector2(1780, 900), Vector2(120, 180), Vector2(700, 980), Vector2(1840, 180)]:
+			tree._pan = target - Vector2(960, 540) - tree._pos(n) * tree._zoom
+			var bounds := tree._tooltip_rect(n, dimensions)
+			check(Rect2(0, 0, 1920, 1080).encloses(bounds), "tooltip stays onscreen: " + n.id + str(target))
+			check(not bounds.intersects(tree._header_rect()) and not bounds.intersects(tree._bar.get_rect()), "tooltip avoids original header and tools: " + n.id + str(target))
+			check(not bounds.intersects(tree._start.get_rect()) and not bounds.intersects(tree._trial.get_rect()), "tooltip avoids lunch and trial: " + n.id + str(target))
+	report["maximum_tooltip_height"] = tallest
+	report["maximum_tooltip_skill"] = longest
+	Game.levels = saved_levels
+	Game._recompute()
+	tree._update_trial_button()
 	tree._hover = longest
 	tree._pan = -tree._pos(Game.node(longest)) * tree._zoom
-	tree._last_detail = ""
-	tree._refresh_detail()
 	await shot("tree_longest_detail")
-	tree._detail_scroll.scroll_vertical = 10000
-	await shot("tree_detail_path")
+	tree._pan += Vector2(630, 360)
+	await shot("tree_edge_tooltip")
 	# Locked and unaffordable are separate review fixtures, restored before further UI actions.
 	var lock_node: Dictionary = Game.node("menu")
 	var was_locked: bool = lock_node.get("locked", false)
 	lock_node["locked"] = true
 	tree._hover = "menu"
 	tree._pan = -tree._pos(lock_node) * tree._zoom
-	tree._last_detail = ""
-	tree._refresh_detail()
-	check(tree._buy.disabled and tree._detail_status.text == tr("敬请期待"), "locked skill explains why purchase is unavailable")
+	check(tree._tooltip_lines(lock_node).any(func(line): return line[0] == tr("敬请期待")), "locked skill explains why purchase is unavailable")
 	await shot("tree_locked")
 	lock_node["locked"] = was_locked
 	var funds := Game.tokens
 	Game.tokens = 0
-	tree._refresh()
-	check(tree._buy.disabled and tree._detail_price.text != "", "unaffordable skill keeps its price visible")
+	check(not Game.can_buy("menu") and tree._tooltip_lines(lock_node).any(func(line): return line[0].contains("token")), "unaffordable skill keeps its price visible")
 	await shot("tree_unaffordable")
 	Game.tokens = funds
-	tree._refresh()
 	tree._hover = "menu"
 	tree._pan = -tree._pos(Game.node("menu")) * tree._zoom
-	tree._last_detail = ""
-	tree._refresh_detail()
-	check(tree._detail_status.text == tr("等级 %d / %d") % [2, Game.node("menu").max], "partial skill is labelled by actual level")
+	check(Game.level("menu") == 2 and not Game.is_maxed("menu"), "partial skill does not qualify for the max-level stamp")
 	await shot("tree_partial")
 	tree._hover = "start"
 	tree._pan = Vector2.ZERO
-	tree._last_detail = ""
-	tree._refresh_detail()
-	check(tree._buy.disabled and tree._detail_status.text == tr("已满级"), "maxed root cannot invite a purchase")
+	check(tree._tooltip_lines(Game.node("start")).any(func(line): return line[0] == tr("已满级")), "maxed root explains its completed state")
 	await shot("tree_maxed")
 	var opener: Button = tree.find_child("Tree_menu", true, false)
 	opener.grab_focus()
 	await key(KEY_ENTER)
 	var planner: MealPlanner = tree._planner
-	check(planner != null and planner._grid.columns == 2, "real toolbar event opens the wide-row menu")
-	check(planner._portrait.size == Vector2(470, 338), "menu portrait stays at its intended layout dimensions")
+	check(planner != null and planner._grid.columns == 3, "real toolbar event opens the original three-column menu")
+	check(planner._portrait.size == Vector2(470, 326), "menu portrait stays at its intended layout dimensions")
 	for card in planner._cards:
 		var id: String = card.get_meta("dish_id")
 		planner._show_detail(id)
 		await frames(2)
 		check(planner._detail_body.get_rect().end.y <= planner._done.position.y - 4, "dish detail does not cover confirmation: " + id)
 		check(card.get_meta("status").get_rect().end.y < card.size.y, "selection status fits its row: " + id)
-		check(card.get_meta("picture").size == Vector2(118, 126), "food texture stays within its intended card area: " + id)
+		check(card.get_meta("picture").size == Vector2(212, 126), "food texture stays within its intended card area: " + id)
+		check(card.get_meta("status").get_rect().end.y <= card.get_meta("picture").position.y, "status does not cover the food picture: " + id)
 	planner._by_id["ball"].grab_focus()
 	await key(KEY_ENTER)
 	await shot("planner_menu")
 	planner._tabs[1].grab_focus()
 	await key(KEY_ENTER)
-	check(planner._portrait.size == Vector2(470, 338), "signature portrait swap preserves intended dimensions")
+	check(planner._portrait.size == Vector2(470, 326), "signature portrait swap preserves intended dimensions")
 	await shot("planner_signatures")
 	await key(KEY_ESCAPE)
 	check(opener.has_focus(), "planner returns focus to its opener")
