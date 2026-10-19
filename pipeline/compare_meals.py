@@ -58,6 +58,7 @@ def cohort(data: dict, label: dict) -> tuple | None:
         raise ValueError("recovery must describe recovery or say no interruption occurred")
     build, result = data["build"], data["result"]
     if (data["mode"] != "manual" or build["trial"] or data["dropped_events"]
+            or not data.get("hash_complete", True) or not all(data["source_sha256"].values())
             or result["reason"] != "食堂关门了" or float(build["skill_spend"]) > cap):
         return None
     hashes = json.dumps(data["source_sha256"], sort_keys=True).encode()

@@ -87,6 +87,14 @@ func _journal_checks() -> void:
 	_check(journal.data.events.size() == JOURNAL.MAX_EVENTS and journal.data.dropped_events == 2, "event storage is bounded and reports truncation")
 	var folder := _out.path_join("retention-fixture")
 	DirAccess.make_dir_recursive_absolute(folder)
+	var bytecode := FileAccess.open(folder.path_join("probe.gdc"), FileAccess.WRITE)
+	bytecode.store_string("fixture bytecode, never executed")
+	bytecode.close()
+	var remap := ConfigFile.new()
+	remap.set_value("remap", "path", folder.path_join("probe.gdc"))
+	remap.save(folder.path_join("probe.gd.remap"))
+	_check(JOURNAL.resource_hash(folder.path_join("probe.gd")).sha256 == FileAccess.get_sha256(folder.path_join("probe.gdc")), "exported resource fingerprint follows its actual bytecode remap")
+	_check(JOURNAL.resource_hash(folder.path_join("missing.gd")).sha256 == "", "missing resource is explicit, not a false source hash")
 	var untouched := FileAccess.open(folder.path_join("notes.json"), FileAccess.WRITE)
 	untouched.store_string("keep")
 	untouched.close()
@@ -164,6 +172,15 @@ func _shift(cols: int) -> void:
 	var journal: Dictionary = run._journal.data
 	var saved_records := DirAccess.get_files_at(Game.save_path.get_basename() + "_meals")
 	_check(not saved_records.is_empty(), "normal settlement saves only to the isolated profile journal: %d columns" % cols)
+	saved_records.sort()
+	if not saved_records.is_empty():
+		_check(FileAccess.get_file_as_string((Game.save_path.get_basename() + "_meals").path_join(saved_records[-1])) == JSON.stringify(journal), "saved closing record exactly matches the settled in-memory evidence: %d columns" % cols)
+	_check(journal.hash_complete and journal.source_sha256.values().all(func(value): return str(value).length() == 64), "rule fingerprints are complete: %d columns" % cols)
+	var observed_catches := 0
+	for counts in journal.food.caught_input.values():
+		for count in counts.values():
+			observed_catches += int(count)
+	_check(observed_catches == run.contacts, "all catch contacts reconcile by dish and recipient: %d columns" % cols)
 	var transforms: Dictionary = journal.transforms
 	_check(int(transforms.get("temperature_changed_kind", 0)) > 0 and int(transforms.get("regenerate_changed_kind", 0)) > 0, "both random transformation mechanisms actually occurred: %d columns" % cols)
 	_check(journal.mode == "autotest" and journal.dropped_events == 0, "full trace is explicitly automated and untruncated: %d columns" % cols)

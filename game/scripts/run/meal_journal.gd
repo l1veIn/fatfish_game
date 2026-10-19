@@ -30,12 +30,27 @@ func begin(run) -> void:
 			"automation": effective, "helpers": run._helper_configs.duplicate(true),
 			"stall_order": run.stall_order.duplicate(), "capacity": run._cap(),
 			"trial": run.trial, "target": run.target, "duration": run.meal_time},
-		"source_sha256": {}, "food": {}, "events": [], "dropped_events": 0,
+		"source_sha256": {}, "hash_paths": {}, "hash_complete": true, "food": {}, "events": [], "dropped_events": 0,
 		"nutrition": [], "first_grok_seconds": -1.0, "transforms": {}, "active_seconds": 0.0,
 		"paid_bites": {"live": 0, "warm": 0, "sleep": 0}, "input_devices": {}}
 	for path in ["scripts/run/canteen_run.gd", "scripts/run/meal_rules.gd", "scripts/run/meal_journal.gd", "scripts/autoload/game.gd", "data/menu.json", "data/skill_tree.json"]:
-		data.source_sha256[path] = FileAccess.get_sha256("res://" + path)
+		var resource := resource_hash("res://" + path)
+		data.source_sha256[path] = resource.sha256
+		data.hash_paths[path] = resource.path
+		data.hash_complete = data.hash_complete and not str(resource.sha256).is_empty()
 	sample(run, true)
+
+
+## Release exports may replace .gd source with remapped bytecode. Fingerprint the
+## bytes actually shipped and record the resolved path; never pretend the hashes
+## of source and compiled scripts are interchangeable.
+static func resource_hash(path: String) -> Dictionary:
+	var resolved := path
+	if not FileAccess.file_exists(resolved) and FileAccess.file_exists(path + ".remap"):
+		var remap := ConfigFile.new()
+		if remap.load(path + ".remap") == OK:
+			resolved = str(remap.get_value("remap", "path", path))
+	return {"path": resolved, "sha256": FileAccess.get_sha256(resolved) if FileAccess.file_exists(resolved) else ""}
 
 
 func count(channel: String, it: int, run, source := "all") -> void:
