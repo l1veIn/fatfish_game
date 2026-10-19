@@ -1079,8 +1079,11 @@ func _catch(b: Dictionary, it: int, show: bool) -> void:
 			var close := _closest_recipe(b.items)
 			if close.is_empty() or not close[1].has(k):
 				var up := _upgrade(k)
-				if up >= 0 and not (k == I.VEG and _grokked):
-					it = with_hot(make(up, grade(it)))
+				var upgraded := with_hot(make(up, grade(it))) if up >= 0 else it
+				# Admission used the falling dish's footprint. A larger replacement must
+				# still fit after recipes merge; otherwise improve the original dish.
+				if up >= 0 and not (k == I.VEG and _grokked) and _accepts(b, upgraded):
+					it = upgraded
 					if show:
 						_chip(b.pos, "dice")
 				else:

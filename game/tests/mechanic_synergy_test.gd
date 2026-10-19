@@ -108,6 +108,27 @@ func _ready() -> void:
 	_check(Game.struck_toggle_reason(main_dishes[1]).is_empty() and Game.toggle_struck(main_dishes[1]), "at capacity a valid replacement can restore the old dish and exclude another")
 	_check(Game.active_struck() == [main_dishes[1]], "capacity replacement keeps exactly the newest valid choice")
 	_check(not Game.struck_toggle_reason("unavailable_or_unknown_food").is_empty(), "unknown or locked food cannot inflate menu bonuses")
+	# A caught one-cell dish may mutate into a two-cell dish after admission.
+	# Exercise real packing, including the last free cell, with no player snapshot.
+	CanteenRun.load_menu()
+	Game.levels = {"start": 1}
+	Game.struck = []
+	Game._recompute()
+	var heated := CanteenRun.new()
+	heated._read_stats()
+	heated.temp = 1.0 # deterministic branch probe, not a purchasable probability
+	var bun := CanteenRun.make(CanteenRun.KIND.bun)
+	var leg := CanteenRun.make(CanteenRun.KIND.leg)
+	var tight := heated._new_basin(Vector2.ZERO)
+	tight.items = [bun, bun, bun]
+	_check(heated._accepts(tight, leg), "last free cell admits the falling one-cell leg")
+	heated._catch(tight, leg, false)
+	_check(heated._space(tight) == 4 and not heated._pack(tight.items).is_empty(), "heat mutation cannot overfill an admitted box")
+	_check(CanteenRun.K(tight.items.back()) == CanteenRun.KIND.leg and CanteenRun.grade(tight.items.back()) == 1 and CanteenRun.is_hot(tight.items.back()), "blocked larger replacement retains the dish with heat and quality improvement")
+	var roomy := heated._new_basin(Vector2.ZERO)
+	heated._catch(roomy, leg, false)
+	_check(CanteenRun.K(roomy.items.back()) == CanteenRun.KIND.burger and not heated._pack(roomy.items).is_empty(), "a larger replacement is still allowed when it fits")
+	heated.free()
 	_check(FileAccess.get_file_as_bytes(Settings.PATH) == settings_before, "mechanic validation preserves player settings")
 	print("MECHANIC_SYNERGY_TEST: %d checks, %d failures" % [_checks, _failures])
 	get_tree().quit(_failures)
