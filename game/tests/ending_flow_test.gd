@@ -53,22 +53,38 @@ func _ready() -> void:
 	if panel == null:
 		_finish()
 		return
-	_check(panel._cards.size() == Game.achievement_catalog().size(), "every catalog achievement has a card")
-	for card in panel._cards:
-		for child in card.get_children():
-			if child is TextureRect:
-				_check(Rect2(Vector2.ZERO, card.size).encloses(child.get_rect()),
-					"achievement portrait stays inside its card: " + str(card.get_meta("achievement_id")))
-				_check(child.size.x <= 160 and child.size.y <= 180,
-					"achievement portrait leaves room for readable text: " + str(card.get_meta("achievement_id")))
-	await _shot("achievements_top")
+	var achievement_ids := {}
+	panel._back.grab_focus()
 	await _key(KEY_DOWN)
-	_check(panel._cards[0].has_focus(), "Down enters the achievement grid")
-	for i in 12:
-		await _key(KEY_DOWN)
-	_check(panel._cards.back().has_focus(), "directional navigation reaches final achievement")
-	_check(panel._scroll.scroll_vertical > 0, "focused achievements scroll into view")
-	await _shot("achievements_bottom")
+	_check(panel._medals[0].has_focus(), "Down enters the first achievement tray")
+	await _key(KEY_DOWN)
+	_check(panel._medals[2].has_focus(), "Down follows medal grid columns")
+	await _key(KEY_UP)
+	_check(panel._medals[0].has_focus(), "Up returns to the first medal")
+	for page in panel._page_count:
+		_check(panel._spread == page and panel._medals.size() <= 6, "achievement tray advances one page with bounded capacity")
+		for i in panel._medals.size():
+			var medal: Button = panel._medals[i]
+			var id := str(medal.get_meta("achievement_id"))
+			_check(medal.has_focus() and panel._selected_id == id, "keyboard navigation exposes detail for " + id)
+			_check(not achievement_ids.has(id), "achievement appears on exactly one tray: " + id)
+			achievement_ids[id] = true
+			for child in medal.get_children():
+				if child is TextureRect:
+					_check(Rect2(Vector2.ZERO, medal.size).encloses(child.get_rect()), "small medal art stays in its slot: " + id)
+					_check(child.size == Vector2(112, 112) and not child.texture.resource_path.contains("portraits"), "small art uses a dedicated simple icon: " + id)
+			for child in panel._detail.get_children():
+				if child is TextureRect:
+					_check(child.size.x >= 350 and child.size.y >= 280, "complex character art has a large detail display")
+			if i + 1 < panel._medals.size():
+				await _key(KEY_TAB)
+		if page == 0:
+			await _shot("achievements_first_tray")
+		if page + 1 < panel._page_count:
+			await _pad(JOY_BUTTON_RIGHT_SHOULDER)
+	_check(achievement_ids.size() == Game.achievement_catalog().size(), "every catalog achievement is reachable through real paged navigation")
+	_check(panel._medals.back().has_focus() and panel._next.disabled, "final achievement is focused and final tray cannot advance")
+	await _shot("achievements_last_tray")
 	await _pad(JOY_BUTTON_B)
 	_check(not is_instance_valid(panel), "gamepad B closes achievements")
 	_check(achievement_button.has_focus(), "closing achievements restores menu focus")
