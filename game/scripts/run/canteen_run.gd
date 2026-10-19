@@ -665,7 +665,7 @@ func _read_stats() -> void:
 	memory = int(Game.stat("memory"))
 	warm = Game.stat("warm") > 0.0
 	warm_x = 2.0 + Game.stat("final")
-	best_of_n = Game.stat("bon") > 0.0
+	best_of_n = Game.automation_enabled("bon")
 	grok = Game.stat("grok") > 0.0
 	grok_need = int(Game.stat("grok_need"))
 	veg_x = 6.0 + Game.stat("aftertaste")

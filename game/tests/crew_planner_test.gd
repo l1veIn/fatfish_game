@@ -25,6 +25,7 @@ func _ready() -> void:
 	Settings.pause_unfocused = false
 	Settings.window_size = _window
 	Settings.fullscreen = false
+	Settings.vsync = false
 	Settings.apply()
 	ThemeDB.get_default_theme().merge_with(UiKit.build_theme())
 	Game.version = Game.VERSIONS.size() - 1
@@ -99,13 +100,17 @@ func _ready() -> void:
 		_bounds(panel)
 	panel._tabs[1].grab_focus()
 	await _key(KEY_ENTER)
-	_check(panel._auto_buttons.size() == 6, "automation uses its own six-switch page")
+	_check(panel._auto_buttons.size() == 7, "automation includes independent warm-box selection on its own page")
 	for id in Game.AUTOMATION_KEYS:
 		var was_on: bool = Game.automation_enabled(id)
 		await _click(panel._auto_buttons[id].get_global_rect().get_center())
 		_check(Game.automation_enabled(id) != was_on, "mouse toggles purchased automation " + id)
 		_check(Game.levels.size() > 0, "automation changes do not refund skills")
 	await _shot("automation_off")
+	panel._auto_buttons.bon.grab_focus()
+	await _pad(JOY_BUTTON_A)
+	_check(Game.automation_enabled("bon"), "controller can restore automatic warm-box selection")
+	_check(get_viewport().gui_get_focus_owner().get_meta("crew_key", "") == "auto_bon", "warm-box toggle preserves controller focus after refresh")
 	Game.levels.overfit = 0
 	Game._recompute()
 	Game.changed.emit()

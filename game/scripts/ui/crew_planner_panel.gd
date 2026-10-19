@@ -22,6 +22,7 @@ const AUTOMATION := {
 	"temp": ["Temperature", "接菜时可能换成更高档菜，或提升品质。"],
 	"regen": ["重新生成", "送饭时可能把散菜升级。"],
 	"overfit": ["过拟合", "顿悟后，散菜可能变成青菜。"],
+	"bon": ["Best-of-N", "自动留最贵整盒；暂停后可手动留盒。"],
 }
 var mode := "crew"
 var _selected := "wen"
@@ -252,23 +253,25 @@ func _build_automation() -> void:
 	for i in Game.AUTOMATION_KEYS.size():
 		var key: String = Game.AUTOMATION_KEYS[i]
 		var spec: Array = AUTOMATION[key]
+		var reserve := key == "bon"
 		var origin := Vector2(112 + (i % 2) * 850, 326 + (i / 2) * 210)
+		if reserve:
+			origin = Vector2(112, 952)
 		var card := Panel.new()
 		card.position = origin
-		card.size = Vector2(812, 186)
+		card.size = Vector2(1662, 64) if reserve else Vector2(812, 186)
 		card.add_theme_stylebox_override("panel", UiKit.box(Color("f6e6c2"), UiKit.WOOD, 1, 12))
 		card.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		_body.add_child(card)
-		_label(card, tr(str(spec[0])), Rect2(22, 16, 555, 50), 31)
-		_label(card, tr(str(spec[1])), Rect2(22, 81, 765, 88), 25, SOFT)
+		_label(card, tr(str(spec[0])), Rect2(22, 10, 250, 44) if reserve else Rect2(22, 16, 555, 50), 27 if reserve else 31)
+		_label(card, tr(str(spec[1])), Rect2(285, 10, 1100, 44) if reserve else Rect2(22, 81, 765, 88), 22 if reserve else 25, SOFT)
 		var owned := Game.stat(key) > 0
-		var button := _button(card, tr("开启") if Game.automation_enabled(key) else (tr("暂停") if owned else tr("未学会")), Rect2(601, 16, 187, 55), "auto_" + key)
+		var button := _button(card, tr("开启") if Game.automation_enabled(key) else (tr("暂停") if owned else tr("未学会")), Rect2(1453, 8, 187, 48) if reserve else Rect2(601, 16, 187, 55), "auto_" + key)
 		button.disabled = not owned
 		_style(button, Game.automation_enabled(key))
 		button.pressed.connect(func(): Game.set_automation(key, not Game.automation_enabled(key)))
 		_auto_buttons[key] = button
 		_controls.append(button)
-	_label(_body, tr("这些开关只决定自动行为，不取消已购买的等级。可搭配单品拼盘、保温箱或青菜玩法。"), Rect2(112, 956, 1656, 60), 25, SOFT)
 
 
 func _wire_focus() -> void:

@@ -129,14 +129,14 @@ func test_data_and_configuration() -> void:
 	check(not Game.helper_recipe_options().is_empty(),"recipe-options cache returns a defensive copy")
 
 func test_persistence_and_switches() -> void:
-	configure({"hire":2,"fc":1,"nutri":1,"skills":1,"temp":1,"fuse3":1,"regen":1,"overfit":1,"stall_wok":1,"stall_dim":2})
+	configure({"hire":2,"fc":1,"nutri":1,"skills":1,"temp":1,"fuse3":1,"regen":1,"overfit":1,"bon":1,"warm":1,"stall_wok":1,"stall_dim":2})
 	for key in Game.AUTOMATION_KEYS:
 		check(Game.automation_enabled(key),"missing automation config keeps owned default: "+key)
 	Game.set_helper_config("wen",false,"sweep","")
 	Game.set_helper_config("ge",true,"nutrition","")
 	Game.set_helper_config("pu",true,"recipe","breakfast")
 	check(Game.set_automation("auto_push",false) and Game.automation_enabled("auto_return"),"empty delivery and full return are independent toggles")
-	for key in ["fuse3","temp","regen","overfit"]:
+	for key in ["fuse3","temp","regen","overfit","bon"]:
 		check(Game.set_automation(key,false) and not Game.automation_enabled(key),"owned disruptive behavior can pause: "+key)
 	check(not Game.set_automation("made_up",false),"unknown automation cannot be saved")
 	Game.save_game()
@@ -149,12 +149,25 @@ func test_persistence_and_switches() -> void:
 	check(Game.active_helpers() == ["pu","ge"],"chosen non-default team persists")
 	var frozen := fresh_run()
 	check(frozen.hired == ["pu","ge"] and frozen._helper_configs.pu.recipe == "breakfast","shift freezes selected team and chosen recipe")
-	check(not frozen.auto_push and frozen.auto_return and frozen.temp == 0 and not frozen.fuse3 and frozen.regen == 0 and not frozen.overfit,"shift reads all six switches independently")
+	check(not frozen.auto_push and frozen.auto_return and frozen.temp == 0 and not frozen.fuse3 and frozen.regen == 0 and not frozen.overfit and not frozen.best_of_n,"shift reads all seven switches independently")
+	var reserved := box(frozen, [food("leg", 2)])
+	frozen._put_warm(reserved)
+	var bulk := box(frozen, [food("leg", 1), food("leg", 1), food("leg", 1)])
+	frozen._serve(bulk)
+	check(is_same(frozen._warm, reserved) and frozen._queue.has(bulk),"paused Best-of-N preserves a deliberate high-single-bite reserve when a higher-total box arrives")
 	Game.set_helper_config("pu",false,"sweep","")
 	Game.set_automation("temp",true)
+	Game.set_automation("bon",true)
 	check(frozen.hired == ["pu","ge"] and frozen.temp == 0 and frozen._helper_configs.pu.recipe == "breakfast","between-meal edits cannot mutate an already-created run")
 	var next := fresh_run()
 	check(next.hired == ["ge"] and next.temp > 0,"new run sees updated configuration")
+	check(not frozen.best_of_n and next.best_of_n,"Best-of-N edits affect only the next meal")
+	next.regen = 0.0 # isolate selection, not random rerolls, in this branch fixture
+	var next_reserve := box(next, [food("leg", 2)])
+	next._put_warm(next_reserve)
+	var next_bulk := box(next, [food("leg", 1), food("leg", 1), food("leg", 1)])
+	next._serve(next_bulk)
+	check(is_same(next._warm, next_bulk) and next._queue.has(next_reserve),"enabled Best-of-N retains its original highest-total-box behavior")
 	Game.respec()
 	check(Game.active_helpers().is_empty() and Game.helper_config("ge").role == "sweep","full refund safely disables team and unavailable nutrition role")
 	check(not Game.automation_enabled("auto_return") and not Game.set_automation("auto_return",true),"unowned behavior cannot be enabled after refund")
