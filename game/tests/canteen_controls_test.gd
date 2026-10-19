@@ -216,6 +216,8 @@ func _ready() -> void:
 	run.compress = 0
 	run._serve(roomy)
 	check(roomy.meal_rule.cache_primed and run._cache_ready, "roomy recipe delivery stores one cache")
+	check(roomy.meal_rule.cache_bridge and run._previous_mono_kind == RUN.I.BOWL and run._combo_n == 3,
+		"actual cache submission bridges the preceding bowl platter and advances the chain")
 	var prior_kind := run._previous_mono_kind
 	var prior_chain := run._combo_n
 	for origin in ["crew", "takeout"]:
@@ -227,7 +229,7 @@ func _ready() -> void:
 	var cached := box(run, [RUN.I.BALL, RUN.I.BALL, RUN.I.BALL, RUN.I.BALL])
 	run._serve(cached)
 	check(cached.meal_rule.cache_consumed and not run._cache_ready, "next player full box consumes cache once")
-	close_enough(run._box_rule_bonus(cached), 0.25, "cache and mono additive bonuses stack")
+	close_enough(run._box_rule_bonus(cached), 0.45, "real cached rotation stacks mono, cache and rotation bonuses")
 	var empty := box(run, [])
 	prior_kind = run._previous_mono_kind
 	run._note_served(empty)

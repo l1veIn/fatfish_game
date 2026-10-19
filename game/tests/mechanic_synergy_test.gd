@@ -76,6 +76,19 @@ func _ready() -> void:
 	_check(not RULES.plan(recipe_box, -1, false, 0.1, 0.0, 0.2).cache_ready, "unlearned compression cannot charge a cache")
 	_check(not RULES.plan(RULES.profile([food(20, 3, false, true, 2)], 4), -1, false, 0.1, 0.15, 0.2).cache_ready, "one free cell does not qualify for the two-cell reserve")
 	_check(not RULES.plan(half, -1, false, 0.1, 0.15, 0.2).cache_ready, "an empty-looking box without a recipe cannot farm reserves")
+	# Exercise reachable consecutive submissions instead of injecting a previous dish
+	# and a charged cache that the old state machine could never retain together.
+	var bridge := RULES.plan(recipe_box, a.next_mono_kind, a.cache_ready, 0.1, 0.15, 0.2)
+	_check(bridge.cache_bridge and bridge.combo_eligible and bridge.next_mono_kind == a.next_mono_kind,
+		"a single cache-preparation recipe bridges the preceding platter without breaking its chain")
+	var real_payout := RULES.plan(other, bridge.next_mono_kind, bridge.cache_ready, 0.1, 0.15, 0.2)
+	_check(real_payout.rotation and real_payout.cache_consumed and is_equal_approx(real_payout.add_bonus, 0.45),
+		"platter A then cache recipe then platter B reaches the combined bonus through real state transitions")
+	var repeated_bridge := RULES.plan(recipe_box, bridge.next_mono_kind, bridge.cache_ready, 0.1, 0.15, 0.2)
+	_check(not repeated_bridge.cache_bridge and not repeated_bridge.combo_eligible and repeated_bridge.next_mono_kind == -1,
+		"another partial recipe cannot farm a chain from an already charged cache")
+	_check(not RULES.plan(recipe_box, a.next_mono_kind, false, 0.1, 0.15, 0.0).cache_bridge,
+		"cache bridging requires learned rotation rather than granting a hidden early chain")
 	Game.levels = {"start": 1, "stall_wok": 1, "menu": 4, "lora": 1}
 	Game._recompute()
 	Game.struck = []

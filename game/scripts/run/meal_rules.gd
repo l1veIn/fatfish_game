@@ -42,12 +42,16 @@ static func plan(box: Dictionary, previous_mono_kind: int, cache_ready: bool,
 	var full := bool(box.get("full", false))
 	var cache_consumed := cache_ready and full and cache_bonus > 0.0
 	var cache_primed := not full and bool(box.get("has_set", false)) and int(box.get("free_cells", 0)) >= 2 and cache_bonus > 0.0 and not cache_ready
+	# One real cache-preparation box can bridge two platters. Once charged, another
+	# partial recipe cannot keep extending the line without paying out the cache.
+	var cache_bridge := cache_primed and previous_mono_kind >= 0 and mono_bonus > 0.0 and rotation_bonus > 0.0
 	var next_cache := cache_bonus > 0.0 and ((cache_ready and not cache_consumed) or cache_primed)
 	var mono_add := maxf(0.0, mono_bonus) if mono else 0.0
 	var cache_add := maxf(0.0, cache_bonus) if cache_consumed else 0.0
 	var rotation_add := maxf(0.0, rotation_bonus) if rotation else 0.0
-	return {"mono_kind": mono_kind, "combo_eligible": int(box.get("high_sets", 0)) >= 2 or mono,
+	return {"mono_kind": mono_kind, "combo_eligible": int(box.get("high_sets", 0)) >= 2 or mono or cache_bridge,
 		"add_bonus": mono_add + cache_add + rotation_add,
 		"mono_bonus": mono_add, "cache_bonus": cache_add, "rotation_bonus": rotation_add,
 		"cache_ready": next_cache, "cache_consumed": cache_consumed, "cache_primed": cache_primed,
-		"rotation": rotation, "next_mono_kind": mono_kind}
+		"rotation": rotation, "cache_bridge": cache_bridge,
+		"next_mono_kind": previous_mono_kind if cache_bridge else mono_kind}

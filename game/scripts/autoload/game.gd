@@ -30,8 +30,9 @@ const BASE := {
 	"peaks": 0.0,          # 推理高峰: 1 = peak / off-peak hours
 	"peak_time": 5.0,      # seconds of each peak
 	"peak_good": 3.0,      # good-stuff multiplier during peaks
-	"helper": 0.0,         # 招募小助手: 问问, then 谱谱 / 小G / 克劳 / 双子 / 格格 (CanteenRun.CREW)
+	"helper": 0.0,         # number of simultaneously active helpers, freely chosen from six
 	"helper_speed": 1.0,   # how fast they run (多 Agent 编排)
+	"crew_relay": 0.0,     # distinct completed helper jobs support the next player delivery
 	"crit_chance": 0.0,    # 中午吃什么: chance a bite is a crit
 	"crit_mult": 2.0,
 	"magnet": 0.0,         # fixed base radius; material never grants attraction
@@ -132,6 +133,12 @@ var trial_fails := {}
 var recipes := {}         # 菜谱图鉴: recipe id -> times made
 var signatures: Array = []  # 招牌菜 picked by the player (food ids); see active_signatures()
 var struck: Array = []      # 今日菜单: dishes struck off (food ids), up to stat menu_cut
+const HELPER_IDS := ["wen", "pu", "g", "ke", "zi", "ge"]
+const AUTOMATION_KEYS := ["auto_push", "auto_return", "fuse3", "temp", "regen", "overfit"]
+var helper_plan: Dictionary = {}  # optional schema-3 selections; missing entries keep the old team
+var automation: Dictionary = {}   # missing entries preserve the purchased skill's enabled behavior
+var _helper_recipe_cache_key := ""
+var _helper_recipe_cache: Array = []
 var seen_buttons := {}      # tree-screen buttons the player has pressed at least once (new ones glow)
 var achievements := {}      # stable ids -> first unlock time, independent of refundable skills
 var lifetime := {"eaten": 0, "full_boxes": 0}
@@ -226,6 +233,8 @@ func is_visible(id: String) -> bool:
 	var parents: Array = node(id)["parents"]
 	if parents.is_empty():
 		return true
+	if node(id).get("require_all", false):
+		return parents.all(func(p): return level(p) > 0)
 	for p in parents:
 		if level(p) > 0:
 			return true
@@ -422,6 +431,144 @@ func active_signatures() -> Array:
 	return out
 
 
+## Prepared between meals. All six characters are available; recruitment buys team slots.
+func helper_capacity() -> int:
+	return clampi(int(stat("helper")), 0, HELPER_IDS.size())
+
+
+func active_helpers() -> Array:
+	var out: Array = []
+	var cap := helper_capacity()
+	for i in HELPER_IDS.size():
+		var id: String = HELPER_IDS[i]
+		var entry: Dictionary = helper_plan.get(id, {})
+		if bool(entry.get("active", i < cap)) and out.size() < cap:
+			out.append(id)
+	return out
+
+
+## Keep requested jobs even after a refund/menu edit, but explain the safe effective fallback.
+func helper_config(id: String) -> Dictionary:
+	var entry: Dictionary = helper_plan.get(id, {}) if HELPER_IDS.has(id) else {}
+	var role: String = entry.get("role", "sweep")
+	var recipe: String = entry.get("recipe", "")
+	var result := {"active": active_helpers().has(id), "role": role, "recipe": recipe,
+		"requested_role": role, "requested_recipe": recipe, "reason": ""}
+	if role == "recipe":
+		if stat("fc") <= 0.0:
+			result.reason = "需要先学会 Function Calling：点单。"
+		elif not helper_recipe_options().any(func(r): return r.id == recipe):
+			result.reason = "当前菜单或饭盒无法完成这道菜，暂时改为补漏。"
+	elif role == "nutrition" and stat("nutri") <= 0.0:
+		result.reason = "需要先学会营养师 Agent。"
+	elif role not in ["sweep", "recipe", "nutrition"]:
+		result.reason = "这项分工已不可用，暂时改为补漏。"
+	if not str(result.reason).is_empty():
+		result.role = "sweep"
+		result.recipe = ""
+	return result
+
+
+func set_helper_config(id: String, active: bool, role: String, recipe: String) -> bool:
+	if not HELPER_IDS.has(id) or helper_capacity() <= 0 or role not in ["sweep", "recipe", "nutrition"]:
+		return false
+	if role == "recipe" and (stat("fc") <= 0.0 or not helper_recipe_options().any(func(r): return r.id == recipe)):
+		return false
+	if role == "nutrition" and stat("nutri") <= 0.0:
+		return false
+	var team := active_helpers()
+	if active and not team.has(id) and team.size() >= helper_capacity():
+		return false
+	# Materialize the current team before editing so a default member cannot silently replace
+	# a benched member, and selecting the sixth character cannot evict an earlier choice.
+	for member in HELPER_IDS:
+		if not helper_plan.has(member):
+			helper_plan[member] = {"active": team.has(member), "role": "sweep", "recipe": ""}
+	helper_plan[id] = {"active": active, "role": role, "recipe": recipe if role == "recipe" else ""}
+	save_game()
+	changed.emit()
+	return true
+
+
+func automation_enabled(key: String) -> bool:
+	return AUTOMATION_KEYS.has(key) and stat(key) > 0.0 and bool(automation.get(key, true))
+
+
+func set_automation(key: String, enabled: bool) -> bool:
+	if not AUTOMATION_KEYS.has(key) or stat(key) <= 0.0:
+		return false
+	automation[key] = enabled
+	save_game()
+	changed.emit()
+	return true
+
+
+## A recipe must have a feasible collection order, including intermediate auto-merges and
+## the real two-row packing rule. These pure previews never discover recipes or spend food.
+func helper_recipe_options() -> Array:
+	CanteenRun.load_menu()
+	var known := recipes.keys()
+	known.sort()
+	var key := JSON.stringify([_available_menu().keys(), active_struck(), stat("box_n"), stat("compress"), known])
+	if key == _helper_recipe_cache_key:
+		return _helper_recipe_cache.duplicate(true)
+	var options: Array = []
+	var available := _available_menu()
+	for id in active_struck():
+		available.erase(id)
+	var sim := CanteenRun.new()
+	sim.box_n = int(stat("box_n"))
+	sim.compress = int(stat("compress"))
+	for r in CanteenRun.RECIPES:
+		if r.kind == "hidden" and not recipes.has(r.id):
+			continue
+		var parts: Array = sim._ingredients(int(r.result))
+		var possible := not parts.is_empty()
+		for part in parts:
+			var food_id: String = CanteenRun.KIND.find_key(int(part))
+			if not available.has(food_id):
+				possible = false
+		if not possible or sim._pack([int(r.result)]).is_empty():
+			continue
+		var memo := {}
+		if _helper_recipe_route(sim, int(r.result), [], parts, memo):
+			options.append({"id": str(r.id), "name": str(r.name), "kind": int(r.result)})
+	sim.free()
+	_helper_recipe_cache_key = key
+	_helper_recipe_cache = options
+	return options.duplicate(true)
+
+
+func _helper_recipe_route(sim: CanteenRun, target: int, items: Array, remaining: Array, memo: Dictionary) -> bool:
+	if items.any(func(it): return CanteenRun.K(int(it)) == target):
+		return true
+	if remaining.is_empty():
+		return false
+	var kinds: Array = items.map(func(it): return CanteenRun.K(int(it)))
+	var rest := remaining.duplicate()
+	rest.sort()
+	var key := JSON.stringify([kinds, rest])
+	if memo.has(key):
+		return false
+	memo[key] = true
+	var tried: Array = []
+	for i in remaining.size():
+		var part: int = remaining[i]
+		if tried.has(part):
+			continue
+		tried.append(part)
+		var next := items.duplicate()
+		next.append(part)
+		sim._merge_items(next)
+		if sim._pack(next).is_empty():
+			continue
+		var missing := remaining.duplicate()
+		missing.remove_at(i)
+		if _helper_recipe_route(sim, target, next, missing, memo):
+			return true
+	return false
+
+
 func signature_available(id: String) -> bool:
 	if not CanteenRun.KIND.has(id):
 		return false
@@ -548,6 +695,7 @@ func save_game() -> bool:
 	f.store_string(JSON.stringify({"version": SAVE_VERSION, "tokens": tokens, "total_tokens": total_tokens,
 		"runs": runs, "best_run": best_run, "levels": levels, "fish_version": version,
 		"trial_fails": trial_fails, "recipes": recipes, "signatures": signatures, "struck": struck,
+		"helper_plan": helper_plan, "automation": automation,
 		"seen_buttons": seen_buttons, "achievements": achievements, "lifetime": lifetime,
 		"ending_seen": ending_seen, "saved_at": Time.get_unix_time_from_system()}, "\t"))
 	f.flush()
@@ -664,6 +812,7 @@ func load_game() -> void:
 			recipes.erase(id)
 	signatures = _food_list(d.get("signatures", []))
 	struck = _food_list(d.get("struck", []))
+	_load_helper_preferences(d)
 	seen_buttons = {}
 	for id in d.get("seen_buttons", {}):
 		if d.seen_buttons[id] is bool:
@@ -684,6 +833,27 @@ func load_game() -> void:
 	_recompute()
 	struck = active_struck()
 	_check_achievements({}, false)
+
+
+func _load_helper_preferences(data: Dictionary) -> void:
+	helper_plan = {}
+	automation = {}
+	var source: Variant = data.get("helper_plan", {})
+	if source is Dictionary:
+		for id in HELPER_IDS:
+			var entry: Variant = source.get(id, null)
+			if not entry is Dictionary or not entry.get("active", null) is bool:
+				continue
+			var role: Variant = entry.get("role", "sweep")
+			var recipe: Variant = entry.get("recipe", "")
+			helper_plan[id] = {"active": entry.active,
+				"role": role if role is String and role in ["sweep", "recipe", "nutrition"] else "sweep",
+				"recipe": recipe if recipe is String and _recipe_ids.has(recipe) else ""}
+	var switches: Variant = data.get("automation", {})
+	if switches is Dictionary:
+		for key in AUTOMATION_KEYS:
+			if switches.get(key, null) is bool:
+				automation[key] = switches[key]
 
 
 func _count_dict(source: Dictionary, maximum := 2000000000) -> Dictionary:
@@ -723,6 +893,8 @@ func reset_save() -> void:
 	recipes = {}
 	signatures = []
 	struck = []
+	helper_plan = {}
+	automation = {}
 	seen_buttons = {}
 	achievements = {}
 	lifetime = {"eaten": 0, "full_boxes": 0}
