@@ -1,5 +1,5 @@
 extends Control
-## Small enamel stall labels and an optional guide, using the canteen's original materials.
+## Painted name plaques; supply details are available through the pause menu.
 const INK := UiKit.INK
 const PAPER := Color("fff2d9")
 const GOLD := Color("e9b85e")
@@ -7,10 +7,11 @@ const MUTED := Color("80654c")
 const CORAL := Color("bb5033")
 const TEAL := Color("6b9271")
 const COLORS := [Color("dbab78"), Color("86be98"), Color("ebc16e"), Color("e69a71"), Color("d4a8c9")]
-const SYMBOLS := ["dump", "veg", "bowl", "leg", "pudding"]
+const SIGN_IDS := ["dim", "wok", "main", "fry", "sweet"]
 var run: Node2D
 var _font: Font
-var _info: Button
+var _signs: Array[Texture2D] = []
+var _pause_owner: Control
 var _modal: Control
 var _body: Control
 var _tabs: Array[Button] = []
@@ -26,22 +27,16 @@ func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 	_font = load("res://assets/ui/ui_font.tres")
-	_info = UiKit.button(tr("档口指南 · Tab"), 20, Vector2(190, 46))
-	_info.focus_mode = Control.FOCUS_NONE
-	_info.position = Vector2(408, 28)
-	_info.pressed.connect(open_guide)
-	add_child(_info)
-	for i in run.STALL_ORDER.size():
-		var b := Button.new()
-		b.position = stall_rect(i).position
-		b.size = stall_rect(i).size
-		b.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
-		b.focus_mode = Control.FOCUS_NONE
-		b.tooltip_text = tr("查看备菜与升级")
-		for s in ["normal", "hover", "pressed", "focus"]:
-			b.add_theme_stylebox_override(s, StyleBoxEmpty.new())
-		b.pressed.connect(func(): open_guide(i))
-		add_child(b)
+	_load_signs()
+	Settings.changed.connect(_load_signs)
+
+
+func _load_signs() -> void:
+	_signs.clear()
+	var locale := "en" if Settings.language == "en" else "zh"
+	for id in SIGN_IDS:
+		_signs.append(load("res://assets/canteen/signs/%s_%s.png" % [id, locale]))
+
 
 
 func _process(_delta: float) -> void:
@@ -51,10 +46,7 @@ func _process(_delta: float) -> void:
 
 func _input(event: InputEvent) -> void:
 	if event is InputEventKey and event.pressed and not event.echo:
-		if event.keycode == KEY_TAB and not is_instance_valid(_modal) and not get_tree().paused and not run._ended:
-			open_guide()
-			get_viewport().set_input_as_handled()
-		elif is_instance_valid(_modal) and event.keycode in [KEY_ESCAPE, KEY_P]:
+		if is_instance_valid(_modal) and event.keycode in [KEY_ESCAPE, KEY_P]:
 			close_guide()
 			get_viewport().set_input_as_handled()
 	if is_instance_valid(_modal) and event is InputEventJoypadButton and event.pressed and event.button_index == JOY_BUTTON_B:
@@ -101,13 +93,9 @@ func draw_stalls(ci: CanvasItem) -> void:
 		var level: int = run.stall_lv.get(id, 0)
 		var arms: Array = run._arms.filter(func(a): return a.stall == id)
 		var accent: Color = COLORS[i] if level > 0 else MUTED
-		# The original painted enamel plate belongs on the wooden counter.
-		UiKit.nine(ci, run._ui.sign_plate, Rect2(r.position + Vector2(0, 4), Vector2(r.size.x, 46)), 20, 0.7)
-		var symbol: int = run.KIND.get(SYMBOLS[i], 1)
-		_image(ci, run._food_tex[symbol], Rect2(r.position + Vector2(10, 10), Vector2(32, 32)), Color.WHITE if level > 0 else Color(0.65, 0.65, 0.65))
-		_text(ci, Rect2(r.position + Vector2(48, 7), Vector2(r.size.x - 61, 35)), tr(run.STALLS[id].name), 24, INK)
-		var status := tr("未营业") if level == 0 else tr("Lv.%d · %d 把勺子") % [level, arms.size()]
-		_text(ci, Rect2(r.position + Vector2(10, 51), Vector2(r.size.x - 20, 27)), status, 20, INK, HORIZONTAL_ALIGNMENT_CENTER)
+		# Each sign is authored at its final small-screen purpose, with no level prose.
+		_image(ci, _signs[i], Rect2(r.get_center().x - minf(260, r.size.x) * 0.5, 315, minf(260, r.size.x), 87), Color.WHITE if level > 0 else Color(0.64, 0.60, 0.54))
+
 		if level == 0 or arms.is_empty():
 			continue
 		var columns := mini(arms.size(), 4)
@@ -115,7 +103,7 @@ func draw_stalls(ci: CanvasItem) -> void:
 		var rows := ceili(float(arms.size()) / columns)
 		for j in arms.size():
 			var a: Dictionary = arms[j]
-			var c := Vector2(r.get_center().x + (j % columns - (columns - 1) * 0.5) * step, r.position.y + 100 + (j / columns) * 31 - (14 if rows > 1 else 0))
+			var c := Vector2(r.get_center().x + (j % columns - (columns - 1) * 0.5) * step, r.position.y + 99 + (j / columns) * 31 - (14 if rows > 1 else 0))
 			var radius := 12.0 if rows > 1 else 18.0
 			var done := 1.0 if a.raise > 0.0 else clampf(1.0 - a.t / maxf(a.t0, 0.01), 0.0, 1.0)
 			ci.draw_circle(c, radius + 3, PAPER)
@@ -128,17 +116,16 @@ func draw_stalls(ci: CanvasItem) -> void:
 				ci.draw_circle(c + Vector2(radius, -radius), 5, CORAL)
 
 
-func open_guide(index := 2) -> void:
-	if is_instance_valid(_modal) or run._ended or get_tree().paused:
+func open_guide(index := 2, pause_owner: Control = null) -> void:
+	if is_instance_valid(_modal) or run._ended or not get_tree().paused or not is_instance_valid(pause_owner):
 		return
 	_return_focus = get_viewport().gui_get_focus_owner()
-	run._interrupt_thinking()
-	get_tree().paused = true
+	_pause_owner = pause_owner
 	_modal = Control.new()
 	_modal.size = size
 	_modal.z_index = 110
 	_modal.mouse_filter = Control.MOUSE_FILTER_STOP
-	add_child(_modal)
+	_pause_owner.add_child(_modal)
 	var shade := ColorRect.new()
 	shade.color = Color(0.12, 0.065, 0.025, 0.75)
 	shade.size = size
@@ -159,8 +146,8 @@ func open_guide(index := 2) -> void:
 		b.pressed.connect(func(): _show_stall(i))
 		_modal.add_child(b)
 		_tabs.append(b)
-	var close := UiKit.button(tr("继续开饭"), 28, Vector2(230, 60))
-	close.position = Vector2(1470, 112)
+	var close := UiKit.button(tr("返回暂停菜单"), 26, Vector2(260, 60))
+	close.position = Vector2(1440, 112)
 	close.pressed.connect(close_guide)
 	_modal.add_child(close)
 	var navigation: Array[Button] = _tabs.duplicate()
@@ -242,8 +229,6 @@ func close_guide() -> void:
 	_closing = true
 	_modal.queue_free()
 	_modal = null
-	get_tree().paused = false
-	run._resume_input_guard = 0.18
-	run._think_input_held = true
+	_pause_owner = null
 	if is_instance_valid(_return_focus): _return_focus.grab_focus()
 	_closing = false

@@ -1,0 +1,227 @@
+{
+  "provider": "OpenAI image_gen",
+  "date": "2026-10-19",
+  "integration": "Original RGBA copied unchanged; engine scales with mipmaps. Counter edited from existing hand-painted counter. English signs edited from matching Chinese signs.",
+  "assets": [
+    {
+      "id": "counter_open",
+      "path": "game/assets/canteen/counter_open.png",
+      "source": "C:\\Users\\A\\.codex\\generated_images\\01a15310-50d6-7221-be0a-49e0fa47b057\\exec-aa5e73b6-a0f5-4ad2-aa14-8d94407a4a2d.png",
+      "sha256": "083540bc88b2acc1dfbfc4b0c271e9b18cd27e941791ad4de94d4513692065ef",
+      "dimensions": [
+        2170,
+        725
+      ],
+      "alpha_extrema": [
+        0,
+        255
+      ],
+      "alpha_bounds": [
+        0,
+        23,
+        2170,
+        725
+      ]
+    },
+    {
+      "id": "dim_zh",
+      "path": "game/assets/canteen/signs/dim_zh.png",
+      "source": "C:\\Users\\A\\.codex\\generated_images\\01a15310-50d6-7221-be0a-49e0fa47b057\\exec-fa1856b4-518f-47ce-b8c5-d605fe5419d8.png",
+      "sha256": "ec02e2e11ea73d38f581a29954acd2b15bab6db6a45fe715adb3130dbdbbe714",
+      "dimensions": [
+        2172,
+        724
+      ],
+      "alpha_extrema": [
+        0,
+        255
+      ],
+      "alpha_bounds": [
+        0,
+        25,
+        2158,
+        724
+      ]
+    },
+    {
+      "id": "wok_zh",
+      "path": "game/assets/canteen/signs/wok_zh.png",
+      "source": "C:\\Users\\A\\.codex\\generated_images\\01a15310-50d6-7221-be0a-49e0fa47b057\\exec-1d743f6c-003f-4908-a50a-a909695088b2.png",
+      "sha256": "ed7646802697c547b3ec77b71573be7d8a3fe22a30d010421fa5b4bd403d9c85",
+      "dimensions": [
+        2172,
+        724
+      ],
+      "alpha_extrema": [
+        0,
+        255
+      ],
+      "alpha_bounds": [
+        80,
+        30,
+        2152,
+        706
+      ]
+    },
+    {
+      "id": "main_zh",
+      "path": "game/assets/canteen/signs/main_zh.png",
+      "source": "C:\\Users\\A\\.codex\\generated_images\\01a15310-50d6-7221-be0a-49e0fa47b057\\exec-49e13ac8-5af3-4fb5-80c8-faee55297fe5.png",
+      "sha256": "55dc768d7ab882d24ba221bf92ec646ce12c8bb3cb95ba816f43fa326e4fb2c9",
+      "dimensions": [
+        2172,
+        724
+      ],
+      "alpha_extrema": [
+        0,
+        255
+      ],
+      "alpha_bounds": [
+        0,
+        15,
+        2148,
+        724
+      ]
+    },
+    {
+      "id": "fry_zh",
+      "path": "game/assets/canteen/signs/fry_zh.png",
+      "source": "C:\\Users\\A\\.codex\\generated_images\\01a15310-50d6-7221-be0a-49e0fa47b057\\exec-1ce60914-6646-493e-9b68-d68b656712c6.png",
+      "sha256": "301413f4563dfcb8baa0f3393b494db50353a70ca89f1b591dc374eb85a88044",
+      "dimensions": [
+        2172,
+        724
+      ],
+      "alpha_extrema": [
+        0,
+        255
+      ],
+      "alpha_bounds": [
+        33,
+        19,
+        2142,
+        724
+      ]
+    },
+    {
+      "id": "sweet_zh",
+      "path": "game/assets/canteen/signs/sweet_zh.png",
+      "source": "C:\\Users\\A\\.codex\\generated_images\\01a15310-50d6-7221-be0a-49e0fa47b057\\exec-5f1e60b5-3611-4946-9fce-66e35e012c23.png",
+      "sha256": "999d188954e77dcf327fb5df81086d8381e73307723c34deb03c98ea33d95f9d",
+      "dimensions": [
+        2172,
+        724
+      ],
+      "alpha_extrema": [
+        0,
+        255
+      ],
+      "alpha_bounds": [
+        25,
+        25,
+        2136,
+        714
+      ]
+    },
+    {
+      "id": "dim_en",
+      "path": "game/assets/canteen/signs/dim_en.png",
+      "source": "C:\\Users\\A\\.codex\\generated_images\\01a15310-50d6-7221-be0a-49e0fa47b057\\exec-b7dc22fb-d8bb-4123-96c0-6f091b7f8d7a.png",
+      "sha256": "85715c1d891037afcca14027a713f747a4533de4b5a518430f53ed602afab2eb",
+      "dimensions": [
+        2172,
+        724
+      ],
+      "alpha_extrema": [
+        0,
+        255
+      ],
+      "alpha_bounds": [
+        33,
+        44,
+        2142,
+        724
+      ]
+    },
+    {
+      "id": "wok_en",
+      "path": "game/assets/canteen/signs/wok_en.png",
+      "source": "C:\\Users\\A\\.codex\\generated_images\\01a15310-50d6-7221-be0a-49e0fa47b057\\exec-e83b722d-062e-402d-8790-7b3fd9dcdcb3.png",
+      "sha256": "b982bfe4f9a97f0d711341e6d1c5517f23ceff14d7ba028386802cd743b25fc0",
+      "dimensions": [
+        2172,
+        724
+      ],
+      "alpha_extrema": [
+        0,
+        255
+      ],
+      "alpha_bounds": [
+        52,
+        25,
+        2125,
+        698
+      ]
+    },
+    {
+      "id": "main_en",
+      "path": "game/assets/canteen/signs/main_en.png",
+      "source": "C:\\Users\\A\\.codex\\generated_images\\01a15310-50d6-7221-be0a-49e0fa47b057\\exec-daccf37c-b9ac-420c-9027-00d0855a00c8.png",
+      "sha256": "28a5a710845bb9e2c690115c27d10d38a3a0b513ccea81b347cd677c11818cc8",
+      "dimensions": [
+        2172,
+        724
+      ],
+      "alpha_extrema": [
+        0,
+        255
+      ],
+      "alpha_bounds": [
+        0,
+        25,
+        2152,
+        724
+      ]
+    },
+    {
+      "id": "fry_en",
+      "path": "game/assets/canteen/signs/fry_en.png",
+      "source": "C:\\Users\\A\\.codex\\generated_images\\01a15310-50d6-7221-be0a-49e0fa47b057\\exec-722ba6a5-dcae-48d1-b13b-0e23c20a5775.png",
+      "sha256": "22beb0f2cef7e8151ddffd27cbc2f7bd2a1dda33354f7c70bb56a2f3043aef52",
+      "dimensions": [
+        2172,
+        724
+      ],
+      "alpha_extrema": [
+        0,
+        255
+      ],
+      "alpha_bounds": [
+        32,
+        35,
+        2154,
+        676
+      ]
+    },
+    {
+      "id": "sweet_en",
+      "path": "game/assets/canteen/signs/sweet_en.png",
+      "source": "C:\\Users\\A\\.codex\\generated_images\\01a15310-50d6-7221-be0a-49e0fa47b057\\exec-58c80cb1-b6e5-4d32-93e6-25461be2e67d.png",
+      "sha256": "a23951c19804ac2f2ebe3bc5e0ec490d9623a96a89091eb93b39e34fa4a5f78e",
+      "dimensions": [
+        2172,
+        724
+      ],
+      "alpha_extrema": [
+        0,
+        255
+      ],
+      "alpha_bounds": [
+        0,
+        0,
+        2093,
+        703
+      ]
+    }
+  ]
+}

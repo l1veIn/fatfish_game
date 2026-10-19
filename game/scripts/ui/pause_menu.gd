@@ -7,6 +7,8 @@ signal end_shift
 signal to_title
 
 var focus_pause := false
+var stall_guide: Control
+var _stall_button: Button
 var _settings: SettingsPanel
 var _book: RecipeBook
 var _first: Button
@@ -28,6 +30,9 @@ func _ready() -> void:
 	var panel := PanelContainer.new()
 	panel.position = Vector2(620, 150)
 	panel.custom_minimum_size = Vector2(680, 780)
+	if is_instance_valid(stall_guide):
+		panel.position.y = 100
+		panel.custom_minimum_size.y = 880
 	panel.add_theme_stylebox_override("panel", UiKit.box(Color(0.20, 0.13, 0.08), UiKit.WOOD, 4, 24, 8))
 	add_child(panel)
 	var col := VBoxContainer.new()
@@ -46,6 +51,8 @@ func _ready() -> void:
 	_first = _add(col, "继续上班", resume)
 	_add(col, "菜谱图鉴", _open_book)
 	_add(col, "设置", _open_settings)
+	if is_instance_valid(stall_guide):
+		_stall_button = _add(col, "档口指南", _open_stalls)
 	_add(col, "提前结束这顿饭", func(): _leave(end_shift))
 	_add(col, "回到标题", func(): _leave(to_title))
 	for i in _buttons.size():
@@ -81,7 +88,13 @@ func _translate() -> void:
 
 
 func _has_child_panel() -> bool:
-	return is_instance_valid(_settings) or is_instance_valid(_book)
+	return is_instance_valid(_settings) or is_instance_valid(_book) or (is_instance_valid(stall_guide) and is_instance_valid(stall_guide._modal))
+
+
+func _open_stalls() -> void:
+	if _has_child_panel() or not is_instance_valid(stall_guide):
+		return
+	stall_guide.open_guide(2, self)
 
 
 func _open_book() -> void:

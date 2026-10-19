@@ -84,7 +84,7 @@ func _ready() -> void:
 	run._abark_t = 0
 	await shot("early_shift")
 	var hud = run._service_ui
-	check(not hud._info.get_rect().intersects(Rect2(24, 14, 372, 196)), "guide button clear of original chalkboard")
+	check(hud._signs.size() == 5, "all five hand-lettered plaques loaded")
 	for i in 5:
 		check(not hud.stall_rect(i).intersects(Rect2(610, 26, 270, 270)), "stall clear of cook %d" % i)
 		if i > 0: check(not hud.stall_rect(i).intersects(hud.stall_rect(i - 1)), "adjacent stall signs do not overlap")
@@ -104,7 +104,7 @@ func _ready() -> void:
 	run._shown = 999999999
 	run._banners.clear()
 	await shot("late_shift")
-	run._bark = tr("怎么还没饭呀……")
+	run._bark = tr("快问快答：别想了，直接接！")
 	run._bark_t = 3
 	run._abark = tr("多吃点菜！")
 	run._abark_t = 3
@@ -113,12 +113,18 @@ func _ready() -> void:
 	run._abark_t = 0
 	run._set_thinking(true)
 	await shot("thinking")
-	# Tab opens once and the world remains frozen until an intentional close.
+	# Guide entry belongs to pause; Tab must not interrupt gameplay.
 	await key(KEY_TAB)
-	check(get_tree().paused and is_instance_valid(hud._modal), "Tab opens paused service guide")
-	check(not run._thinking and not Audio._slow, "guide interrupts thinking and sound")
+	check(not get_tree().paused and not is_instance_valid(hud._modal), "Tab does not open a gameplay overlay")
+	await key(KEY_ESCAPE)
+	check(get_tree().paused and is_instance_valid(run._pause), "Escape opens pause menu")
+	await shot("pause_menu")
+	var pause_menu = run._pause
+	await click(pause_menu._stall_button.get_global_rect().get_center())
+	check(get_tree().paused and is_instance_valid(hud._modal), "pause menu opens service guide")
+	check(not run._thinking and not Audio._slow, "pause interrupts thinking and sound")
 	var original = hud._modal
-	hud.open_guide()
+	hud.open_guide(2, pause_menu)
 	check(hud._modal == original, "service guide singleton")
 	var time_before: float = run._t
 	for i in 5:
@@ -129,21 +135,20 @@ func _ready() -> void:
 	check(is_equal_approx(run._t, time_before), "guide freezes meal timer")
 	Settings.pause_unfocused = true
 	run._notification(NOTIFICATION_APPLICATION_FOCUS_OUT)
-	check(not is_instance_valid(run._pause), "focus loss does not stack a pause menu over guide")
+	check(run._pause == pause_menu, "focus loss does not stack pause menus")
 	await key(KEY_ESCAPE)
-	check(not get_tree().paused and not is_instance_valid(hud._modal), "Escape resumes service")
+	check(get_tree().paused and not is_instance_valid(hud._modal), "Escape returns to pause without resuming")
+	check(get_viewport().gui_get_focus_owner() == pause_menu._stall_button, "guide restores pause button focus")
+	await key(KEY_ENTER)
+	check(is_instance_valid(hud._modal), "keyboard reopens guide from pause")
+	await key(KEY_ESCAPE)
+	await key(KEY_ESCAPE)
+	check(not get_tree().paused and not is_instance_valid(run._pause), "second Escape resumes meal")
 	check(run._resume_input_guard > 0, "resume prevents held-input actions")
-	await click(hud._info.get_global_rect().get_center())
-	check(get_tree().paused, "mouse opens stall guide")
-	await key(KEY_ESCAPE)
-	check(get_viewport().gui_get_focus_owner() != hud._info, "closing mouse-opened guide cannot steal deliver focus")
 	run._resume_input_guard = 0
 	run._aim = run.STACK_AT
 	await key(KEY_ENTER)
 	check(not get_tree().paused and run._hand != null, "Enter still takes a box after reading the guide")
-	await key(KEY_TAB)
-	check(get_tree().paused, "Tab reopens guide after mouse use")
-	await key(KEY_ESCAPE)
 	run._think_cooldown = 0.7
 	await shot("cooldown")
 	run._hand = run._new_basin(Vector2(800, 550))
@@ -161,7 +166,7 @@ func _ready() -> void:
 	await get_tree().create_timer(0.15, true, false, true).timeout
 	UiKit.clear_cache()
 	var report := {"checks": checks, "failures": failures, "language": Settings.language, "window": str(window), "scope": "fixed early/late states and real keyboard/mouse modal input", "source_sha256": {}}
-	for file in ["scripts/ui/canteen_overlay.gd", "scripts/run/canteen_run.gd", "tests/canteen_presentation_test.gd"]:
+	for file in ["scripts/ui/canteen_overlay.gd", "scripts/ui/pause_menu.gd", "scripts/run/canteen_run.gd", "tests/canteen_presentation_test.gd"]:
 		report.source_sha256[file] = FileAccess.get_sha256("res://" + file)
 	if out != "":
 		FileAccess.open(out.path_join("report.json"), FileAccess.WRITE).store_string(JSON.stringify(report, "  "))

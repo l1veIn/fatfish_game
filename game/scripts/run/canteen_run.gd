@@ -40,7 +40,7 @@ const SLOTS := 8                      # most tentacles 梁阿姨 can have
 const STALL_ORDER := ["dim", "wok", "main", "fry", "sweet"]   # the five windows, 主食 in the middle
 ## One long canteen counter (counter_long.png at COUNTER_RECT): its food pans, by window, as x
 ## centres; a window's dishes sit in its pans, a closed window has a shutter over them.
-const COUNTER_RECT := Rect2(35, 110, 1420, 327)
+const COUNTER_RECT := Rect2(35, 34, 1420, 474)
 const PANS := {"dim": [157.0, 258.0, 358.0], "wok": [470.0, 570.0], "main": [662.0, 747.0, 829.0],
 	"fry": [919.0, 1019.0], "sweet": [1123.0, 1226.0, 1327.0]}
 const PAN_W := 100.0
@@ -264,7 +264,7 @@ const TRIAL_ENDS := {
 # where the art goes (see the layer note at the top)
 const ART := "res://assets/canteen/"
 const COUNTER_AT := Vector2(35, 180)      # top-left of the counter: plate s under _slot_x(s), trays at COUNTER_Y
-const AUNTIE_AT := Vector2(745, 345)      # bottom centre of 梁阿姨; her lower half is behind the counter
+const AUNTIE_AT := Vector2(745, 285)      # apron behind the counter; face clears its back edge
 const TABLE_AT := Vector2(1290, 826)      # top-left of the table art, drawn TABLE_SCALE times bigger
 const TABLE_SCALE := 1.3
 const LADLE_GRIP := Vector2(104, 7)       # the handle end in ladle.png, held by the tentacle tip
@@ -746,7 +746,7 @@ func _load_art() -> void:
 		_auntie[m] = load(ART + "auntie_%s.png" % m)
 	_bg = load(ART + "bg_wall.png")
 	_counter = load(ART + "counter.png")
-	_counter_long = _maybe(ART + "counter_long.png")
+	_counter_long = _maybe(ART + "counter_open.png")
 	_load_hud()
 	_shutter = _maybe(ART + "counter_shutter.png")
 	_table = load(ART + "table.png")
@@ -1249,6 +1249,7 @@ func pause(from_focus := false) -> void:
 	_interrupt_thinking()
 	_pause = PauseMenu.new()
 	_pause.focus_pause = from_focus
+	_pause.stall_guide = _service_ui
 	_pause.resumed.connect(func():
 		_resume_input_guard = 0.18
 		_think_input_held = true)
@@ -2764,6 +2765,11 @@ func _bot() -> void:
 
 func _draw_back() -> void:
 	_back.draw_texture(_bg, Vector2.ZERO)
+	# The counter's open middle reveals her face while its front hides her lower body.
+	var tex: Texture2D = _auntie[_mood()]
+	var bob := 0.0 if Settings.reduced_motion else sin(_t * 3.0) * 4.0
+	var art_size := tex.get_size() * 0.78
+	_back.draw_texture_rect(tex, Rect2(AUNTIE_AT + Vector2(-art_size.x * 0.5, bob - art_size.y), art_size), false)
 
 
 ## A trial is close to failing: the floor pile, the users' patience or the spoiled boxes.
@@ -2782,11 +2788,6 @@ func _draw_front() -> void:
 		_front.draw_texture(_counter, COUNTER_AT)
 	else:
 		_front.draw_texture_rect(_counter_long, COUNTER_RECT, false)
-	# Her expression is foreground theatre, clear of the counter's opaque glass frame.
-	var tex: Texture2D = _auntie[_mood()]
-	var bob := 0.0 if Settings.reduced_motion else sin(_t * 3.0) * 3.0
-	var portrait_size := tex.get_size() * (270.0 / tex.get_height())
-	_front.draw_texture_rect(tex, Rect2(Vector2(AUNTIE_AT.x - portrait_size.x * 0.5, 26 + bob), portrait_size), false)
 	for id in STALL_ORDER:
 		var pans: Array = PANS[id]
 		var lv: int = stall_lv.get(id, 0)
@@ -3397,7 +3398,7 @@ func _draw_floaters(font: Font) -> void:
 		var k := 1.0 + 0.5 * maxf(0.0, 1.0 - t / 0.15)
 		_icon(c.icon, c.pos + Vector2(0, -40.0 * t), 46.0 * k, 1.0 - maxf(0.0, (t - 0.5) / 0.4))
 	if _bark_t > 0.0:   # her speech bubble, its tail pointing down at her
-		_bubble(Vector2(1040, 510), _bark, true)
+		_bubble(Vector2(1200, 470), _bark, true)
 	if _abark_t > 0.0:   # 梁阿姨's, by her hat
 		_bubble(Vector2(860, 178), _abark, false)
 
