@@ -56,11 +56,11 @@ static func build_theme() -> Theme:
 	var t := Theme.new()
 	# buttons: cream with a thick wooden bottom edge, lighter on hover, pressed sinks in
 	for type in ["Button", "OptionButton"]:
-		t.set_stylebox("normal", type, box(CREAM, WOOD, 3, 18, 8))
-		t.set_stylebox("hover", type, box(CREAM_HI, WOOD, 3, 18, 8))
-		t.set_stylebox("pressed", type, box(Color(0.93, 0.78, 0.48), WOOD_DARK, 3, 18, 3))
-		t.set_stylebox("disabled", type, box(Color(0.6, 0.57, 0.52), Color(0.4, 0.36, 0.32), 3, 18, 8))
-		var focus := box(Color.TRANSPARENT, GOLD, 5, 22)
+		t.set_stylebox("normal", type, box(CREAM, WOOD, 2, 12, 3))
+		t.set_stylebox("hover", type, box(CREAM_HI, WOOD, 2, 12, 3))
+		t.set_stylebox("pressed", type, box(Color(0.93, 0.78, 0.48), WOOD_DARK, 2, 12, 2))
+		t.set_stylebox("disabled", type, box(Color(0.6, 0.57, 0.52), Color(0.4, 0.36, 0.32), 2, 12, 3))
+		var focus := box(Color.TRANSPARENT, GOLD, 3, 16)
 		focus.draw_center = false
 		focus.expand_margin_left = 4
 		focus.expand_margin_right = 4
@@ -218,7 +218,7 @@ static func hook(b: BaseButton) -> void:
 	b.mouse_entered.connect(func():
 		if not b.disabled:
 			Audio.sfx("ui_hover", -12.0)
-			_bounce(b, 1.04))
+			_bounce(b, 1.015))
 	b.focus_entered.connect(func(): Audio.sfx("ui_hover", -12.0))
 	b.mouse_exited.connect(func(): _bounce(b, 1.0))
 	b.pressed.connect(func(): Audio.sfx("ui_back" if b.has_meta("ui_back") else "ui_click", -4.0))
@@ -236,7 +236,7 @@ static func _bounce(b: Control, to: float) -> void:
 	b.pivot_offset = b.size * 0.5
 	var tw := b.create_tween()
 	b.set_meta("ui_bounce_tween", tw)
-	tw.tween_property(b, "scale", Vector2.ONE * to, 0.08).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	tw.tween_property(b, "scale", Vector2.ONE * to, 0.10).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
 
 
 ## A big menu button.

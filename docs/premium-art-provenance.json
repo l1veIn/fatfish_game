@@ -1,0 +1,169 @@
+{
+  "created": "2026-10-19",
+  "provider": "Built-in OpenAI image generation",
+  "billing": "No charge total exposed by tool",
+  "assets": [
+    {
+      "id": "logo_zh",
+      "source": "C:\\Users\\A\\.codex\\generated_images\\01a15310-50d6-7221-be0a-49e0fa47b057\\exec-7b66e6b9-b568-40ca-bce8-52182b8d73bd.png",
+      "destination": "game/assets/ui/premium/logo_zh.png",
+      "workflow": "OpenAI image generation; original output copied without raster resampling",
+      "correction": true,
+      "purpose": "Hand-lettered title asset",
+      "size": [
+        1774,
+        887
+      ],
+      "mode": "RGBA",
+      "sha256": "fb8fdd0a6590efe7c5868c9009a9bbc51ba208a3c4981bfa8d1299e4ce503821",
+      "alpha_extrema": [
+        0,
+        255
+      ]
+    },
+    {
+      "id": "logo_en",
+      "source": "C:\\Users\\A\\.codex\\generated_images\\01a15310-50d6-7221-be0a-49e0fa47b057\\exec-1a4844d4-e9aa-4bce-b460-22b212be5868.png",
+      "destination": "game/assets/ui/premium/logo_en.png",
+      "workflow": "OpenAI image generation; original output copied without raster resampling",
+      "correction": true,
+      "purpose": "Hand-lettered title asset",
+      "size": [
+        1774,
+        887
+      ],
+      "mode": "RGBA",
+      "sha256": "9da93608b047ec95129c56d271baa66823d395fe3045417b1552b01f02ae2665",
+      "alpha_extrema": [
+        0,
+        255
+      ]
+    },
+    {
+      "id": "recipe_spread",
+      "source": "C:\\Users\\A\\.codex\\generated_images\\01a15310-50d6-7221-be0a-49e0fa47b057\\exec-77115497-f57e-408e-b817-678e23239680.png",
+      "destination": "game/assets/ui/premium/recipe_spread.png",
+      "workflow": "OpenAI image generation; original output copied without raster resampling",
+      "correction": false,
+      "purpose": "Fixed-ratio two-page cookbook",
+      "size": [
+        1672,
+        941
+      ],
+      "mode": "RGBA",
+      "sha256": "a0b3dde0dc468dfcf596206d885d3b3cb2fd03432b5daaefdbeaa2d3129fcf3d",
+      "alpha_extrema": [
+        0,
+        255
+      ]
+    },
+    {
+      "id": "badge_meal",
+      "source": "C:\\Users\\A\\.codex\\generated_images\\01a15310-50d6-7221-be0a-49e0fa47b057\\exec-d72706d3-6d52-4b66-a465-39a6168aa4ec.png",
+      "destination": "game/assets/ui/premium/badge_meal.png",
+      "workflow": "OpenAI image generation; original output copied without raster resampling",
+      "correction": true,
+      "purpose": "Small single-subject achievement medallion; inspect at 96-112 logical px",
+      "size": [
+        1254,
+        1254
+      ],
+      "mode": "RGBA",
+      "sha256": "b30e062ea557516f43887a32624f0afe68eaf4838a0b106bada70f8a3e2b65e8",
+      "alpha_extrema": [
+        0,
+        255
+      ]
+    },
+    {
+      "id": "badge_growth",
+      "source": "C:\\Users\\A\\.codex\\generated_images\\01a15310-50d6-7221-be0a-49e0fa47b057\\exec-1270078c-8dc5-451f-b9ae-6859591e5079.png",
+      "destination": "game/assets/ui/premium/badge_growth.png",
+      "workflow": "OpenAI image generation; original output copied without raster resampling",
+      "correction": true,
+      "purpose": "Small single-subject achievement medallion; inspect at 96-112 logical px",
+      "size": [
+        1254,
+        1254
+      ],
+      "mode": "RGBA",
+      "sha256": "1526158c1ac73a157b3e5cb9fefffaaabdc8a131616638420179dd320efae875",
+      "alpha_extrema": [
+        0,
+        255
+      ]
+    },
+    {
+      "id": "badge_recipe",
+      "source": "C:\\Users\\A\\.codex\\generated_images\\01a15310-50d6-7221-be0a-49e0fa47b057\\exec-cbcae732-c369-459c-b9d9-2bc34bafce06.png",
+      "destination": "game/assets/ui/premium/badge_recipe.png",
+      "workflow": "OpenAI image generation; original output copied without raster resampling",
+      "correction": false,
+      "purpose": "Small single-subject achievement medallion; inspect at 96-112 logical px",
+      "size": [
+        1254,
+        1254
+      ],
+      "mode": "RGBA",
+      "sha256": "c25a9d3945b366f661fe63178d5f2c10b7ed8cbedc5f1d1fdc793a2240856d70",
+      "alpha_extrema": [
+        0,
+        255
+      ]
+    },
+    {
+      "id": "badge_balance",
+      "source": "C:\\Users\\A\\.codex\\generated_images\\01a15310-50d6-7221-be0a-49e0fa47b057\\exec-9cc87176-5641-416f-8434-65cbae2d6947.png",
+      "destination": "game/assets/ui/premium/badge_balance.png",
+      "workflow": "OpenAI image generation; original output copied without raster resampling",
+      "correction": false,
+      "purpose": "Small single-subject achievement medallion; inspect at 96-112 logical px",
+      "size": [
+        1254,
+        1254
+      ],
+      "mode": "RGBA",
+      "sha256": "39901d6d53f02359b45a6c562032243be9fb2c53d6a7675ab43f82dd703888c4",
+      "alpha_extrema": [
+        0,
+        255
+      ]
+    },
+    {
+      "id": "badge_kitchen",
+      "source": "C:\\Users\\A\\.codex\\generated_images\\01a15310-50d6-7221-be0a-49e0fa47b057\\exec-b35881e8-d7f3-46b3-811a-dbe9b20e797e.png",
+      "destination": "game/assets/ui/premium/badge_kitchen.png",
+      "workflow": "OpenAI image generation; original output copied without raster resampling",
+      "correction": false,
+      "purpose": "Small single-subject achievement medallion; inspect at 96-112 logical px",
+      "size": [
+        1254,
+        1254
+      ],
+      "mode": "RGBA",
+      "sha256": "1c0feeb6df6070e0782b0b684d8e85d81981e105fb00d08b8b966b8e1b9f601b",
+      "alpha_extrema": [
+        0,
+        255
+      ]
+    },
+    {
+      "id": "badge_gold",
+      "source": "C:\\Users\\A\\.codex\\generated_images\\01a15310-50d6-7221-be0a-49e0fa47b057\\exec-e751bdf2-1048-4e6d-ac87-47ea9fa5db17.png",
+      "destination": "game/assets/ui/premium/badge_gold.png",
+      "workflow": "OpenAI image generation; original output copied without raster resampling",
+      "correction": true,
+      "purpose": "Small single-subject achievement medallion; inspect at 96-112 logical px",
+      "size": [
+        1254,
+        1254
+      ],
+      "mode": "RGBA",
+      "sha256": "3216313d14821f319a113cc34628e557d5ad4a150f06a9fbd71cbc7ac8cbcb97",
+      "alpha_extrema": [
+        0,
+        255
+      ]
+    }
+  ]
+}
