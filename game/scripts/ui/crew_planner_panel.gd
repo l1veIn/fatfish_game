@@ -125,7 +125,8 @@ func _build_crew() -> void:
 		_picture(card, picture, Rect2(12, 18, 142, 192))
 		_label(card, tr(CanteenRun.CREW[id].name), Rect2(164, 24, 180, 50), 31)
 		_label(card, tr("出场") if config.active else tr("休息"), Rect2(164, 83, 180, 40), 26, SOFT)
-		_label(card, tr(ROLE_NAMES[ROLES.find(config.role)]), Rect2(164, 133, 180, 42), 26)
+		_role_mark(card, str(config.role), Rect2(164, 141, 26, 26))
+		_label(card, tr(ROLE_NAMES[ROLES.find(config.role)]), Rect2(198, 133, 146, 42), 26)
 		_label(card, tr(str(TRICKS[id][0])), Rect2(164, 182, 180, 54), 22, SOFT)
 		card.pressed.connect(_select_member.bind(id))
 		_cards[id] = card
@@ -138,8 +139,9 @@ func _build_crew() -> void:
 	_controls.append(_activate)
 	for i in ROLES.size():
 		var role: String = ROLES[i]
-		var button := _button(_body, tr(ROLE_NAMES[i]), Rect2(1300 + i * 160, 474, 150, 58), "role_" + role)
-		button.add_theme_font_size_override("font_size", 25)
+		var button := _button(_body, "", Rect2(1300 + i * 160, 474, 150, 58), "role_" + role)
+		_role_mark(button, role, Rect2(10, 16, 26, 26))
+		_label(button, tr(ROLE_NAMES[i]), Rect2(44, 10, 100, 38), 22)
 		button.disabled = cap == 0 or (role == "recipe" and (Game.stat("fc") <= 0 or Game.helper_recipe_options().is_empty())) or (role == "nutrition" and Game.stat("nutri") <= 0)
 		_style(button, role == current.role)
 		button.pressed.connect(_choose_role.bind(role))
@@ -162,7 +164,28 @@ func _build_crew() -> void:
 	else:
 		var description := tr("接住有用的漏菜，帮你补上顾不到的地方。") if current.role == "sweep" else tr("按主食、荤菜、素菜 4:3:3 的缺口补餐，也会考虑正在收集和等待的饭盒。")
 		_label(_body, description, Rect2(1300, 662, 470, 220), 27, SOFT)
-	_label(_body, tr("接力：每种职责最多存一份，共三份。亲手送出下一只非空饭盒时消费，每份收益 +15% / +30%（按编排等级）。"), Rect2(112, 916, 1660, 92), 25, SOFT)
+	for i in 3:
+		var state: String = ["catch", "return", "fetch"][i]
+		var caption: String = [tr("圆点：接菜"), tr("箭头：送餐"), tr("沙漏：等盒")][i]
+		var mark := Control.new()
+		mark.position = Vector2(114 + i * 340, 911)
+		mark.size = Vector2(20, 26)
+		mark.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		_body.add_child(mark)
+		mark.draw.connect(func(): CanteenRun.draw_helper_state(mark, Rect2(Vector2.ZERO, mark.size), state))
+		_label(_body, caption, Rect2(145 + i * 340, 908, 300, 34), 22, SOFT)
+	_label(_body, tr("接力：每种职责最多存一份，共三份。亲手送出下一只非空饭盒时消费，每份收益 +15% / +30%（按编排等级）。"), Rect2(112, 946, 1660, 76), 23, SOFT)
+
+
+## These are the same shape primitives as the small in-shift badges, not substitutes.
+func _role_mark(parent: Node, role: String, rect: Rect2) -> void:
+	var mark := Control.new()
+	mark.position = rect.position
+	mark.size = rect.size
+	mark.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	mark.set_meta("helper_role", role)
+	parent.add_child(mark)
+	mark.draw.connect(func(): CanteenRun.draw_helper_role(mark, Rect2(Vector2.ZERO, mark.size), role))
 
 
 func _build_recipes(selected: String) -> void:

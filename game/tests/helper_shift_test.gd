@@ -92,8 +92,10 @@ var _worst_engine_batch_us := 0
 var _steps := 0
 var _async_crave_seen := false
 var _relay_stored_seen := false
-var _caption_layout_samples := 0
-var _caption_layout_violations := 0
+var _badge_layout_samples := 0
+var _badge_layout_violations := 0
+var _badge_role_states := {}
+var _settlement_finished := false
 var _settings_before: PackedByteArray
 
 
@@ -122,16 +124,18 @@ func _ready() -> void:
 	ThemeDB.get_default_theme().merge_with(UiKit.build_theme())
 	CanteenRun.load_menu()
 	_configure()
+	_check_dense_badges()
 	_report = {"seed": FIXTURE_SEED, "step_seconds": STEP, "steps_per_engine_frame": STEPS_PER_FRAME,
 		"scope": "Continuous normal-food shift with existing autotest player, fixed small gameplay steps; not human feel, FPS or balance evidence",
 		"fixture": "Six legal helpers, two per role; egg_veg order from level-one wok. Legal high supply and fast eating, ordinary meal duration. No direct food/box injection.",
 		"language": Settings.language, "requested_size": str(_requested_size), "source_sha256": {}, "levels": Game.levels.duplicate(),
 		"helper_plan": Game.helper_plan.duplicate(true)}
-	for path in ["scripts/run/canteen_run.gd", "scripts/autoload/game.gd", "scripts/run/meal_rules.gd", "data/skill_tree.json", "data/menu.json", "tests/helper_shift_test.gd"]:
+	for path in ["scripts/run/canteen_run.gd", "scripts/ui/crew_planner_panel.gd", "scripts/autoload/game.gd", "scripts/run/meal_rules.gd", "data/skill_tree.json", "data/menu.json", "tests/helper_shift_test.gd"]:
 		_report.source_sha256[path] = FileAccess.get_sha256("res://" + path)
 	seed(FIXTURE_SEED)
 	_run = ObservedRun.new()
 	_run.autotest = true
+	_run.finished.connect(func(_earned: float): _settlement_finished = true)
 	add_child(_run)
 	_run.set_process(false)
 	_check(_run.hired.size() == 6 and _run._crew.size() == 6, "all six selected helpers spawn")
@@ -158,7 +162,7 @@ func _ready() -> void:
 			_observe(positions)
 		_worst_engine_batch_us = maxi(_worst_engine_batch_us, Time.get_ticks_usec() - batch_start)
 		await get_tree().process_frame
-		_observe_caption_layout()
+		_observe_badge_layout()
 		if _run._t >= 8.0 and not _shots.has("early"):
 			await _shot("early")
 		if _run._helper_relay.size() > 0 and not _shots.has("hud_relay"):
@@ -168,12 +172,19 @@ func _ready() -> void:
 		if _run._t >= _run.meal_time - 7.0 and not _shots.has("late"):
 			await _shot("late")
 	_finish_checks()
+	# _end is a real coroutine: it waits one second to open the receipt and another two
+	# before finishing autotest. Do not free its scene while that sequence still owns art.
+	var settlement_deadline := Time.get_ticks_msec() + 6000
+	while not _settlement_finished and Time.get_ticks_msec() < settlement_deadline:
+		await get_tree().create_timer(0.05, true, false, true).timeout
+	_check(_settlement_finished and _run._checkout, "normal receipt coroutine finishes before the run is freed")
 	await _shot("closed")
 	_report.merge({"checks": _checks, "failures": _failures, "passed": _failures.is_empty(), "world_seconds": _run._t,
 		"gameplay_steps": _steps, "worst_gameplay_step_ms": _worst_step_us / 1000.0,
 		"worst_engine_batch_ms": _worst_engine_batch_us / 1000.0, "max_helper_boxes": _max_boxes,
 		"budget_violations": _budget_violations, "peak_falling_food": _peak_food, "normal_throws": _run.throws,
-		"caption_layout_samples": _caption_layout_samples, "caption_layout_violations": _caption_layout_violations,
+		"badge_layout_samples": _badge_layout_samples, "badge_layout_violations": _badge_layout_violations,
+		"badge_role_states": _badge_role_states, "settlement_finished": _settlement_finished,
 		"catches_by_id": _run.catches_by_id, "deliveries_by_id": _run.deliveries_by_id,
 		"deliveries_by_role": _run.deliveries_by_role, "completed_orders": _run.delivered_orders,
 		"relay_awards_by_role": _run.relay_by_role, "relay_uses": _run.relay_uses,
@@ -181,21 +192,28 @@ func _ready() -> void:
 		"player_deliveries": _run.player_deliveries, "movement_distance_by_id": _moving_distance,
 		"async_retained_crave_seen": _async_crave_seen, "events": _run.events,
 		"screenshots": _shots, "window_size": str(DisplayServer.window_get_size())})
-	var file := FileAccess.open(_out.path_join("report.json"), FileAccess.WRITE)
-	file.store_string(JSON.stringify(_report, "\t"))
-	file.close()
 	print("HELPER_SHIFT observations: ", JSON.stringify({"roles": _run.deliveries_by_role, "ids": _run.deliveries_by_id,
 		"relay_uses": _run.relay_uses, "ge_inspections": _run.inspections, "world_seconds": _run._t,
 		"max_boxes": _max_boxes, "worst_step_ms": _worst_step_us / 1000.0}))
 	Fx.world = null
+	var weak_run: WeakRef = weakref(_run)
 	_run.queue_free()
-	await get_tree().process_frame
+	_run = null
+	for i in 3:
+		await get_tree().process_frame
+	_check(weak_run.get_ref() == null, "run and its resource-owning children are released before shutdown")
 	Audio.set_process(false)
-	for player in Audio.get_children():
-		if player is AudioStreamPlayer:
-			player.stop()
-			player.stream = null
+	Audio._exit_tree() # stop pooled playback AND release cached SFX / voice streams
+	UiKit.clear_cache()
+	# Give the render and audio servers actual frames to retire freed scene resources.
+	if DisplayServer.get_name() != "headless":
+		for i in 3:
+			await RenderingServer.frame_post_draw
 	await get_tree().create_timer(0.15, true, false, true).timeout
+	_report["passed"] = _failures.is_empty()
+	var file := FileAccess.open(_out.path_join("report.json"), FileAccess.WRITE)
+	file.store_string(JSON.stringify(_report, "\t"))
+	file.close()
 	print("HELPER_SHIFT_TEST %s failures=%d" % ["PASS" if _failures.is_empty() else "FAIL", _failures.size()])
 	get_tree().quit(0 if _failures.is_empty() else 1)
 
@@ -249,16 +267,50 @@ func _ge_has_inspected_box() -> bool:
 	return false
 
 
-func _observe_caption_layout() -> void:
+func _observe_badge_layout() -> void:
 	var tags: Array = _run._helper_task_layout()
-	_caption_layout_samples += 1
+	_badge_layout_samples += 1
+	if tags.size() != _run._crew.size():
+		_badge_layout_violations += 1
 	for i in tags.size():
-		var rect: Rect2 = tags[i].rect
-		if not Rect2(0, 0, 1920, 1080).encloses(rect):
-			_caption_layout_violations += 1
+		var tag: Dictionary = tags[i]
+		var rect: Rect2 = tag.rect
+		_badge_role_states["%s/%s" % [tag.role, tag.state]] = true
+		if not Rect2(0, 1042, 1500, 38).encloses(rect) or tag.has("text") or tag.has("text_at") or tag.has("anchor"):
+			_badge_layout_violations += 1
+		if not rect.encloses(tag.role_rect) or not rect.encloses(tag.state_rect) or tag.role_rect.intersects(tag.state_rect):
+			_badge_layout_violations += 1
+		if tag.role == "recipe" and (tag.recipe < 0 or not rect.encloses(tag.recipe_rect) or tag.recipe_rect.intersects(tag.role_rect) or tag.recipe_rect.intersects(tag.state_rect)):
+			_badge_layout_violations += 1
+		var member: Dictionary = _run._crew.filter(func(c): return c.id == tag.id)[0]
+		if tag.role != member.role or tag.state != member.state or int(tag.recipe) != int(member.recipe):
+			_badge_layout_violations += 1
 		for j in range(i):
 			if rect.intersects(tags[j].rect):
-				_caption_layout_violations += 1
+				_badge_layout_violations += 1
+
+
+func _check_dense_badges() -> void:
+	# Layout-only adversarial fixtures are separate from the real continuous meal below.
+	# Six exact-position crossings at both bounds must not need caption tethers or overlap.
+	var layout := CanteenRun.new()
+	var order_kind := int(Game.helper_recipe_options().filter(func(option): return option.id == "egg_veg")[0].kind)
+	for x in [0.0, 750.0, 1920.0]:
+		for all_orders in [false, true]:
+			layout._crew.clear()
+			for i in 6:
+				var role: String = "recipe" if all_orders else ["sweep", "recipe", "nutrition"][i % 3]
+				layout._crew.append({"id": Game.HELPER_IDS[i], "x": x, "role": role,
+					"state": ["catch", "return", "fetch"][i % 3], "recipe": order_kind if role == "recipe" else -1})
+			var tags: Array = layout._helper_task_layout()
+			var safe := tags.size() == 6
+			for i in tags.size():
+				var rect: Rect2 = tags[i].rect
+				safe = safe and Rect2(0, 1042, 1500, 38).encloses(rect)
+				for j in range(i):
+					safe = safe and not rect.intersects(tags[j].rect)
+			_check(safe, "six coincident helper badges remain separated at x=%s, all_orders=%s" % [x, all_orders])
+	layout.free()
 
 
 func _finish_checks() -> void:
@@ -277,7 +329,10 @@ func _finish_checks() -> void:
 	_check(_run.inspections > 0, "Ge improves an ordinary real catch during the shift")
 	_check(_budget_violations == 0 and _max_boxes == 6, "helper reservations stay bounded and actually use all six slots")
 	_check(_async_crave_seen, "async helper eating preserves nonzero stored appetite")
-	_check(_caption_layout_samples > 100 and _caption_layout_violations == 0, "moving helper task captions stay separated and within the viewport throughout the shift")
+	_check(_badge_layout_samples > 100 and _badge_layout_violations == 0, "text-free helper badges stay separated below characters, with correct role/order/state throughout the shift")
+	for role in ["sweep", "recipe", "nutrition"]:
+		for state in ["catch", "return", "fetch"]:
+			_check(_badge_role_states.has(role + "/" + state), "badge visibly represents observed role/state: " + role + "/" + state)
 	_check(FileAccess.get_file_as_bytes(Settings.PATH) == _settings_before, "player settings remain byte-identical")
 	if DisplayServer.get_name() != "headless":
 		_check(DisplayServer.window_get_size() == _requested_size, "actual render window matches requested size")

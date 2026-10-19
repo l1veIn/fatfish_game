@@ -2278,57 +2278,99 @@ func _draw_crew_layer() -> void:
 				var at := Vector2(c.x + 20.0 + phase * 40.0, FLOOR_Y + 40 - height - 10.0 - phase * 60.0)
 				_crew_layer.draw_string_outline(font, at, "z" if j < 2 else "Z", HORIZONTAL_ALIGNMENT_LEFT, -1, 18 + j * 6, 4, Color(0.1, 0.06, 0.04, 1.0 - phase))
 				_crew_layer.draw_string(font, at, "z" if j < 2 else "Z", HORIZONTAL_ALIGNMENT_LEFT, -1, 18 + j * 6, Color(0.85, 0.9, 1.0, 1.0 - phase))
-	# The assistants can physically cross. Their task captions share one reserved floor
-	# line, in the same left-to-right order; a tether keeps displaced captions attributable.
+	# Compact, text-free task pins share the clear strip below the characters' feet.
 	for tag in _helper_task_layout():
-		var anchor: Vector2 = tag.anchor
-		var center: Vector2 = tag.rect.get_center()
-		if absf(anchor.x - center.x) > 5.0:
-			var end := Vector2(center.x, tag.rect.position.y - 2.0)
-			_crew_layer.draw_line(anchor, end, UiKit.WOOD_DARK, 5.0, true)
-			_crew_layer.draw_line(anchor, end, Color(UiKit.CREAM, 0.8), 2.0, true)
-			_crew_layer.draw_circle(anchor, 3.0, UiKit.CREAM)
-		var text_at: Vector2 = tag.text_at
-		_crew_layer.draw_string_outline(font, text_at, tag.text, HORIZONTAL_ALIGNMENT_LEFT, -1, tag.px, 4, UiKit.WOOD_DARK)
-		_crew_layer.draw_string(font, text_at, tag.text, HORIZONTAL_ALIGNMENT_LEFT, -1, tag.px, UiKit.CREAM)
+		var r: Rect2 = tag.rect
+		var edge := Color("795133")
+		for layer in [0, 1]:
+			var face: Rect2 = r.grow(-float(layer) * 2.0)
+			var radius := face.size.y * 0.5
+			var color := edge if layer == 0 else Color("fff2d9")
+			_crew_layer.draw_rect(Rect2(face.position + Vector2(radius, 0), Vector2(face.size.x - radius * 2, face.size.y)), color)
+			_crew_layer.draw_circle(Vector2(face.position.x + radius, face.get_center().y), radius, color)
+			_crew_layer.draw_circle(Vector2(face.end.x - radius, face.get_center().y), radius, color)
+		draw_helper_role(_crew_layer, tag.role_rect, tag.role)
 		if tag.recipe >= 0:
-			_crew_layer.draw_texture_rect(_food_tex[tag.recipe], tag.icon_rect, false)
+			_crew_layer.draw_texture_rect(_food_tex[tag.recipe], tag.recipe_rect, false)
+		draw_helper_state(_crew_layer, tag.state_rect, tag.state)
 
 
 ## Read-only presentation layout: never moves a helper or swaps her assigned catch goal.
-## Kept measurable so crossing helpers and both locales can be checked without a draw call.
+## Kept measurable so crossing helpers can be checked without a draw call. No labels or
+## tethers: shape encodes the duty, the actual dish encodes an order, and a tiny state pin
+## distinguishes collecting / delivering / waiting. The planner uses these exact glyphs.
 func _helper_task_layout() -> Array:
-	var font := ThemeDB.fallback_font
 	var ordered: Array = _crew.duplicate()
 	ordered.sort_custom(func(a, b): return a.x < b.x if not is_equal_approx(a.x, b.x) else str(a.id) < str(b.id))
 	var tags: Array = []
 	for c in ordered:
-		var task := _helper_status(c)
 		var recipe := int(c.get("recipe", -1)) if c.get("role", "sweep") == "recipe" else -1
-		var icon_width := 30.0 if recipe >= 0 else 0.0
-		var px := 22
-		while px > 16 and font.get_string_size(task, HORIZONTAL_ALIGNMENT_LEFT, -1, px).x + icon_width > 134.0:
-			px -= 1
-		var text_width := font.get_string_size(task, HORIZONTAL_ALIGNMENT_LEFT, -1, px).x
-		var width := text_width + icon_width + 12.0 # includes the 4 px outline on both edges
+		var width := 86.0 if recipe >= 0 else 58.0
 		var x := clampf(float(c.x) - width * 0.5, 16.0, 1500.0 - width)
 		if not tags.is_empty():
-			x = maxf(x, float(tags[-1].rect.end.x) + 16.0)
-		tags.append({"id": c.id, "text": task, "px": px, "recipe": recipe,
-			"anchor": Vector2(c.x, 1040), "rect": Rect2(x, 1048, width, 30)})
-	# Backward pass fits a crossing group near the table without squeezing its labels.
+			x = maxf(x, float(tags[-1].rect.end.x) + 8.0)
+		tags.append({"id": c.id, "role": str(c.get("role", "sweep")), "state": str(c.state), "recipe": recipe,
+			"rect": Rect2(x, 1044, width, 32)})
+	# Backward pass fits a crossing group near the table without squeezing its badges.
 	var right := 1500.0
 	for i in range(tags.size() - 1, -1, -1):
 		var r: Rect2 = tags[i].rect
 		r.position.x = minf(r.position.x, right - r.size.x)
 		tags[i].rect = r
-		right = r.position.x - 16.0
+		right = r.position.x - 8.0
 	for tag in tags:
 		var r: Rect2 = tag.rect
-		var icon_width := 30.0 if tag.recipe >= 0 else 0.0
-		tag.text_at = Vector2(r.position.x + 6.0 + icon_width, 1072.0)
-		tag.icon_rect = Rect2(r.position.x + 4.0, 1048.0, 28.0, 28.0)
+		tag.role_rect = Rect2(r.position + Vector2(5, 3), Vector2(26, 26))
+		tag.recipe_rect = Rect2(r.position + Vector2(33, 3), Vector2(26, 26)) if tag.recipe >= 0 else Rect2()
+		tag.state_rect = Rect2(r.end.x - 21, r.position.y + 7, 14, 18)
 	return tags
+
+
+## Shared drawn legend: a receiving tray, an order ticket, and a three-part meal plate.
+## No font glyphs, language-dependent letters or colour-only distinctions.
+static func draw_helper_role(ci: CanvasItem, rect: Rect2, role: String) -> void:
+	var unit := rect.size.x / 26.0
+	var at := rect.position
+	var ink := Color("66432b")
+	var stroke := 1.8 * unit
+	var accents := {"sweep": Color("e5bd77"), "recipe": Color("edc6a3"), "nutrition": Color("abc6a0")}
+	ci.draw_circle(rect.get_center(), rect.size.x * 0.48, accents.get(role, Color("e5bd77")))
+	match role:
+		"recipe":
+			var ticket := Rect2(at + Vector2(6, 3) * unit, Vector2(15, 20) * unit)
+			ci.draw_rect(ticket, Color("fff8e8"))
+			ci.draw_rect(ticket, ink, false, stroke)
+			for row in 3:
+				ci.draw_line(at + Vector2(9, 8 + row * 5) * unit, at + Vector2(18, 8 + row * 5) * unit, ink, stroke, true)
+		"nutrition":
+			var center := rect.get_center()
+			ci.draw_circle(center, 9.0 * unit, Color("fff8e8"))
+			ci.draw_arc(center, 9.0 * unit, 0, TAU, 24, ink, stroke, true)
+			for angle in [-PI * 0.5, PI / 6.0, PI * 5.0 / 6.0]:
+				ci.draw_line(center, center + Vector2.from_angle(angle) * 9.0 * unit, ink, stroke, true)
+		_:
+			ci.draw_polyline(PackedVector2Array([at + Vector2(4, 14) * unit, at + Vector2(7, 21) * unit,
+				at + Vector2(19, 21) * unit, at + Vector2(22, 14) * unit]), ink, stroke, true)
+			ci.draw_line(at + Vector2(4, 14) * unit, at + Vector2(22, 14) * unit, ink, stroke, true)
+			ci.draw_circle(at + Vector2(13, 8) * unit, 3.0 * unit, ink)
+			ci.draw_line(at + Vector2(13, 3) * unit, at + Vector2(13, 1) * unit, ink, stroke, true)
+
+
+static func draw_helper_state(ci: CanvasItem, rect: Rect2, state: String) -> void:
+	var center := rect.get_center()
+	var ink := Color("795133")
+	var unit := minf(rect.size.x / 14.0, rect.size.y / 18.0)
+	match state:
+		"return":
+			ci.draw_line(center + Vector2(-5, 0) * unit, center + Vector2(5, 0) * unit, ink, 2.2 * unit, true)
+			ci.draw_polyline(PackedVector2Array([center + Vector2(0, -5) * unit, center + Vector2(5, 0) * unit, center + Vector2(0, 5) * unit]), ink, 2.2 * unit, true)
+		"fetch":
+			var points := PackedVector2Array([center + Vector2(-5, -6) * unit, center + Vector2(5, -6) * unit,
+				center + Vector2(-5, 6) * unit, center + Vector2(5, 6) * unit, center + Vector2(-5, -6) * unit])
+			ci.draw_polyline(points, ink, 1.8 * unit, true)
+		_:
+			ci.draw_circle(center, 3.4 * unit, ink)
+			ci.draw_arc(center, 6.0 * unit, 0, TAU, 16, Color(ink, 0.5), 1.0 * unit, true)
 
 
 ## A helper's box catches food crossing its rim line (only boxes in the "catch" state).
