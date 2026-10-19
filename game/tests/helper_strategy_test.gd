@@ -407,6 +407,94 @@ func test_queue_relay_and_budget() -> void:
 	run._update_crew(0.01)
 	check(run._crew[5].box != null and run._crew[0].box == null and run._helper_box_count() == 6,"longest wait wins limited reservation; no fixed-order starvation or over-budget allocation")
 
+## Real closing-time scoring, not a replacement/stub for _end or its multiplier rules.
+## A real FishRig satisfies the presentation endpoint; no _ready/GPU scene is needed.
+func settlement_run() -> CanteenRun:
+	var run := fresh_run()
+	run._fish = FishRig.new()
+	run.add_child(run._fish)
+	return run
+
+func test_relay_and_leftover_settlement() -> void:
+	# These independent endings would otherwise start/replace several audio streams in
+	# one engine frame. Let the real audio server mix between settlement scenarios.
+	await get_tree().create_timer(0.12,true,false,true).timeout
+	configure({"hire":1,"orch":2,"ocr":1,"warm":1})
+	var normal := settlement_run()
+	check(normal._award_helper_relay(box(normal,[food("ball"),food("ball")],true)),"settlement setup earns a real sweep relay")
+	var served := box(normal,[food("ball")])
+	normal._note_served(served)
+	normal._queue.append(served)
+	var wallet_before := Game.tokens
+	normal._update_fish(0.0,1.0) # Actual queue selection and initial eating animation.
+	normal._update_fish(0.0,1.0) # Actual bite, income attribution, and empty-box return.
+	var normal_expected := normal._g * (1.0 + normal.box_bonus + 0.3)
+	check(is_equal_approx(served.mult,1.5) and normal._eating == null,"ordinary delivered box eats with relay exactly once")
+	check(is_equal_approx(normal.earned,normal_expected) and is_equal_approx(Game.tokens-wallet_before,normal_expected),"ordinary relay reaches actual credited income")
+	check(is_equal_approx(float(served.rule_share),0.3/1.5) and is_equal_approx(normal._rule_income,normal._g*0.3),"ordinary rule_share includes exactly the earned relay contribution")
+	await get_tree().create_timer(0.12,true,false,true).timeout
+	normal._end("提前下班",false)
+	check(is_equal_approx(normal.earned,normal_expected),"ordinary closing does not credit a consumed relay box twice")
+	await get_tree().create_timer(0.12,true,false,true).timeout
+
+	configure({"hire":1,"orch":2,"ocr":1,"warm":1})
+	var kept := settlement_run()
+	kept._award_helper_relay(box(kept,[food("ball"),food("ball")],true))
+	var warm_box := box(kept,[food("ball")])
+	kept._put_warm(warm_box) # Actual submission consumes/fixes the charge before closing.
+	check(is_equal_approx(float(warm_box.get("crew_relay_bonus",0.0)),0.3) and kept._helper_relay.is_empty(),"putting a player box in the warmer freezes and consumes its earned relay")
+	wallet_before = Game.tokens
+	kept._end("提前下班",false)
+	var warm_expected := normal_expected * kept.warm_x
+	check(is_equal_approx(float(kept._score.get("warm",0.0)),warm_expected),"real _end warmer settlement includes relay in its additive pool")
+	check(is_equal_approx(kept.earned,warm_expected) and is_equal_approx(Game.tokens-wallet_before,warm_expected),"warmer relay reaches actual credited income")
+	check(is_equal_approx(kept._rule_income,kept._g*0.3*kept.warm_x),"warmer attribution credits relay share after the warm multiplier")
+	kept._end("提前下班",false)
+	check(is_equal_approx(Game.tokens-wallet_before,warm_expected) and Game.runs == 1,"repeated close cannot consume or pay the warm relay again")
+	await get_tree().create_timer(0.12,true,false,true).timeout
+
+	configure({"hire":1,"sleep":1,"warm":1,"ocr":1})
+	var closing := settlement_run()
+	var reserved := box(closing,[food("ball")])
+	closing._put_warm(reserved)
+	var shared := box(closing,[food("ball")])
+	var equal_a := box(closing,[food("ball")])
+	var equal_b := box(closing,[food("ball")])
+	var hand := box(closing,[food("ball")])
+	var cargo := box(closing,[food("ball")],true)
+	closing._queue = [reserved,shared,equal_a,shared]
+	closing._eating = shared
+	closing._hand = hand
+	closing._flying = [{"basin":reserved},{"basin":shared},{"basin":equal_b},{"basin":null}]
+	closing._crew = [{"box":reserved},{"box":cargo},{"box":null}]
+	var leftovers: Array = closing._leftover_boxes()
+	check(leftovers.size() == 5 and leftovers.filter(func(b): return is_same(b,shared)).size() == 1,"leftovers deduplicate queue/eating/hand/flight/crew by identity and exclude the warmer")
+	check(leftovers.any(func(b): return is_same(b,equal_a)) and leftovers.any(func(b): return is_same(b,equal_b)),"equal-content but distinct boxes are both retained for settlement")
+	wallet_before = Game.tokens
+	closing._end("提前下班",false)
+	var closed_warm := closing._g * 1.2 * closing.warm_x
+	var closed_sleep := closing._g * 5.0 * 0.5
+	check(is_equal_approx(float(closing._score.get("sleep",0.0)),closed_sleep),"real sleep settlement pays every remaining box including in-flight food exactly once")
+	check(is_equal_approx(float(closing._score.get("warm",0.0)),closed_warm) and is_equal_approx(closing.earned,closed_warm+closed_sleep),"warm aliases cannot be eaten again by sleep after the warmer is cleared")
+	check(is_equal_approx(Game.tokens-wallet_before,closed_warm+closed_sleep) and closing.eaten == 6,"wallet and eaten count agree with one warm portion plus five unique leftovers")
+	check([shared,equal_a,equal_b,hand,cargo].all(func(b): return b.items.is_empty()) and closing._hand == null,"sleep consumes the actual referenced in-flight and remaining cargo")
+	await get_tree().create_timer(0.12,true,false,true).timeout
+
+	configure({"hire":1,"sleep":1,"ocr":2,"stream":2,"hot":2,"fp32":1})
+	var value_run := settlement_run()
+	var premium := food("ball",2,true)
+	var transit := box(value_run,[premium],true)
+	transit.mult = 99.0
+	transit.chain_multiplier = 99.0
+	transit.crew_relay_bonus = 0.9
+	value_run._flying = [{"basin":transit}]
+	value_run._bites = 100 # Mid-shift stream state; sleep must ignore it and box multipliers.
+	var half_raw := value_run._item_value(premium) * value_run._g * 0.5
+	check(value_run._stream_mult() > 1.0 and is_equal_approx(value_run._item_value(premium),10.0),"premium sleep fixture has real FP32 gold/hot value and an active stream multiplier")
+	value_run._end("提前下班",false)
+	check(is_equal_approx(float(value_run._score.get("sleep",0.0)),half_raw),"in-flight sleep retains gold and heat value but excludes stream, box, chain and relay bonuses")
+	await get_tree().create_timer(0.12,true,false,true).timeout
+
 func _ready() -> void:
 	if not OS.get_cmdline_user_args().has("--test-profile="+PROFILE) or not Game.save_path.begins_with("user://qa_"):
 		push_error("Refusing helper strategy test outside isolated profile")
@@ -422,12 +510,14 @@ func _ready() -> void:
 	test_nutrition()
 	test_ge_inspection()
 	test_queue_relay_and_budget()
+	await test_relay_and_leftover_settlement()
 	check(FileAccess.get_file_as_bytes(Settings.PATH) == settings_before,"player settings remain byte-identical")
 	var report := {"checks":checks,"check_count":checks.size(),"failures":failures,"scope":"Headless real-policy fixtures; not human play, visual quality or build balance evidence","hashes":{}}
 	for path in ["res://scripts/autoload/game.gd","res://scripts/run/canteen_run.gd","res://scripts/run/meal_rules.gd","res://data/skill_tree.json","res://tests/helper_strategy_test.gd"]:
 		report.hashes[path] = FileAccess.get_sha256(path)
 	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path("res://../build/qa/helper-strategy"))
-	var file := FileAccess.open("res://../build/qa/helper-strategy/strategy-report.json",FileAccess.WRITE)
+	# Keep the original 113-check report bound to its original source hashes.
+	var file := FileAccess.open("res://../build/qa/helper-strategy/strategy-settlement-report.json",FileAccess.WRITE)
 	file.store_string(JSON.stringify(report,"\t"))
 	file.close()
 	Game.reset_save()

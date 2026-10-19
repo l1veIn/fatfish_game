@@ -1460,7 +1460,7 @@ func _plan_box(b: Dictionary) -> Dictionary:
 
 
 func _box_rule_bonus(b: Dictionary) -> float:
-	return float(b.get("meal_rule", {}).get("add_bonus", 0.0))
+	return float(b.get("meal_rule", {}).get("add_bonus", 0.0)) + float(b.get("crew_relay_bonus", 0.0))
 
 
 ## Freeze the chain at submission time: the table is a stack, so eating order can differ.
@@ -2251,16 +2251,57 @@ func _draw_crew_layer() -> void:
 				var at := Vector2(c.x + 20.0 + phase * 40.0, FLOOR_Y + 40 - height - 10.0 - phase * 60.0)
 				_crew_layer.draw_string_outline(font, at, "z" if j < 2 else "Z", HORIZONTAL_ALIGNMENT_LEFT, -1, 18 + j * 6, 4, Color(0.1, 0.06, 0.04, 1.0 - phase))
 				_crew_layer.draw_string(font, at, "z" if j < 2 else "Z", HORIZONTAL_ALIGNMENT_LEFT, -1, 18 + j * 6, Color(0.85, 0.9, 1.0, 1.0 - phase))
+	# The assistants can physically cross. Their task captions share one reserved floor
+	# line, in the same left-to-right order; a tether keeps displaced captions attributable.
+	for tag in _helper_task_layout():
+		var anchor: Vector2 = tag.anchor
+		var center: Vector2 = tag.rect.get_center()
+		if absf(anchor.x - center.x) > 5.0:
+			var end := Vector2(center.x, tag.rect.position.y - 2.0)
+			_crew_layer.draw_line(anchor, end, UiKit.WOOD_DARK, 5.0, true)
+			_crew_layer.draw_line(anchor, end, Color(UiKit.CREAM, 0.8), 2.0, true)
+			_crew_layer.draw_circle(anchor, 3.0, UiKit.CREAM)
+		var text_at: Vector2 = tag.text_at
+		_crew_layer.draw_string_outline(font, text_at, tag.text, HORIZONTAL_ALIGNMENT_LEFT, -1, tag.px, 4, UiKit.WOOD_DARK)
+		_crew_layer.draw_string(font, text_at, tag.text, HORIZONTAL_ALIGNMENT_LEFT, -1, tag.px, UiKit.CREAM)
+		if tag.recipe >= 0:
+			_crew_layer.draw_texture_rect(_food_tex[tag.recipe], tag.icon_rect, false)
+
+
+## Read-only presentation layout: never moves a helper or swaps her assigned catch goal.
+## Kept measurable so crossing helpers and both locales can be checked without a draw call.
+func _helper_task_layout() -> Array:
+	var font := ThemeDB.fallback_font
+	var ordered: Array = _crew.duplicate()
+	ordered.sort_custom(func(a, b): return a.x < b.x if not is_equal_approx(a.x, b.x) else str(a.id) < str(b.id))
+	var tags: Array = []
+	for c in ordered:
 		var task := _helper_status(c)
+		var recipe := int(c.get("recipe", -1)) if c.get("role", "sweep") == "recipe" else -1
+		var icon_width := 30.0 if recipe >= 0 else 0.0
 		var px := 22
-		while px > 13 and font.get_string_size(task, HORIZONTAL_ALIGNMENT_LEFT, -1, px).x > 126:
+		while px > 16 and font.get_string_size(task, HORIZONTAL_ALIGNMENT_LEFT, -1, px).x + icon_width > 134.0:
 			px -= 1
-		var text_at := Vector2(c.x - font.get_string_size(task, HORIZONTAL_ALIGNMENT_LEFT, -1, px).x * 0.5, 1072)
-		_crew_layer.draw_string_outline(font, text_at, task, HORIZONTAL_ALIGNMENT_LEFT, -1, px, 5, UiKit.WOOD_DARK)
-		_crew_layer.draw_string(font, text_at, task, HORIZONTAL_ALIGNMENT_LEFT, -1, px, UiKit.CREAM)
-		if c.get("role", "sweep") == "recipe" and int(c.get("recipe", -1)) >= 0:
-			var icon: Texture2D = _food_tex[int(c.recipe)]
-			_crew_layer.draw_texture_rect(icon, Rect2(c.x + 38, 1026, 36, 36), false)
+		var text_width := font.get_string_size(task, HORIZONTAL_ALIGNMENT_LEFT, -1, px).x
+		var width := text_width + icon_width + 12.0 # includes the 4 px outline on both edges
+		var x := clampf(float(c.x) - width * 0.5, 16.0, 1500.0 - width)
+		if not tags.is_empty():
+			x = maxf(x, float(tags[-1].rect.end.x) + 16.0)
+		tags.append({"id": c.id, "text": task, "px": px, "recipe": recipe,
+			"anchor": Vector2(c.x, 1040), "rect": Rect2(x, 1048, width, 30)})
+	# Backward pass fits a crossing group near the table without squeezing its labels.
+	var right := 1500.0
+	for i in range(tags.size() - 1, -1, -1):
+		var r: Rect2 = tags[i].rect
+		r.position.x = minf(r.position.x, right - r.size.x)
+		tags[i].rect = r
+		right = r.position.x - 16.0
+	for tag in tags:
+		var r: Rect2 = tag.rect
+		var icon_width := 30.0 if tag.recipe >= 0 else 0.0
+		tag.text_at = Vector2(r.position.x + 6.0 + icon_width, 1072.0)
+		tag.icon_rect = Rect2(r.position.x + 4.0, 1048.0, 28.0, 28.0)
+	return tags
 
 
 ## A helper's box catches food crossing its rim line (only boxes in the "catch" state).
@@ -2664,7 +2705,7 @@ func _start_box(b: Dictionary) -> void:
 		m += fill_bonus
 	m += cot * mini(int(b.get("chains", 0)), 3)
 	var rule_add := _box_rule_bonus(b)
-	m += rule_add + float(b.get("crew_relay_bonus", 0.0))
+	m += rule_add
 	b["rule_share"] = rule_add / m
 	var h := 1.0
 	var crew_box: bool = b.get("crew", false)
@@ -2769,6 +2810,22 @@ func _flop() -> void:
 	tw.tween_callback(func(): Audio.sfx("deliver", -6.0))   # thud on the table
 
 
+## Remaining real boxes, including a box submitted just before closing but still in flight.
+## Warm storage has its own settlement. A shared reference can only be eaten once.
+func _leftover_boxes(settled: Array = []) -> Array:
+	var candidates: Array = _queue.duplicate()
+	candidates.append_array([_eating, _hand])
+	for flight in _flying:
+		candidates.append(flight.basin)
+	for c in _crew:
+		candidates.append(c.box)
+	var boxes: Array = []
+	for box in candidates:
+		if box != null and not is_same(box, _warm) and not box.items.is_empty() and not settled.any(func(known): return is_same(known, box)) and not boxes.any(func(known): return is_same(known, box)):
+			boxes.append(box)
+	return boxes
+
+
 ## Ends the shift: "吃饱了！", "食堂关门了", "提前下班" (pause menu) or, in a trial, "新年快乐！"
 ## (passed) / "宕机了……". `card` false skips the result card (leaving for the title).
 func _end(reason: String, card_too := true) -> void:
@@ -2788,9 +2845,11 @@ func _end(reason: String, card_too := true) -> void:
 	var meal := earned   # what she ate during the shift
 	var warm_step := {}
 	var eos_step := {}
+	var settled: Array = []
 	if _warm != null:
 		var wb: Dictionary = _warm
 		_warm = null
+		settled.append(wb)
 		var mult := (1.0 + box_bonus + (fill_bonus if wb.get("full", false) else 0.0) + cot * mini(int(wb.get("chains", 0)), 3) + _box_rule_bonus(wb))
 		var rule_share := _box_rule_bonus(wb) / mult
 		mult *= _crave_x(INF) * float(wb.get("chain_multiplier", 1.0)) * warm_x
@@ -2823,15 +2882,7 @@ func _end(reason: String, card_too := true) -> void:
 			var k := K(wb.items[best])
 			eos_step = {"icon": "crown", "text": tr("最后一口：%s") % tr(NAMES[k]), "mark": "×%.0f" % ex, "add": extra,
 				"dish": _food_tex[k], "dish_name": tr(NAMES[k])}
-	# what was left on the table, in her box, in the player's hands and the helpers' boxes
-	var boxes: Array = _queue.duplicate()
-	for bx in [_eating, _hand]:
-		if bx != null:
-			boxes.append(bx)
-	for c in _crew:
-		if c.box != null:
-			boxes.append(c.box)
-	boxes = boxes.filter(func(bx): return not bx.items.is_empty())
+	var boxes := _leftover_boxes(settled)
 	var left_step := {}
 	if not boxes.is_empty():
 		var left := 0.0
@@ -2869,7 +2920,7 @@ func _end(reason: String, card_too := true) -> void:
 	if _sig_bonus > 0.0:
 		steps.append({"note": tr("其中招牌菜"), "add": _sig_bonus})
 	if _rule_income > 0.0:
-		steps.append({"note": tr("其中搭配加成：单品 / 缓存 / 换菜"), "add": _rule_income})
+		steps.append({"note": tr("其中搭配 / 接力加成"), "add": _rule_income})
 	for st in [left_step, warm_step, eos_step]:
 		if not st.is_empty():
 			steps.append(st)
@@ -3621,24 +3672,56 @@ func _badge(c: Vector2, icon: String, text: String, id: String, value: float, la
 	if value > float(_badge_val.get(id, value)) + 0.001:
 		_badge_bump[id] = 1.0
 	_badge_val[id] = value
-	var k := 1.0 + (0.04 if compact else 0.12) * sin(float(_badge_bump.get(id, 0.0)) * PI)
-	var font := ThemeDB.fallback_font
-	var lw := font.get_string_size(label, HORIZONTAL_ALIGNMENT_LEFT, -1, 22).x + 8.0 if label != "" else 0.0
-	var w := 44.0 + (44.0 if icon != "" else 0.0) + lw + _dfont.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, 28).x
-	w = clampf(w, 120.0, 365.0)
-	if right > 0.0:
-		c.x = right - w * 0.5
-	var h := 40.0 if compact else 58.0
-	var r := Rect2(c - Vector2(w, h) * 0.5 * k, Vector2(w, h) * k)
-	UiKit.nine(self, _ui.ui_badge, r, 30, 0.45 if compact else 0.65)
-	var x := r.position.x + 22 * k
+	var k := 1.0 + (0.04 if compact else 0.12) * sin(float(_badge_bump.get(id, 0.0)) * PI) if not Settings.reduced_motion else 1.0
+	var layout := _badge_layout(c, icon, text, label, right, compact, k)
+	# Scale the badge and all its content together around the same anchor. A right-aligned
+	# badge grows leftward, never pushing its enamel edge or last glyph off the viewport.
+	draw_set_transform(layout.center, 0.0, Vector2(k, k))
+	UiKit.nine(self, _ui.ui_badge, layout.rect, 30, 0.45 if compact else 0.65)
 	if icon != "":
-		_icon(icon, Vector2(x + 18 * k, c.y), (30 if compact else 38) * k)
-		x += 44 * k
+		_icon(icon, layout.icon_at, 30 if compact else 38)
+	var font := ThemeDB.fallback_font
 	if label != "":
-		_write(font, Vector2(x, c.y + 9 * k), label, int(22 * k), INK, Color(0, 0, 0, 0))
-		x += lw * k
-	_write(_nfont, Vector2(x, c.y + 11 * k), text, int(28 * k), ENAMEL, Color(0, 0, 0, 0))
+		_write(font, layout.label_at, label, layout.label_px, INK, Color.TRANSPARENT)
+	_write(_nfont, layout.value_at, text, layout.value_px, ENAMEL, Color.TRANSPARENT)
+	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+
+
+## Measure the font that will actually be drawn. The numeral atlas includes its black
+## outline and negative side bearings (up to 31/96 em); keep that ink inside the safe area.
+func _badge_layout(c: Vector2, icon: String, text: String, label := "", right := -1.0, compact := false, scale_k := 1.0) -> Dictionary:
+	var font := ThemeDB.fallback_font
+	var label_px := 20 if compact else 22
+	var value_px := 24 if compact else 28
+	var icon_width := 40.0 if icon != "" else 0.0
+	var gap := 10.0 if label != "" else 0.0
+	var label_width := font.get_string_size(label, HORIZONTAL_ALIGNMENT_LEFT, -1, label_px).x
+	var value_width := _nfont.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, value_px).x
+	var ink_pad := ceilf(value_px * 0.35)
+	var content := icon_width + label_width + gap + value_width + ink_pad * 2.0
+	while content > 321.0 and value_px > 14:
+		value_px -= 1
+		label_px = maxi(14, int(round(value_px * (20.0 / 24.0 if compact else 22.0 / 28.0))))
+		label_width = font.get_string_size(label, HORIZONTAL_ALIGNMENT_LEFT, -1, label_px).x
+		value_width = _nfont.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, value_px).x
+		ink_pad = ceilf(value_px * 0.35)
+		content = icon_width + label_width + gap + value_width + ink_pad * 2.0
+	var w := clampf(content + 44.0, 120.0, 365.0)
+	var h := 40.0 if compact else 58.0
+	if right > 0.0:
+		c.x = minf(right, 1900.0) - w * scale_k * 0.5
+	else:
+		c.x = clampf(c.x, 20.0 + w * scale_k * 0.5, 1900.0 - w * scale_k * 0.5)
+	var rect := Rect2(-w * 0.5, -h * 0.5, w, h)
+	var x := rect.position.x + 22.0
+	var label_at := Vector2(x + icon_width, label_px * 0.36)
+	var value_at := Vector2(label_at.x + label_width + gap + ink_pad, value_px * 0.36)
+	return {"center": c, "rect": rect, "icon_at": Vector2(x + 17.0, 0), "label_at": label_at,
+		"value_at": value_at, "label_px": label_px, "value_px": value_px,
+		"bounds": Rect2(c + rect.position * scale_k, rect.size * scale_k),
+		"value_ink_span": Vector2(value_at.x - ink_pad, value_at.x + value_width + ink_pad),
+		"label_span": Vector2(label_at.x, label_at.x + label_width),
+		"safe_span": Vector2(rect.position.x + 12.0, rect.end.x - 12.0)}
 
 
 ## How many boxes are in a stack: a small enamel tag with the number (not a bare "×2").
