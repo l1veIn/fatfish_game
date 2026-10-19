@@ -84,7 +84,7 @@ func _ready() -> void:
 	run._abark_t = 0
 	await shot("early_shift")
 	var hud = run._service_ui
-	check(hud._clock_text(59.9) == "01:00" and hud._clock_text(59.0) == "00:59", "countdown remains continuous across minute boundary")
+	check(not hud._info.get_rect().intersects(Rect2(24, 14, 372, 196)), "guide button clear of original chalkboard")
 	for i in 5:
 		check(not hud.stall_rect(i).intersects(Rect2(610, 26, 270, 270)), "stall clear of cook %d" % i)
 		if i > 0: check(not hud.stall_rect(i).intersects(hud.stall_rect(i - 1)), "adjacent stall signs do not overlap")
@@ -104,8 +104,13 @@ func _ready() -> void:
 	run._shown = 999999999
 	run._banners.clear()
 	await shot("late_shift")
-	for r in hud.text_bounds:
-		check(Rect2(0, 0, 1920, 1080).encloses(r), "bounded HUD text")
+	run._bark = tr("怎么还没饭呀……")
+	run._bark_t = 3
+	run._abark = tr("多吃点菜！")
+	run._abark_t = 3
+	await shot("painted_bubbles")
+	run._bark_t = 0
+	run._abark_t = 0
 	run._set_thinking(true)
 	await shot("thinking")
 	# Tab opens once and the world remains frozen until an intentional close.
@@ -144,11 +149,12 @@ func _ready() -> void:
 	run._hand = run._new_basin(Vector2(800, 550))
 	run._hand.items = [run.make(run.I.BALL, 2)]
 	run._banner("深度思考", tr("按住空格或右键，时间变慢"), "clock")
+	run._banners[0].t = 0.5
 	check(run._front.z_index < run.z_index, "notice layer remains behind all food and the hand")
 	await shot("announcement_behind_box")
 	run._checkout = true
 	await frames()
-	check(not hud.visible, "ledger hidden during checkout")
+	check(not hud.visible, "service guide hidden during checkout")
 	run.queue_free()
 	await frames()
 	Audio._exit_tree()

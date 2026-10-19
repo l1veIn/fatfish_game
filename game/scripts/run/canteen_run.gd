@@ -2813,7 +2813,7 @@ func _draw_front() -> void:
 					_sprite(_front, "fx_steam", Vector2(x + sin(ph * 6.0 + j) * 8.0, PAN_Y - 24.0 - ph * 60.0), 24.0 + ph * 26.0, sin(ph * 4.0 + j) * 0.2, Color(1, 1, 1, 0.42 * (1.0 - ph) * minf(ph * 5.0, 1.0)))
 	if is_instance_valid(_service_ui):
 		_service_ui.draw_stalls(_front)
-		_service_ui.draw_announcement(_front)
+	_draw_announcement(_front)
 
 
 ## 梁阿姨's face for the moment.
@@ -2912,8 +2912,8 @@ func _draw() -> void:
 		draw_texture_rect(UiKit.vignette(), Rect2(0, 0, 1920, 1080), false, Color(0.22, 0.12, 0.42, 0.75))
 		if _hand != null:
 			_label(font, _hand.pos + Vector2(-90, -110), tr("嗯，用户想要") + "……".repeat(1 + int(_t * 3.0) % 3), HORIZONTAL_ALIGNMENT_LEFT, -1, 26, Color(0.9, 0.85, 1.0))
-	if _show_stats and not _checkout:
-		_label(font, Vector2(410, 80), "FPS %d / Items %d" % [Engine.get_frames_per_second(), _fp.size()], HORIZONTAL_ALIGNMENT_LEFT, 550, 22, Color.WHITE)
+	if not _checkout:
+		_draw_hud(font)
 
 
 ## Text with a dark outline, readable on the busy canteen art.
@@ -3189,6 +3189,14 @@ func _write(f: Font, pos: Vector2, text: String, size: int, col: Color, outline 
 	draw_string(f, pos, text, HORIZONTAL_ALIGNMENT_LEFT, -1, size, col)
 
 
+func _fit_write(f: Font, pos: Vector2, text: String, px: int, width: float, col: Color) -> void:
+	while px > 16 and f.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, px).x > width:
+		px -= 1
+	while f.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, px).x > width and text.length() > 1:
+		text = text.left(text.length() - 2) + "…"
+	_write(f, pos, text, px, col, Color.TRANSPARENT)
+
+
 func _icon(name: String, centre: Vector2, size: float, a := 1.0) -> void:
 	var t: Texture2D = _ui.get("icon_" + name, null)
 	if t == null:
@@ -3208,24 +3216,145 @@ func _piece(name: String, r: Rect2, col := Color.WHITE) -> void:
 
 
 
+func _draw_hud(font: Font) -> void:
+	# A: the chalkboard
+	var a := Rect2(24, 14, 372, 196)
+	_piece("ui_chalkboard", a)
+	var left := maxf(meal_time - _meal_elapsed(), 0.0)
+	var urgent := left <= 10.0 and not _ended
+	var pulse := 1.0 + (0.08 * sin(_t * 12.0) if urgent and not Settings.reduced_motion else 0.0)
+	if _learning():
+		_fit_write(font, a.position + Vector2(40, 50), tr("第一次来，慢慢学"), 23, 292, Color(0.92, 0.95, 0.9))
+		_write(font, a.position + Vector2(40, 82), tr("计时未开始"), 22, Color(1.0, 0.85, 0.5), Color.TRANSPARENT)
+	else:
+		_fit_write(font, a.position + Vector2(40, 58), tr("食堂关门还剩"), 22, 146, Color(0.92, 0.95, 0.9))
+		var num := "%d" % int(ceil(left))
+		_write(_nfont, a.position + Vector2(196, 74), num, int(54 * pulse), Color(1.0, 0.45, 0.4) if urgent else Color(0.98, 0.98, 0.92), Color(0, 0, 0, 0))
+		_write(font, a.position + Vector2(206 + _nfont.get_string_size(num, HORIZONTAL_ALIGNMENT_LEFT, -1, int(54 * pulse)).x, 70), tr("秒"), 22, Color(0.92, 0.95, 0.9), Color.TRANSPARENT)
+	var line2 := tr(Game.plate())
+	if trial != "":
+		line2 = tr("评测：本顿要到 %s") % Game.fmt(target)
+		var pr := Rect2(a.position + Vector2(40, 128), Vector2(292, 12))
+		draw_rect(pr, Color(1, 1, 1, 0.18))
+		draw_rect(Rect2(pr.position, Vector2(pr.size.x * clampf(earned / maxf(target, 1.0), 0.0, 1.0), pr.size.y)), GOLD_C if earned < target else Color(0.55, 0.9, 0.5))
+	_fit_write(font, a.position + Vector2(40, 112), line2, 20, 292, Color(0.85, 0.9, 0.82))
+	if peaks:
+		_icon("bell", a.position + Vector2(52, 166), 30, 1.0 if _peak_on else 0.45)
+		_write(font, a.position + Vector2(74, 174), (tr("高峰 %d 秒") if _peak_on else tr("谷时 %d 秒")) % int(ceil(_peak_t)), 20, Color(1.0, 0.6, 0.5) if _peak_on else Color(0.8, 0.85, 0.8), Color(0, 0, 0, 0))
+	if can_think:
+		var think_panel := Rect2(1000, 14, 455, 154)
+		UiKit.nine(self, _ui.ui_chalkboard, think_panel, 48, 0.6)
+		var clock_at := think_panel.position + Vector2(60, 77)
+		_icon("clock", clock_at, 47)
+		draw_arc(clock_at, 34, -PI / 2, TAU - PI / 2, 48, Color(1, 0.97, 0.88, 0.2), 4, true)
+		var ready := clampf(_think / maxf(think_time, 0.01), 0, 1)
+		if _think_cooldown > 0: ready = clampf(1.0 - _think_cooldown / THINK_COOLDOWN, 0, 1)
+		if ready > 0.001:
+			draw_arc(clock_at, 34, -PI / 2, ready * TAU - PI / 2, 48, Color("e19a77") if _think_cooldown > 0 else GOLD_C, 4, true)
+		_fit_write(font, think_panel.position + Vector2(111, 44), tr("深度思考"), 24, 213, PAPER)
+		_fit_write(_nfont, think_panel.position + Vector2(340, 44), "%.1fs" % _think, 21, 84, PAPER)
+		_fit_write(font, think_panel.position + Vector2(111, 85), _think_hint(), 20, 313, PAPER)
+		if _thinking or hybrid:
+			_fit_write(font, think_panel.position + Vector2(111, 119), tr("蓝线：饭盒高度的预计落点"), 18, 313, Color(0.72, 0.86, 0.91))
+	# B: the cash register and the 主 / 荤 / 素 tray
+	var b := Rect2(1530, 14, 370, 92)
+	_piece("ui_paper", b)
+	_icon("token", b.position + Vector2(46, 46), 52)
+	_fit_write(_nfont, b.position + Vector2(84, 62), Game.fmt(_shown), 46, 172, Color(0.76, 0.46, 0.06))
+	_write(font, b.position + Vector2(268, 62), tr("token"), 20, INK, Color(0, 0, 0, 0))
+	var tray := Rect2(1545, 112, 340, 101)
+	_piece("ui_tray", tray)
+	var tot: float = _cat["主"] + _cat["荤"] + _cat["素"]
+	var goal := {"主": 0.4, "荤": 0.3, "素": 0.3}
+	var i := 0
+	for cn in ["主", "荤", "素"]:
+		var cx := tray.position.x + tray.size.x * (0.18 + 0.32 * i)
+		var share: float = float(_cat[cn]) / tot if tot > 0.0 else 0.0
+		var fill := clampf(share / goal[cn], 0.0, 1.0)
+		var cell := Rect2(cx - 44, tray.position.y + 22, 88, 58)
+		draw_rect(Rect2(cell.position.x, cell.end.y - cell.size.y * fill, cell.size.x, cell.size.y * fill), Color(CAT_COL[cn], 0.55))
+		_write(font, Vector2(cx, cell.position.y + 30), tr(cn), 22, INK, Color(1, 1, 1, 0.8), true)
+		_write(font, Vector2(cx, cell.position.y + 52), "%d%%" % int(round(share * 100)), 16, INK, Color(1, 1, 1, 0.8), true)
+		i += 1
+	_badge(Vector2(1715, 246), "", tr("均衡 ×%.2f") % balance_mult(), "balance", balance_mult())
+	# C: her badges
+	var y := 300.0
+	var rows: Array = []
+	# [icon, name, value, id, number]: the name says which multiplier it is (the icons alone
+	# didn't), right-aligned under the tray
+	if stream > 0.0:
+		rows.append(["flame", tr("流式"), "×%.2f" % _stream_mult(), "stream", _stream_mult()])
+	if crave > 0.0:
+		rows.append(["drool", tr("馋"), "×%.2f" % _crave_x(_crave_t if _eating == null else 0.0), "crave", _crave_x(_crave_t)])
+	if combo > 0.0:
+		rows.append(["chain", tr("连击"), "%d" % _combo_n, "combo", float(_combo_n)])
+	if grok:
+		rows.append(["leaf", tr("顿悟"), "✓" if _grokked else "%d/%d" % [_grok_n, grok_need], "grok", float(_grok_n)])
+	if critic > 0.0:
+		rows.append(["crown", tr("评鉴"), tr("%d 种") % _kinds_eaten.size(), "critic", float(_kinds_eaten.size())])
+	if cache_bonus > 0.0 and _cache_ready:
+		rows.append(["box", tr("缓存"), "+%d%%" % int(round(cache_bonus * 100)), "cache", cache_bonus])
+	for r in rows:
+		_badge(Vector2(0, y), r[0], r[2], r[3], r[4], r[1], 1890.0, rows.size() > 3)
+		y += 42.0 if rows.size() > 3 else 64.0
+	if _show_stats:
+		var lines := [
+			tr("FPS %d · 掉落物 %d") % [Engine.get_frames_per_second(), _fp.size()],   # notr
+			tr("接住率 %d%% · 晃出 %d · 掉地上 %d") % [int(catch_rate() * 100), spilled, wasted],   # notr
+			tr("她空等 %.1f 秒") % fish_wait,   # notr
+		]
+		draw_rect(Rect2(420, 20, 460, 34 * lines.size() + 16), Color(0, 0, 0, 0.45))
+		for j in lines.size():
+			_label(font, Vector2(436, 52 + 34 * j), lines[j], HORIZONTAL_ALIGNMENT_LEFT, -1, 22, Color(0.85, 0.92, 1.0))
+
+
+## Keep the original painted ribbon, beneath food and the player's box.
+func _draw_announcement(ci: CanvasItem) -> void:
+	if _checkout or _banners.is_empty(): return
+	var bn: Dictionary = _banners[0]
+	var t: float = bn.t
+	var alpha := minf(1.0, t / BANNER_T[0])
+	if t > BANNER_T[0] + BANNER_T[1]:
+		alpha = 1.0 - (t - BANNER_T[0] - BANNER_T[1]) / BANNER_T[2]
+	var r := Rect2(650, 390, 620, 161)
+	ci.draw_texture_rect(_ui.ui_banner, r, false, Color(1, 1, 1, alpha))
+	if bn.icon != "":
+		var tex: Texture2D = _ui.get("icon_" + bn.icon)
+		if tex != null:
+			var sz := tex.get_size() * (48.0 / maxf(tex.get_width(), tex.get_height()))
+			ci.draw_texture_rect(tex, Rect2(Vector2(752, 465) - sz * 0.5, sz), false, Color(1, 1, 1, alpha))
+	var font: Font = load("res://assets/ui/ui_font.tres")
+	for row in 2:
+		var text: String = bn.title if row == 0 else bn.sub
+		var px := 40 if row == 0 else 22
+		var f: Font = _dfont if row == 0 else font
+		while px > 16 and f.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, px).x > 400: px -= 1
+		while f.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, px).x > 400 and text.length() > 1:
+			text = text.left(text.length() - 2) + "…"
+		var at := Vector2(790, 468 if row == 0 else 504)
+		ci.draw_string_outline(f, at, text, HORIZONTAL_ALIGNMENT_CENTER, 400, px, 4, Color(0.45, 0.06, 0.04, alpha))
+		ci.draw_string(f, at, text, HORIZONTAL_ALIGNMENT_CENTER, 400, px, Color(1, 0.97, 0.88, alpha))
+
+
 ## One enamel badge, centred at `c` (or with its right edge at `right`): an icon, the
 ## multiplier's name and its value; it bounces when the value goes up.
-func _badge(c: Vector2, icon: String, text: String, id: String, value: float, label := "", right := -1.0) -> void:
+func _badge(c: Vector2, icon: String, text: String, id: String, value: float, label := "", right := -1.0, compact := false) -> void:
 	if value > float(_badge_val.get(id, value)) + 0.001:
 		_badge_bump[id] = 1.0
 	_badge_val[id] = value
-	var k := 1.0 + 0.12 * sin(float(_badge_bump.get(id, 0.0)) * PI)
+	var k := 1.0 + (0.04 if compact else 0.12) * sin(float(_badge_bump.get(id, 0.0)) * PI)
 	var font := ThemeDB.fallback_font
 	var lw := font.get_string_size(label, HORIZONTAL_ALIGNMENT_LEFT, -1, 22).x + 8.0 if label != "" else 0.0
 	var w := 44.0 + (44.0 if icon != "" else 0.0) + lw + _dfont.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, 28).x
-	w = maxf(w, 120.0)
+	w = clampf(w, 120.0, 365.0)
 	if right > 0.0:
 		c.x = right - w * 0.5
-	var r := Rect2(c - Vector2(w, 58) * 0.5 * k, Vector2(w, 58) * k)
-	_piece("ui_badge", r)
+	var h := 40.0 if compact else 58.0
+	var r := Rect2(c - Vector2(w, h) * 0.5 * k, Vector2(w, h) * k)
+	UiKit.nine(self, _ui.ui_badge, r, 30, 0.45 if compact else 0.65)
 	var x := r.position.x + 22 * k
 	if icon != "":
-		_icon(icon, Vector2(x + 18 * k, c.y), 38 * k)
+		_icon(icon, Vector2(x + 18 * k, c.y), (30 if compact else 38) * k)
 		x += 44 * k
 	if label != "":
 		_write(font, Vector2(x, c.y + 9 * k), label, int(22 * k), INK, Color(0, 0, 0, 0))
@@ -3267,18 +3396,23 @@ func _draw_floaters(font: Font) -> void:
 	if _bark_t > 0.0:   # her speech bubble, its tail pointing down at her
 		_bubble(Vector2(1040, 510), _bark, true)
 	if _abark_t > 0.0:   # 梁阿姨's, by her hat
-		_bubble(Vector2(860, 8), _abark, false)
+		_bubble(Vector2(860, 178), _abark, false)
 
 
 func _bubble(at: Vector2, text: String, flip: bool) -> void:
 	var font: Font = load("res://assets/ui/ui_font.tres")
-	var width := minf(390, maxf(180, font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, 26).x))
+	var width := minf(330, maxf(140, font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, 26).x))
 	var measured := font.get_multiline_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, width, 26)
-	var r := Rect2(at, Vector2(width + 36, measured.y + 30))
-	draw_style_box(UiKit.box(PAPER, Color("213c47"), 2, 16), r)
-	var tail := r.position + Vector2(r.size.x - 35 if flip else 32, r.size.y - 1)
-	draw_colored_polygon(PackedVector2Array([tail, tail + Vector2(24, 0), tail + Vector2(20 if flip else -10, 22)]), PAPER)
-	draw_multiline_string(font, r.position + Vector2(18, 15 + font.get_ascent(26)), text, HORIZONTAL_ALIGNMENT_LEFT, width, 26, -1, Color("213c47"))
+	var r := Rect2(at, Vector2(width + 100, maxf(120, measured.y + 90)))
+	var tex: Texture2D = _ui.ui_bubble
+	if flip:
+		draw_set_transform(Vector2(r.end.x, r.position.y), 0, Vector2(-1, 1))
+		draw_texture_rect(tex, Rect2(Vector2.ZERO, r.size), false)
+		draw_set_transform(Vector2.ZERO, 0, Vector2.ONE)
+	else:
+		draw_texture_rect(tex, r, false)
+	var y := r.position.y + (r.size.y * 0.84 - measured.y) * 0.5 + font.get_ascent(26)
+	draw_multiline_string(font, Vector2(r.position.x + 50, y), text, HORIZONTAL_ALIGNMENT_CENTER, width, 26, -1, INK)
 
 
 ## D: the box in hand — capacity pips and the 套餐 it is on its way to, as ingredient icons.
