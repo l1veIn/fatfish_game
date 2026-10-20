@@ -17,6 +17,7 @@ const TICKET := Vector2(172, 108)     # avoids the four closest authored pairs w
 const ZOOM := Vector2(0.45, 1.3)
 const MealPlannerPanel := preload("res://scripts/ui/meal_planner.gd")
 const CrewPlannerPanel := preload("res://scripts/ui/crew_planner_panel.gd")
+const TOUCH_UI := preload("res://scripts/ui/touch_controls.gd")
 
 var _zoom := 0.75
 var _bar: HBoxContainer
@@ -40,6 +41,14 @@ var _crew_planner: Control
 var _crew_button: Button
 var _modal_focus: Array = []
 var _tooltip_bounds := Rect2()
+var _touch_points := {}
+var _touch_start := Vector2.ZERO
+var _touch_moved := false
+var _touch_panel: Control
+var _touch_buy: Button
+var _touch_refund: Button
+var _touch_zoom_out: Button
+var _touch_zoom_in: Button
 
 
 func _ready() -> void:
@@ -97,6 +106,116 @@ func _ready() -> void:
 	grab_focus.call_deferred()
 	Audio.music("bgm_tree")
 	Audio.ambience("")
+	if TOUCH_UI.available():
+		_enable_touch_tools()
+
+
+func _enable_touch_tools() -> void:
+	if is_instance_valid(_touch_panel):
+		return
+	_touch_panel = Control.new()
+	_touch_panel.name = "TouchTreeTools"
+	_touch_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_touch_panel.position = Vector2(430, 930)
+	_touch_panel.size = Vector2(830, 90)
+	add_child(_touch_panel)
+	_touch_zoom_out = TOUCH_UI.make_button("−", Rect2(0, 0, 100, 90), 44)
+	_touch_zoom_out.name = "TouchZoomOut"
+	_touch_zoom_out.pressed.connect(func(): _zoom_at(_zoom / 1.18, Vector2(1140, 540)))
+	_touch_panel.add_child(_touch_zoom_out)
+	_touch_zoom_in = TOUCH_UI.make_button("+", Rect2(114, 0, 100, 90), 44)
+	_touch_zoom_in.name = "TouchZoomIn"
+	_touch_zoom_in.pressed.connect(func(): _zoom_at(_zoom * 1.18, Vector2(1140, 540)))
+	_touch_panel.add_child(_touch_zoom_in)
+	_touch_buy = TOUCH_UI.make_button(tr("购买一级"), Rect2(236, 0, 280, 90))
+	_touch_buy.name = "TouchBuy"
+	_touch_buy.pressed.connect(func():
+		if _hover != "" and not _has_input_modal():
+			try_buy(_hover))
+	_touch_panel.add_child(_touch_buy)
+	_touch_refund = TOUCH_UI.make_button(tr("退款"), Rect2(538, 0, 220, 90))
+	_touch_refund.name = "TouchRefund"
+	_touch_refund.pressed.connect(func():
+		if _hover != "" and not _has_input_modal():
+			_refund_node(_hover))
+	_touch_panel.add_child(_touch_refund)
+	var tools_hint := get_node("TreeToolsHint") as Label
+	tools_hint.position.x = 430
+	tools_hint.text = tr("轻触查看 · 拖动平移 · 双指缩放")
+	_refresh_touch_tools()
+
+
+func _refresh_touch_tools() -> void:
+	if not is_instance_valid(_touch_panel):
+		return
+	_touch_panel.visible = not _has_input_modal()
+	if not _touch_panel.visible:
+		_cancel_touch_gesture()
+	var selected := not _hover.is_empty() and Game.is_visible(_hover)
+	_touch_buy.text = tr("购买一级")
+	_touch_refund.text = tr("退款")
+	_touch_buy.disabled = not selected or Game.is_maxed(_hover)
+	var n := Game.node(_hover) if selected else {}
+	_touch_refund.disabled = not selected or _hover == "start" or n.get("kind", "") == "ticket" or Game.level(_hover) <= 0
+	_touch_zoom_out.disabled = _zoom <= ZOOM.x
+	_touch_zoom_in.disabled = _zoom >= ZOOM.y
+	var tools_hint := get_node("TreeToolsHint") as Label
+	tools_hint.text = tr("轻触查看 · 拖动平移 · 双指缩放")
+
+
+func _cancel_touch_gesture() -> void:
+	_touch_points.clear()
+	_touch_moved = false
+	_dragging = false
+	if is_instance_valid(_touch_panel):
+		for button in _touch_panel.get_children():
+			button.cancel_touch()
+
+
+func _notification(what: int) -> void:
+	if what in [NOTIFICATION_APPLICATION_FOCUS_OUT, NOTIFICATION_PAUSED, NOTIFICATION_EXIT_TREE]:
+		_cancel_touch_gesture()
+
+
+func _zoom_at(value: float, pivot: Vector2) -> void:
+	var next := clampf(value, ZOOM.x, ZOOM.y)
+	_pan = (center() - pivot) * (next / _zoom) + pivot - Vector2(960, 540)
+	_zoom = next
+
+
+func _touch_input(event: InputEvent) -> void:
+	if event is InputEventScreenTouch:
+		if event.pressed and not event.canceled:
+			if _touch_points.is_empty():
+				_touch_start = event.position
+				_touch_moved = false
+			else:
+				_touch_moved = true
+			_touch_points[event.index] = event.position
+			grab_focus()
+		elif _touch_points.has(event.index):
+			_touch_points.erase(event.index)
+			if not event.canceled and not _touch_moved and event.position.distance_to(_touch_start) < 20.0:
+				# Inspect first; only the separate purchase button spends tokens.
+				if not _tooltip_bounds.has_point(event.position):
+					_hover = node_at(event.position)
+			_touch_moved = true
+	elif event is InputEventScreenDrag and _touch_points.has(event.index):
+		var before: Vector2 = _touch_points[event.index]
+		if _touch_points.size() == 1:
+			_pan += event.position - before
+			if event.position.distance_to(_touch_start) >= 20.0:
+				_touch_moved = true
+		else:
+			var keys := _touch_points.keys()
+			var other: Vector2 = _touch_points[keys[0] if keys[0] != event.index else keys[1]]
+			var old_distance := before.distance_to(other)
+			if old_distance > 1.0:
+				_zoom_at(_zoom * event.position.distance_to(other) / old_distance, (before + other) * 0.5)
+				_pan += (event.position - before) * 0.5
+			_touch_moved = true
+		_touch_points[event.index] = event.position
+	get_viewport().set_input_as_handled()
 
 
 func _update_trial_button() -> void:
@@ -402,6 +521,8 @@ func _at(n: Dictionary) -> Vector2:
 func node_at(p: Vector2) -> String:
 	if _header_rect().has_point(p) or _bar.get_rect().grow(10).has_point(p):
 		return ""
+	if is_instance_valid(_touch_panel) and _touch_panel.visible and _touch_panel.get_rect().grow(10).has_point(p):
+		return ""
 	for n in Game.nodes:
 		if _is_displayed(n["id"]) and Rect2(_at(n) - TICKET * _zoom * 0.5, TICKET * _zoom).has_point(p):
 			return n["id"]
@@ -470,10 +591,17 @@ func _process(delta: float) -> void:
 		_tooltip_bounds = _tooltip_rect(Game.node(_hover), _tooltip_size(_tooltip_lines(Game.node(_hover))))
 	else:
 		_tooltip_bounds = Rect2()
+	_refresh_touch_tools()
 	queue_redraw()
 
 
 func _input(event: InputEvent) -> void:
+	if _has_input_modal():
+		_cancel_touch_gesture()
+		return
+	if (event is InputEventScreenTouch or event is InputEventScreenDrag) and _touch_points.has(event.index):
+		_touch_input(event)
+		return
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and not event.pressed:
 		_dragging = false
 	if _has_input_modal(): return
@@ -544,6 +672,13 @@ func _step(dir: Vector2) -> void:
 
 func _gui_input(event: InputEvent) -> void:
 	if _has_input_modal():
+		return
+	if event is InputEventMouse and event.device == InputEvent.DEVICE_ID_EMULATION:
+		accept_event()
+		return
+	if event is InputEventScreenTouch or event is InputEventScreenDrag:
+		_enable_touch_tools()
+		_touch_input(event)
 		return
 	if has_focus():
 		if _hover != "" and _is_refund_input(event):
@@ -801,7 +936,7 @@ func _tooltip_lines(n: Dictionary) -> Array:
 		var afford := Game.tokens >= Game.cost(id)
 		lines.append([tr("花费 %s token") % Game.fmt(Game.cost(id)), 26, Color(0.75, 1.0, 0.8) if afford else Color(1.0, 0.55, 0.5)])
 	if Game.level(id) > 0 and id != "start" and n.get("kind", "") != "ticket":
-		lines.append([tr("退款：右键 / %s / 手柄 %s") % [Settings.binding_label("refund"), Settings.binding_label("refund", "gamepad")], 22, Color(0.8, 0.75, 0.7)])
+		lines.append([tr("选中后点「退款」") if is_instance_valid(_touch_panel) else tr("退款：右键 / %s / 手柄 %s") % [Settings.binding_label("refund"), Settings.binding_label("refund", "gamepad")], 22, Color(0.8, 0.75, 0.7)])
 		if Game.refund_floor(id) > 0:
 			lines.append([tr("已有下游技能：只能退多余等级，最低保留 1 级。"), 22, Color(1.0, 0.75, 0.5)])
 		else:
@@ -824,6 +959,8 @@ func _tooltip_rect(n: Dictionary, dimensions: Vector2) -> Rect2:
 	var at := _at(n)
 	var preferred := at + Vector2(TICKET.x * _zoom * 0.5 + 18, -60)
 	var blocked := [_header_rect().grow(12), _bar.get_rect().grow(12)]
+	if is_instance_valid(_touch_panel) and _touch_panel.visible:
+		blocked.append(_touch_panel.get_rect().grow(12))
 	for action in [_start, _trial]:
 		if action.visible:
 			blocked.append(action.get_rect().grow(18))

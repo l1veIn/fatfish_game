@@ -21,6 +21,8 @@ var _raised := false
 
 
 func _ready() -> void:
+	if DisplayServer.is_touchscreen_available() or OS.get_cmdline_user_args().has("--force-touch"):
+		_device = "touch"
 	position = HOME
 	size = Vector2(1080, 174)
 	z_index = 90
@@ -83,6 +85,8 @@ func _avoid_hand() -> void:
 func _input(event: InputEvent) -> void:
 	if not active or not visible:
 		return
+	if event is InputEventMouse and event.device == InputEvent.DEVICE_ID_EMULATION:
+		return
 	if event is InputEventKey and event.pressed and not event.echo and event.physical_keycode == KEY_T:
 		skip()
 		get_viewport().set_input_as_handled()
@@ -92,7 +96,9 @@ func _input(event: InputEvent) -> void:
 		get_viewport().set_input_as_handled()
 		return
 	var device := _device
-	if event is InputEventMouseMotion and event.relative.length_squared() > 4.0:
+	if event is InputEventScreenTouch or event is InputEventScreenDrag:
+		device = "touch"
+	elif event is InputEventMouseMotion and event.relative.length_squared() > 4.0:
 		device = "mouse"
 	elif event is InputEventMouseButton:
 		device = "mouse"
@@ -158,16 +164,20 @@ func _refresh() -> void:
 	if not is_instance_valid(_title):
 		return
 	_skip.visible = active
-	_skip.text = tr("跳过引导 · View") if _device == "pad" else tr("跳过引导 · T")
+	_skip.text = tr("跳过引导") if _device == "touch" else (tr("跳过引导 · View") if _device == "pad" else tr("跳过引导 · T"))
 	if not active:
 		_title.text = tr("开饭啦！计时开始")
 		_instruction.text = tr("继续接菜、送桌；关门后用 token 升级。")
-		_footer.text = tr("随时按 Esc / Start 暂停。")
+		_footer.text = tr("随时点「暂停」休息一下。") if _device == "touch" else tr("随时按 Esc / Start 暂停。")
 		return
 	var titles := [tr("先拿一个饭盒"), tr("接住一份菜"), tr("把饭盒送上桌")]
 	_title.text = "%02d / 03   %s" % [step + 1, titles[step]]
 	var instructions: Array
 	match _device:
+		"touch":
+			instructions = [tr("点右下角「拿起饭盒」。"),
+				tr("在接菜区拖动，把饭盒放在落下的菜下面。"),
+				tr("拖回右下角餐桌，再点「送饭」。")]
 		"keyboard", "pad":
 			var device := "gamepad" if _device == "pad" else "keyboard"
 			var deliver := Settings.binding_label("deliver", device)

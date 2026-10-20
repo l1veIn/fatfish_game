@@ -177,7 +177,9 @@ func _route(pad: bool) -> void:
 	Game.version = 1
 	Game.runs = 1
 	Game.tokens = 50000
-	Game.levels = {"start": 1, "stall_main": 1}
+	# This route opens the automation toolbar. Explicitly unlock one helper so
+	# that tool exists; the original two-skill fixture never exposed this menu.
+	Game.levels = {"start": 1, "stall_main": 1, "hire": 1}
 	Game.seen_buttons = {"menu": true, "sigs": true, "menu_card": true, "sigs_card": true, "intro_think": true, "intro_canteen_started": true}
 	Game._recompute()
 	seed(2026102007)
@@ -196,6 +198,11 @@ func _route(pad: bool) -> void:
 		_check(tree.has_focus(), "pad cancel returns from skill-tree tools to map")
 	else:
 		for tool in [tree.find_child("Tree_book", true, false), tree._crew_button]:
+			_check(is_instance_valid(tool), "keyboard route fixture exposes the required tree tool")
+			if not is_instance_valid(tool):
+				_main.queue_free()
+				await _wait()
+				return
 			for i in 20:
 				if tool.has_focus(): break
 				await _key(KEY_TAB)

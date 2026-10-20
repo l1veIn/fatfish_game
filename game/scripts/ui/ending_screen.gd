@@ -314,7 +314,7 @@ func save_keepsake() -> void:
 		_hint.text = tr("未能保存饭票，请检查保存目录后重试。")
 		return
 	var directory := ProjectSettings.globalize_path(export_directory)
-	_last_export_error = DirAccess.make_dir_recursive_absolute(directory)
+	_last_export_error = OK if OS.has_feature("web") else DirAccess.make_dir_recursive_absolute(directory)
 	if _last_export_error != OK:
 		_hint.text = tr("未能保存饭票，请检查保存目录后重试。")
 		return
@@ -330,17 +330,34 @@ func save_keepsake() -> void:
 	await RenderingServer.frame_post_draw
 	var picture := get_viewport().get_texture().get_image()
 	var stamp := Time.get_datetime_string_from_system().replace(":", "-")
-	var path := directory.path_join("fatfish-agi-%s-%d.png" % [stamp, Time.get_ticks_msec()])
-	_last_export_error = picture.save_png(path)
+	var filename := "fatfish-agi-%s-%d.png" % [stamp, Time.get_ticks_msec()]
+	var path := directory.path_join(filename)
+	if OS.has_feature("web"):
+		var png := picture.save_png_to_buffer()
+		# Toy recommends base64 below 2 MB. Reduce only the exported keepsake when
+		# necessary; game textures and the displayed card retain their resolution.
+		while png.size() > 1400000 and picture.get_width() > 960:
+			var width := maxi(960, int(picture.get_width() * 0.8))
+			var height := roundi(float(picture.get_height()) * width / picture.get_width())
+			picture.resize(width, height, Image.INTERPOLATE_LANCZOS)
+			png = picture.save_png_to_buffer()
+		if is_instance_valid(ToyPlatform.active):
+			var result := await ToyPlatform.active.save_image(png, filename)
+			_last_export_error = OK if result.ok else FAILED
+		else:
+			JavaScriptBridge.download_buffer(png, filename, "image/png")
+			_last_export_error = OK
+	else:
+		_last_export_error = picture.save_png(path)
 	for control in [_previous, _save, _next, _skip, _page_label, _hint]:
 		control.show()
 	_exporting = false
 	share_capture_changed.emit(false)
 	if _last_export_error == OK:
-		_last_export_path = path
+		_last_export_path = filename if OS.has_feature("web") else path
 		_hint.add_theme_font_size_override("font_size", 19)
-		_hint.text = tr("饭票已保存：%s") % path
+		_hint.text = tr("已请求保存饭票，请查看相册或下载。") if OS.has_feature("web") else tr("饭票已保存：%s") % path
 	else:
-		_hint.text = tr("未能保存饭票，请检查保存目录后重试。")
+		_hint.text = tr("未能保存饭票，请重试。") if OS.has_feature("web") else tr("未能保存饭票，请检查保存目录后重试。")
 	if is_instance_valid(focus):
 		focus.grab_focus()

@@ -103,6 +103,10 @@ func _ready() -> void:
 			return
 		_show_run()
 	else:
+		var platform := ToyPlatform.new()
+		platform.name = "ToyPlatform"
+		add_child(platform)
+		await platform.startup()
 		_show_title()
 
 
@@ -179,6 +183,7 @@ func _make_title() -> TitleScreen:
 func _continue_game() -> void:
 	if _busy:
 		return
+	ToyPlatform.start_gesture()
 	if Game.ending_pending():
 		_show_ending()
 	elif Game.runs == 0:

@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+	<title>$GODOT_PROJECT_NAME</title>
+	<style>
+		:root { color-scheme: dark; font-family: system-ui, "Microsoft YaHei", sans-serif; background: #1a0f0a; color: #fff0ce; }
+		* { box-sizing: border-box; }
+		html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; }
+		body { touch-action: none; }
+		#game { position: fixed; top: max(env(safe-area-inset-top), var(--toy-safe-top, 0px)); left: max(env(safe-area-inset-left), var(--toy-safe-left, 0px));
+			width: calc(min(100vw, var(--toy-viewport-width, 100vw)) - max(env(safe-area-inset-left), var(--toy-safe-left, 0px)) - max(env(safe-area-inset-right), var(--toy-safe-right, 0px)));
+			height: calc(min(100vh, var(--toy-viewport-height, 100vh)) - max(env(safe-area-inset-top), var(--toy-safe-top, 0px)) - max(env(safe-area-inset-bottom), var(--toy-safe-bottom, 0px))); }
+		#canvas { display: block; width: 100%; height: 100%; border: 0; outline: none; }
+		button, a { -webkit-tap-highlight-color: transparent; }
+		button { font: inherit; color: #2f2117; background: #f3cf7b; border: 1px solid #f7df9c; border-radius: 10px; padding: .75rem 1.3rem; cursor: pointer; }
+		button:focus-visible, a:focus-visible { outline: 3px solid white; outline-offset: 3px; }
+		button:disabled { opacity: .6; cursor: wait; }
+		#status { position: fixed; inset: 0; z-index: 30; background: #1a0f0a; display: flex; align-items: center; justify-content: center; padding: 2rem; text-align: center; }
+		#status[hidden], [hidden] { display: none !important; }
+		.loading-panel { max-width: 34rem; }
+		.loading-panel h1 { font-size: clamp(1.4rem, 4vw, 2rem); }
+		.loading-panel p { line-height: 1.7; color: #d4bca4; white-space: pre-line; }
+		#status-progress { display: block; width: 100%; margin: 1.3rem 0; accent-color: #f3cf7b; }
+		#status-notice { white-space: pre-line; }
+		#rotate { display: none; position: fixed; inset: 0; z-index: 20; place-items: center; background: #1a0f0aee; text-align: center; padding: 2rem; }
+		#rotate p { line-height: 1.8; font-size: 1.2rem; }
+		@media (orientation: portrait) and (pointer: coarse) {
+			#rotate { display: grid; }
+		}
+		#toy-sync { position: fixed; top: max(.4rem, env(safe-area-inset-top), var(--toy-safe-top, 0px)); left: 50%; transform: translateX(-50%); z-index: 40; max-width: calc(100% - 1rem); background: #231a13e8; border: 1px solid #82664d; border-radius: 8px; padding: .35rem .65rem; display: flex; align-items: center; gap: .6rem; font-size: 12px; line-height: 1.4; }
+		#toy-sync button { padding: .25rem .55rem; font-size: 12px; white-space: nowrap; border-radius: 5px; }
+		#toy-sync a { color: #f3cf7b; }
+		.toy-dialog-backdrop { position: fixed; inset: 0; z-index: 60; display: grid; place-items: center; padding: 1rem; background: #100c0aee; overflow: auto; touch-action: pan-y; }
+		.toy-dialog { width: min(34rem, 100%); margin: auto; padding: 1.5rem; background: #302318; border: 1px solid #aa8759; border-radius: 16px; }
+		.toy-dialog h2 { margin-top: 0; font-size: 1.4rem; }
+		.toy-dialog p { line-height: 1.6; }
+		.toy-dialog button { display: block; width: 100%; margin-top: .75rem; white-space: pre-line; line-height: 1.5; }
+	</style>
+	$GODOT_HEAD_INCLUDE
+	<script src="https://s1.hdslb.com/bfs/seed/toy/app/sdk/toy-sdk.js" async></script>
+	<script src="toy_bridge.js" defer></script>
+</head>
+<body>
+	<div id="game"><canvas id="canvas" tabindex="0">请使用支持 WebGL 2 的浏览器。 Please use a browser with WebGL 2.</canvas></div>
+	<div id="rotate"><p>请将手机横过来，开饭啦！<br>Please rotate your phone to landscape.</p></div>
+	<div id="status">
+		<div class="loading-panel">
+			<h1>吃白饭的大肥鱼</h1>
+			<p id="status-notice">正在准备饭堂…</p>
+			<progress id="status-progress"></progress>
+			<button id="start-button" type="button" hidden>进入饭堂</button>
+		</div>
+	</div>
+	<noscript>请启用 JavaScript 后进入饭堂。 JavaScript is required.</noscript>
+	<script src="$GODOT_URL"></script>
+	<script>
+		const GODOT_CONFIG = $GODOT_CONFIG;
+		const GODOT_THREADS_ENABLED = $GODOT_THREADS_ENABLED;
+		// The game surface respects the App safe area. Godot observes its CSS size.
+		GODOT_CONFIG.canvasResizePolicy = 0;
+		const engine = new Engine(GODOT_CONFIG);
+		window.addEventListener("DOMContentLoaded", () => {
+			const overlay = document.getElementById("status");
+			const notice = document.getElementById("status-notice");
+			const progress = document.getElementById("status-progress");
+			const start = document.getElementById("start-button");
+			const isEnglish = (navigator.language || "").toLowerCase().startsWith("en");
+			const tr = (zh, en) => isEnglish ? en : zh;
+			document.documentElement.lang = isEnglish ? "en" : "zh-CN";
+			if (window.FatFishToy) {
+				window.FatFishToy.setLanguage(isEnglish ? "en" : "zh_CN");
+				void window.FatFishToy.prepare();
+			}
+			function fail(error) {
+				console.error("FatFish startup failed:", error);
+				progress.hidden = true;
+				start.hidden = true;
+				notice.textContent = tr("饭堂暂时打不开，请刷新重试。\n", "Could not open the canteen. Please reload.\n") +
+					(error && error.message ? error.message : String(error));
+			}
+			const missing = Engine.getMissingFeatures({ threads: GODOT_THREADS_ENABLED });
+			if (missing.length) {
+				fail(tr("浏览器缺少：", "Browser features missing: ") + missing.join(", "));
+				return;
+			}
+			notice.textContent = tr("正在准备饭堂…首次加载需要一点时间。", "Preparing the canteen… the first visit may take a moment.");
+			engine.startGame({
+				onProgress: (current, total) => {
+					if (current > 0 && total > 0) { progress.value = current; progress.max = total; }
+					else { progress.removeAttribute("value"); progress.removeAttribute("max"); }
+				},
+			}).then(() => {
+				progress.hidden = true;
+				notice.textContent = tr("饭堂准备好了。进入后点击「开始游戏」开饭。", "The canteen is ready. Enter, then select Play to begin.");
+				start.textContent = tr("进入饭堂", "Enter the canteen");
+				start.hidden = false;
+				start.focus();
+			}).catch(fail);
+			start.addEventListener("click", () => {
+				if (window.FatFishToy) window.FatFishToy.startGesture();
+				overlay.hidden = true;
+				document.getElementById("canvas").focus();
+			});
+			function resizeCanvas() {
+				const canvas = document.getElementById("canvas");
+				const rect = document.getElementById("game").getBoundingClientRect();
+				const scale = Math.min(window.devicePixelRatio || 1, 1920 / Math.max(1, rect.width), 1080 / Math.max(1, rect.height));
+				canvas.width = Math.max(1, Math.round(rect.width * scale));
+				canvas.height = Math.max(1, Math.round(rect.height * scale));
+			}
+			new ResizeObserver(resizeCanvas).observe(document.getElementById("game"));
+			resizeCanvas();
+		});
+	</script>
+</body>
+</html>

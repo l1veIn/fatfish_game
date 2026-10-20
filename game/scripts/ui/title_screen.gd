@@ -141,6 +141,9 @@ func _ready() -> void:
 	author.text = tr("作者：%s") % "夸夸家族族长"
 	author.uri = "https://space.bilibili.com/2501012"
 	author.tooltip_text = author.uri
+	if OS.has_feature("web"):
+		author.uri = ""
+		author.pressed.connect(ToyPlatform.open_author)
 	author.focus_mode = Control.FOCUS_ALL
 	author.underline = LinkButton.UNDERLINE_MODE_ON_HOVER
 	author.position = Vector2(150, 1000)

@@ -34,6 +34,7 @@ signal to_title
 
 const MEAL_JOURNAL := preload("res://scripts/run/meal_journal.gd")
 const FISH_MEAL_VISUAL := preload("res://scripts/ui/fish_meal_visual.gd")
+const TOUCH_UI := preload("res://scripts/ui/touch_controls.gd")
 var _meal_visual = null
 var _journal = null
 var _journal_bite_phase := "live"
@@ -486,6 +487,8 @@ var _hint_input_device := "keyboard"
 var _think_transitions := 0           # state transitions, also useful for bounded audio QA
 var _pause: PauseMenu
 var _focus_pause_pending := false
+var _touch_controls: Control
+var _touch_finger := -1
 var _coach = null
 var _learning_time := 0.0             # tutorial time never consumes the first meal's clock
 var _recipes_made := 0
@@ -597,6 +600,41 @@ func _ready() -> void:
 	_service_ui.run = self
 	add_child(_service_ui)
 	_maybe_stall_layout_intro()
+	if TOUCH_UI.available():
+		_enable_touch_controls()
+
+
+func _enable_touch_controls() -> void:
+	if is_instance_valid(_touch_controls) or autotest:
+		return
+	_touch_controls = TOUCH_UI.new()
+	_touch_controls.run = self
+	_touch_controls.deliver_requested.connect(_touch_deliver)
+	_touch_controls.pause_requested.connect(pause)
+	add_child(_touch_controls)
+
+
+func _touch_deliver() -> void:
+	if _ended or get_tree().paused:
+		return
+	# The pickup button is on the table. A carried box must still be moved back
+	# there (or to the warmer) before the shared delivery path accepts it.
+	if _hand == null:
+		_aim = Vector2(STACK_AT.x, BAND.y)
+		_mouse_steering = true
+	_try_deliver()
+
+
+func _cancel_touch() -> void:
+	_touch_finger = -1
+	if is_instance_valid(_touch_controls):
+		_touch_controls.cancel_touch()
+
+
+func _exit_tree() -> void:
+	_cancel_touch()
+	Settings.release_gameplay_inputs()
+	Audio.slowmo(false)
 
 
 func _maybe_stall_layout_intro() -> void:
@@ -1300,7 +1338,43 @@ func _magnet() -> float:
 
 # --- input --------------------------------------------------------------------------------------
 
+func _input(event: InputEvent) -> void:
+	# A drag begun in the playfield remains ours even when it ends over a GUI.
+	# Otherwise that GUI can consume the release and leave a stale finger captured.
+	if _touch_finger < 0 or _ended:
+		return
+	if event is InputEventScreenTouch and event.index == _touch_finger and (not event.pressed or event.canceled):
+		_touch_finger = -1
+		get_viewport().set_input_as_handled()
+	elif event is InputEventScreenDrag and event.index == _touch_finger:
+		_aim = get_canvas_transform().affine_inverse() * event.position
+		_mouse_steering = true
+		get_viewport().set_input_as_handled()
+
+
 func _unhandled_input(event: InputEvent) -> void:
+	if event is InputEventMouse and event.device == InputEvent.DEVICE_ID_EMULATION:
+		return
+	if event is InputEventScreenTouch or event is InputEventScreenDrag:
+		if _ended or autotest:
+			return
+		_enable_touch_controls()
+		_hint_input_device = "touch"
+		if _journal != null:
+			_journal.data.input_devices["touch"] = true
+		if event is InputEventScreenTouch:
+			if event.canceled or not event.pressed:
+				if event.index == _touch_finger:
+					_touch_finger = -1
+			elif _touch_finger < 0:
+				_touch_finger = event.index
+				_aim = get_canvas_transform().affine_inverse() * event.position
+				_mouse_steering = true
+		elif event.index == _touch_finger:
+			_aim = get_canvas_transform().affine_inverse() * event.position
+			_mouse_steering = true
+		get_viewport().set_input_as_handled()
+		return
 	if _journal != null and not _ended:
 		if event is InputEventJoypadButton or (event is InputEventJoypadMotion and absf(event.axis_value) > 0.2):
 			_journal.data.input_devices["gamepad"] = true
@@ -1349,6 +1423,8 @@ func pause(from_focus := false) -> void:
 	if not is_inside_tree() or is_queued_for_deletion() or is_instance_valid(_pause) or _ended or get_tree().paused:
 		return
 	_interrupt_thinking()
+	_cancel_touch()
+	Settings.release_gameplay_inputs()
 	_pause = PauseMenu.new()
 	_pause.focus_pause = from_focus
 	_pause.stall_guide = _service_ui
@@ -1369,6 +1445,10 @@ func pause(from_focus := false) -> void:
 
 
 func _notification(what: int) -> void:
+	if what == NOTIFICATION_APPLICATION_FOCUS_OUT:
+		_cancel_touch()
+		if is_node_ready():
+			_interrupt_thinking()
 	if what == NOTIFICATION_APPLICATION_FOCUS_OUT and Settings.pause_unfocused and not autotest and not _ended and is_inside_tree() and not _focus_pause_pending:
 		# OS focus notifications lock the child list while walking the scene tree.
 		# Installing a menu here fails, leaving a paused game with no way to resume.
@@ -1431,6 +1511,8 @@ func _think_hint() -> String:
 		return tr("松开后再按")
 	if _think < minf(THINK_MIN_CHARGE, think_time):
 		return tr("思考恢复中")
+	if _hint_input_device == "touch" or is_instance_valid(_touch_controls):
+		return tr("按住思考")
 	var binding := Settings.binding_label("think", _hint_input_device).get_slice(" / ", 0)
 	return (tr("按住 %s") if _hint_input_device == "gamepad" else tr("按住 %s / 右键")) % binding
 
@@ -1625,7 +1707,7 @@ func _process(delta: float) -> void:
 		queue_redraw()
 		return
 	# 深度思考 slows the world down; the basin (your hand) keeps real time
-	var want_think := can_think and (Input.is_action_pressed("think") or Input.is_mouse_button_pressed(MOUSE_BUTTON_RIGHT))
+	var want_think: bool = can_think and (Input.is_action_pressed("think") or Input.is_mouse_button_pressed(MOUSE_BUTTON_RIGHT) or (is_instance_valid(_touch_controls) and _touch_controls.think_held))
 	if autotest:
 		want_think = can_think and _bot_think()
 	_update_thinking(delta, want_think)
@@ -2989,6 +3071,7 @@ func _end(reason: String, card_too := true) -> void:
 	if _ended:
 		return
 	_ended = true
+	_cancel_touch()
 	_meal_visual.clear()
 	if is_instance_valid(_coach):
 		_coach.close()

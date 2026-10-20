@@ -1,0 +1,62 @@
+{
+  "schema_version": 1,
+  "name": "toy-quality-first-v1",
+  "description": "Only staged Godot texture import settings change. Source PNGs, dimensions, alpha, rig coordinates, mipmap settings and audio remain intact.",
+  "default": {
+    "compression": "lossy",
+    "quality": 0.8,
+    "minimum_source_bytes": 32768
+  },
+  "rules": [
+    {
+      "patterns": [
+        "assets/ui/numerals.png",
+        "assets/ui/icon.png",
+        "assets/ui/cursor_*.png",
+        "assets/canteen/fx_*.png",
+        "assets/canteen/stamp_ring.png",
+        "assets/crew/zi_run.png"
+      ],
+      "compression": "lossless",
+      "reason": "Keep functional UI, font atlas, effects and two measured chroma-sensitive sprites exact."
+    },
+    {
+      "patterns": [
+        "assets/crew/*.png"
+      ],
+      "compression": "lossy",
+      "quality": 0.92,
+      "reason": "Small character silhouettes retain extra color detail."
+    },
+    {
+      "patterns": [
+        "assets/canteen/food_*.png",
+        "assets/canteen/stall_*.png"
+      ],
+      "compression": "lossless",
+      "reason": "Small food and stall art contains saturated, closely spaced details that suffer from chroma subsampling."
+    },
+    {
+      "patterns": [
+        "assets/canteen/signs/*.png",
+        "assets/ui/premium/logo_*.png"
+      ],
+      "compression": "lossy",
+      "quality": 0.9,
+      "reason": "Use extra quality for baked Chinese/English lettering."
+    }
+  ],
+  "quality_checks": {
+    "require_same_dimensions": true,
+    "require_exact_alpha": true,
+    "minimum_visible_rgb_psnr_db": 30.0,
+    "representatives": [
+      "assets/canteen/cork_bg.png",
+      "assets/canteen/signs/fry_zh.png",
+      "assets/canteen/signs/wok_en.png",
+      "assets/portraits/release/fish_thinker.png",
+      "assets/ui/premium/logo_zh.png",
+      "assets/ui/premium/badge_balance.png"
+    ]
+  }
+}

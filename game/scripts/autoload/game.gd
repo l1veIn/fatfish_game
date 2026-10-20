@@ -9,6 +9,7 @@ extends Node
 signal changed
 signal achievement_unlocked(id: String)
 signal save_failed(message: String)
+signal save_committed(payload: String)
 
 ## Autotests play on their own save so they never touch the player's progress.
 var save_path := "user://save.json"
@@ -802,6 +803,55 @@ func save_game() -> bool:
 	if rename_error != OK:
 		return _save_error("Cannot replace save file (%s)." % error_string(rename_error))
 	save_status = ""
+	if platform_sync_allowed():
+		save_committed.emit(FileAccess.get_file_as_string(save_path))
+	return true
+
+
+func platform_sync_allowed() -> bool:
+	return not _test_profile and not _save_read_only
+
+
+## Supply the same last-known-good save that load_game uses, including backup recovery.
+func cloud_snapshot() -> String:
+	for suffix in ["", ".tmp", ".bak"]:
+		var data := _read_save(save_path + suffix)
+		if not data.is_empty():
+			return JSON.stringify(data)
+	return ""
+
+
+## Validate through the ordinary save reader before touching the active save. Keep an
+## independent pre-cloud copy so choosing another device's progress is recoverable.
+func restore_cloud_save(payload: String) -> bool:
+	var candidate := save_path + ".cloud.tmp"
+	var file := FileAccess.open(candidate, FileAccess.WRITE)
+	if file == null:
+		return _save_error("Cannot prepare the cloud save; local progress is preserved.")
+	file.store_string(payload)
+	file.flush()
+	var write_error := file.get_error()
+	file.close()
+	var data := _read_save(candidate)
+	if write_error != OK or data.is_empty() or int(data.get("version", 0)) < 2 or int(data.version) > SAVE_VERSION:
+		DirAccess.remove_absolute(candidate)
+		return _save_error("Cloud save is damaged or uses an unsupported version; local progress is preserved.")
+	var local := cloud_snapshot()
+	if not local.is_empty():
+		var backup := FileAccess.open(save_path + ".before-cloud", FileAccess.WRITE)
+		if backup == null:
+			return _save_error("Cannot back up local progress; cloud restore was cancelled.")
+		backup.store_string(local)
+		backup.flush()
+		var backup_error := backup.get_error()
+		backup.close()
+		if backup_error != OK:
+			return _save_error("Cannot back up local progress; cloud restore was cancelled.")
+	var err := DirAccess.rename_absolute(candidate, save_path)
+	if err != OK:
+		return _save_error("Cannot install the cloud save; local progress is preserved.")
+	load_game()
+	changed.emit()
 	return true
 
 
