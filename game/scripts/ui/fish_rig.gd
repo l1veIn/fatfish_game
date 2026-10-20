@@ -82,6 +82,8 @@ var emote := 2                         # how much she shows (EMOTE_AS); the shif
 var _cfg: Dictionary
 var _root: Node2D
 var _body: MeshInstance2D
+var _pose_fade: MeshInstance2D
+var _pose_fade_left := 0.0
 var _base: Texture2D
 var _poses := {}
 var _mat: ShaderMaterial
@@ -100,9 +102,23 @@ var _down := false             # banging: the spoon is down
 var _head := 0.0
 var _hop := 0.0
 var _lean := 0.0
+## Presentation clock comes from real bites; it never drives score or eating speed.
+var meal_active := false
+var meal_phase := 0.0
+var meal_style := "gobble"
+var meal_fast := false
+var meal_chain := false
+var meal_continuing := false
+var meal_variant := 0
+var _meal_pose := ""
+var _meal_breath := 0.0
+var _meal_faces := {}
+var _cosmetic_rng := RandomNumberGenerator.new()
+const MEAL_MOUTH_RECT := Rect2(115, 100, 110, 80)
 
 
 func _ready() -> void:
+	_cosmetic_rng.randomize()
 	_cfg = RIGS["seat" if seated else ("basin" if basin else "stand")]
 	texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 	_root = Node2D.new()
@@ -119,20 +135,35 @@ func _ready() -> void:
 	_body.material = _mat
 	_body.position = -_cfg.feet
 	_root.add_child(_body)
+	_pose_fade = MeshInstance2D.new()
+	_pose_fade.mesh = mesh
+	_pose_fade.material = _mat
+	_pose_fade.position = -_cfg.feet
+	_pose_fade.visible = false
+	_root.add_child(_pose_fade)
 	var info: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(_cfg.data))
 	for name in info.get("poses", {}):
 		_poses[name] = load(_cfg.dir + "pose_%s.png" % name)
+	if seated:
+		for name in ["take", "comic"]:
+			_poses["meal_" + name] = load(_cfg.dir + "pose_meal_%s.png" % name)
 	var r: Array = info["face_rect"]
 	_face_rect = Rect2(r[0], r[1], r[2], r[3])
 	for name in info["faces"]:
 		_faces[name] = load(_cfg.dir + "face_%s.png" % name)
+	if seated:
+		for name in ["stuffed"]:
+			var mouth := AtlasTexture.new()
+			mouth.atlas = _faces[name]
+			mouth.region = MEAL_MOUTH_RECT
+			_meal_faces[name] = mouth
 	_pivot = Node2D.new()
 	_root.add_child(_pivot)
 	_face = Sprite2D.new()
 	_face.centered = false
 	_face.position = _face_rect.position - _cfg.neck
 	_pivot.add_child(_face)
-	_t = randf() * 10.0
+	_t = _cosmetic_rng.randf() * 10.0
 	if clip == "":
 		play(idle_clip)
 	_apply(0.0)
@@ -213,6 +244,7 @@ func _apply(delta: float) -> void:
 	var arm := sin(_t * TAU / 3.4 + 0.6) * 0.012
 	var tail := sin(_t * 1.4) * 0.08
 	var hair := 0.004
+	var comic_hand := Vector2.ZERO
 	match clip:
 		"happy":
 			hop = absf(sin(_ct * TAU / 1.1)) * 34.0 * maxf(1.0 - _ct / 1.2, 0.0)
@@ -230,11 +262,9 @@ func _apply(delta: float) -> void:
 			if clip == "broke":
 				lean = sin(_ct * 12.0) * 0.012 * maxf(1.0 - _ct / 2.0, 0.0)
 		"slurp", "nibble", "eat_rice":
-			var ph := fmod(_ct, 0.75) / 0.75   # one bite: lift, then chew
-			face = "open" if ph < 0.3 else "stuffed"
-			pose = "eat_lift" if ph < 0.3 else "eat_scoop"
-			head_shift = Vector2(0.0, 0.006 * sin(ph * TAU))
-			head = sin(_ct * 1.7) * 0.03
+			# Waiting for a real bite: never conjure a basin of rice from a loop timer.
+			face = "blank"
+			pose = ""
 		"full_belly", "outsource":
 			lean = -0.03
 			breath *= 2.2
@@ -317,6 +347,26 @@ func _apply(delta: float) -> void:
 			pose = "bang_down" if down else "bang_up"
 			head = 0.03 if down else -0.02
 			fin = 0.1 if down else -0.05
+	_meal_pose = ""
+	if seated and meal_active and clip not in ["spit", "grimace", "grok", "full_belly", "think"]:
+		var preparing := meal_phase < 0.16 and not meal_continuing
+		var settling := meal_phase >= 0.70 and not meal_chain
+		_meal_pose = "take" if preparing or settling else "comic"
+		pose = "meal_" + _meal_pose
+		face = "stuffed" if settling and meal_phase < 0.93 else ""
+		# Deadpan eyes, a short hold for chewing, then one little swallowing nod.
+		head = (sin(meal_phase * PI) * 0.012) * (1 if meal_variant == 0 else -1)
+		head_shift = Vector2(0, sin(clampf((meal_phase - 0.86) / 0.14, 0.0, 1.0) * PI) * 0.007) if settling else Vector2.ZERO
+		if _meal_pose == "comic":
+			var beat := meal_phase * TAU * (4.0 if meal_fast else 2.0)
+			comic_hand = Vector2(cos(beat) * 0.006, sin(beat) * 0.014) * (0.4 if meal_style == "sip" else 1.0)
+		hop = 0.0
+		if Settings.reduced_motion:
+			head = 0.0
+			head_shift = Vector2.ZERO
+			breath = 0.0
+			comic_hand = Vector2.ZERO
+	_meal_breath = breath
 	# ease the big moves so switching actions never snaps
 	var k := 1.0 - exp(-12.0 * delta) if delta > 0.0 else 1.0
 	_head = lerpf(_head, head, k)
@@ -325,8 +375,16 @@ func _apply(delta: float) -> void:
 	# a pose is a whole replacement drawing (same as the body except arms, basin and face);
 	# the face patch only for pose-less clips
 	var pose_tex: Texture2D = _poses.get(pose, null)
-	_body.texture = pose_tex if pose_tex != null else _base
-	if pose_tex != null and not pose.begins_with("bang"):   # banging keeps the deadpan face on top
+	var next_body: Texture2D = pose_tex if pose_tex != null else _base
+	if next_body != _body.texture:
+		if seated and meal_active and not Settings.reduced_motion:
+			_pose_fade.texture = _body.texture
+			_pose_fade_left = 0.065
+		_body.texture = next_body
+	_pose_fade_left = maxf(0.0, _pose_fade_left - delta)
+	_pose_fade.visible = _pose_fade_left > 0.0 and not Settings.reduced_motion
+	_pose_fade.modulate.a = _pose_fade_left / 0.065
+	if pose_tex != null and not pose.begins_with("bang") and not pose.begins_with("meal_"):
 		face = ""
 	# blink now and then, only with the calm faces (other faces have their own eyes); the
 	# deadpan one blinks without the smile (blink_flat: seated and basin)
@@ -334,13 +392,16 @@ func _apply(delta: float) -> void:
 		_blink_in -= delta
 		if _blink_in <= 0.0:
 			_blink = 0.13
-			_blink_in = randf_range(2.2, 5.0) * (0.35 if randf() < 0.2 else 1.0)   # sometimes a double blink
+			_blink_in = _cosmetic_rng.randf_range(2.2, 5.0) * (0.35 if _cosmetic_rng.randf() < 0.2 else 1.0)
 		if _blink > 0.0:
 			_blink -= delta
 			face = "blink_flat" if face == "blank" and _faces.has("blink_flat") else "blink"
 	if not _faces.has(face) and FACE_FALLBACK.has(face):
 		face = FACE_FALLBACK[face]
-	_face.texture = _faces.get(face, null)
+	# Only the mouth changes during a bite: keep the new pose's deadpan eyes and identity.
+	var meal_mouth: bool = pose.begins_with("meal_") and _meal_faces.has(face)
+	_face.texture = _meal_faces[face] if meal_mouth else _faces.get(face, null)
+	_face.position = _face_rect.position - _cfg.neck + (MEAL_MOUTH_RECT.position if meal_mouth else Vector2.ZERO)
 	_face.visible = face != "" and _face.texture != null
 	# shader and the face pivot get the same head motion
 	_mat.set_shader_parameter("t", _t)
@@ -353,9 +414,24 @@ func _apply(delta: float) -> void:
 	_mat.set_shader_parameter("tail_angle", 0.0 if seated else tail)
 	_mat.set_shader_parameter("arm_angle", 0.0 if seated or basin else arm)
 	_mat.set_shader_parameter("belly", belly)
+	_mat.set_shader_parameter("comic_hand", comic_hand)
 	_pivot.position = -_cfg.feet + _cfg.neck + head_shift * 1024.0 - Vector2(0.0, breath * 1024.0)
 	_pivot.rotation = _head
 	var q := _squash / 0.15
 	_root.scale = Vector2(1.0 + 0.06 * q, 1.0 - 0.05 * q) * s
 	_root.position = Vector2(0.0, -_hop)
 	_root.rotation = _lean
+
+
+## Authored comic accent points in the 1024 px rig canvas; no food is rendered here.
+func meal_anchor(which: String) -> Vector2:
+	var point := Vector2(500, 746)
+	if which == "basin" and _meal_pose == "comic": point = Vector2(506, 610)
+	elif which == "utensil":
+		point = Vector2(325, 570)
+	elif which == "mouth": point = Vector2(511, 519)
+	# Match the shader's head rotation and breathing at the contact point.
+	var wh := 1.0 - smoothstep(0.53, 0.62, point.y / 1024.0)
+	point = point.lerp(_cfg.neck + (point - Vector2(_cfg.neck)).rotated(_head), wh)
+	point.y -= _meal_breath * 1024.0 * (1.0 - smoothstep(0.72, 1.0, point.y / 1024.0))
+	return _root.to_global(point - Vector2(_cfg.feet))

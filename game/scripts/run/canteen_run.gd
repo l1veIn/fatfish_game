@@ -33,6 +33,8 @@ signal card_shown
 signal to_title
 
 const MEAL_JOURNAL := preload("res://scripts/run/meal_journal.gd")
+const FISH_MEAL_VISUAL := preload("res://scripts/ui/fish_meal_visual.gd")
+var _meal_visual = null
 var _journal = null
 var _journal_bite_phase := "live"
 
@@ -542,6 +544,10 @@ func _ready() -> void:
 	_fish.beat.connect(func(): Audio.sfx("clang", -7.0))
 	_fish.z_index = -1
 	add_child(_fish)
+	_meal_visual = FISH_MEAL_VISUAL.new()
+	_meal_visual.run = self
+	_meal_visual.fish = _fish
+	add_child(_meal_visual)
 	_read_stats()
 	if trial != "":
 		_setup_trial()
@@ -2678,6 +2684,7 @@ static func _spread(xs: Array, lo: float, hi: float, gap: float) -> Array:
 
 ## `wdt` is world time; she eats and chews in `delta` (real time while you think, with 边想边用工具).
 func _update_fish(wdt: float, delta: float) -> void:
+	_meal_visual.advance(delta)
 	_chew_pause = maxf(_chew_pause - delta, 0.0)
 	_fish.belly = 0.12 * (1.0 - exp(-float(eaten) / 160.0))   # rounder and rounder, no limit
 	if _eating == null and not _queue.is_empty():
@@ -2725,8 +2732,10 @@ func _update_fish(wdt: float, delta: float) -> void:
 	_eat_acc += eat_rate * delta
 	var gained := 0.0
 	while not _eating.items.is_empty() and _eat_acc >= EAT[K(_eating.items[0])]:
+		var origin := _boxed_item_origin(_eating, 0, EAT_AT, 0.55)
 		var it: int = _eating.items.pop_front()
 		var k := K(it)
+		_meal_visual.consume(it, origin, (PICKY[k] and not _grokked and not grok) or k == I.JI)
 		_eat_acc -= EAT[k]
 		if PICKY[k] and not _grokked:
 			if not grok:
@@ -2965,6 +2974,7 @@ func _end(reason: String, card_too := true) -> void:
 	if _ended:
 		return
 	_ended = true
+	_meal_visual.clear()
 	if is_instance_valid(_coach):
 		_coach.close()
 	_end_reason = reason
@@ -3466,24 +3476,20 @@ func _draw_food_on(ci: CanvasItem, kind: int, at: Vector2, rot: float, scale_k: 
 ## The box drawn on another canvas item (the helpers' layer): art and food, no label.
 func _draw_basin_on(ci: CanvasItem, at: Vector2, b: Dictionary, scale_k: float) -> void:
 	var n := _cols()
-	var rows := _rows()
 	var tex: Texture2D = _box_tex[n]
 	var g: Rect2 = _box_grid[n]
 	var gw := n * CELL * scale_k
 	var aw := gw / g.size.x
 	var ah := aw * tex.get_height() / tex.get_width()
-	var gh := g.size.y * ah
 	ci.draw_texture_rect(tex, Rect2(at - Vector2(aw * (g.position.x + g.size.x * 0.5), ah * (g.position.y + g.size.y * 0.5)), Vector2(aw, ah)), false, MATERIALS[mat_level].tint)
 	var cw := gw / n
-	var ch := gh / rows
 	var slots := _pack(b.items)
 	for i in slots.size():
-		var cell_i: int = slots[i][0]
 		var span: int = slots[i][1]
 		if span == 0:
 			continue
 		var k := K(b.items[i])
-		var centre := Vector2(at.x - gw * 0.5 + (cell_i % n + span * 0.5) * cw, at.y - gh * 0.5 + (cell_i / n + 0.5) * ch - ch * 0.12)
+		var centre := _boxed_item_origin(b, i, at, scale_k, slots)
 		_draw_item(b.items[i], centre, 0.0, cw * (0.88 + 0.42 * (span - 1)) / SIZE_PX[k], true, ci)
 
 
@@ -3492,7 +3498,6 @@ func _draw_basin_on(ci: CanvasItem, at: Vector2, b: Dictionary, scale_k: float) 
 ## the catching line). Food sits in its cells, back row first; sloshing only wobbles the food.
 func _draw_basin(at: Vector2, b: Dictionary, slosh: float, scale_k: float, font: Font, in_hand: bool) -> void:
 	var n := _cols()
-	var rows := _rows()
 	var tex: Texture2D = _box_tex[n]
 	var g: Rect2 = _box_grid[n]
 	var gw := n * CELL * scale_k
@@ -3504,7 +3509,6 @@ func _draw_basin(at: Vector2, b: Dictionary, slosh: float, scale_k: float, font:
 	var gx0 := at.x - gw * 0.5
 	var gy0 := at.y - gh * 0.5
 	var cw := gw / n
-	var ch := gh / rows
 	var slots := _pack(b.items)
 	var items: Array = b.items
 	var order := range(slots.size())
@@ -3512,12 +3516,11 @@ func _draw_basin(at: Vector2, b: Dictionary, slosh: float, scale_k: float, font:
 	var wobble := clampf(-slosh, -1.0, 1.0) * 6.0 * scale_k
 	var ghosts := 0
 	for i in order:
-		var cell_i: int = slots[i][0]
 		var span: int = slots[i][1]
 		if span == 0:
 			ghosts += 1
 			continue
-		var centre := Vector2(gx0 + (cell_i % n + span * 0.5) * cw + wobble, gy0 + (cell_i / n + 0.5) * ch - ch * 0.12)
+		var centre := _boxed_item_origin(b, i, at, scale_k, slots) + Vector2(wobble, 0)
 		var want := cw * (0.88 + 0.42 * (span - 1))
 		_draw_item(items[i], centre, 0.0, want / SIZE_PX[K(items[i])], true)
 	if ghosts > 0:   # 幻觉 / 投机解码: bites that take no cell
@@ -3537,6 +3540,23 @@ func _draw_basin(at: Vector2, b: Dictionary, slosh: float, scale_k: float, font:
 		_draw_hand_tag(Vector2(at.x, art.end.y + 16), b)
 		if combo > 0.0 and _combo_eligible(b):
 			_icon("chain", Vector2(art.end.x - 6, art.position.y + 6), 40)
+
+
+## Shared by lunchbox rendering and the pick-up cue: the accent belongs to the consumed cell.
+func _boxed_item_origin(b: Dictionary, index: int, at: Vector2, scale_k: float, slots: Array = []) -> Vector2:
+	if slots.is_empty(): slots = _pack(b.items)
+	if index >= slots.size() or int(slots[index][1]) == 0: return at
+	var n := _cols()
+	var cell_i: int = slots[index][0]
+	var span: int = slots[index][1]
+	var g: Rect2 = _box_grid[n]
+	var tex: Texture2D = _box_tex[n]
+	var gw := n * CELL * scale_k
+	var gh := g.size.y * gw / g.size.x * tex.get_height() / tex.get_width()
+	var cw := gw / n
+	var ch := gh / _rows()
+	return Vector2(at.x - gw * 0.5 + (cell_i % n + span * 0.5) * cw,
+		at.y - gh * 0.5 + (cell_i / n + 0.5) * ch - ch * 0.12)
 
 
 # --- HUD (docs/hud_design.md): five fixed zones, three kinds of text ---------------------------

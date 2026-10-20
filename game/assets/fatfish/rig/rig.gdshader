@@ -16,6 +16,7 @@ uniform float fin_angle = 0.0;       // the whale-fin ears flap (mirrored)
 uniform float ahoge_angle = 0.0;
 uniform float arm_angle = 0.0;       // both arms swing out (mirrored)
 uniform float belly = 0.0;           // 0..~0.12: the tummy rounds out as she eats
+uniform vec2 comic_hand = vec2(0.0); // seated comic pose only; the face and basin stay steady
 
 // regions (uv)
 uniform vec2 neck = vec2(0.498, 0.43);
@@ -58,6 +59,7 @@ void vertex() {
 	// arms, from the shoulders
 	p = mix(p, rot(p, arm_l_root, arm_angle), ell(uv, arm_l));
 	p = mix(p, rot(p, arm_r_root, -arm_angle), ell(uv, arm_r));
+	p += comic_hand * ell(uv, vec4(0.29, 0.57, 0.18, 0.13));
 	// the tummy swells from its centre
 	p += (uv - belly_e.xy) * belly * ell(uv, belly_e);
 	// the head and everything attached to it

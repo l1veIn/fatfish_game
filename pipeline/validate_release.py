@@ -57,6 +57,7 @@ def main() -> None:
         ("helper-shift", "helper_shift_test", "helper_shift", "HELPER_SHIFT_TEST PASS failures=0"),
         ("random-shift", "random_shift_test", "random_shift", "RANDOM_SHIFT_TEST PASS failures=0"),
         ("crew-planner", "crew_planner_test", "crew_planner", "CREW_PLANNER_TEST PASS failures=0"),
+        ("fish-meal", "fish_meal_visual_test", "fish_meal", "FISH_MEAL_VISUAL_TEST PASS"),
         ("planner", "meal_planner_test", "meal_planner_release", "MEAL_PLANNER_TEST PASS failures=0"),
         ("service-ui", "canteen_presentation_test", "canteen_presentation_release", '"failures":[]'),
         ("collections", "collection_presentation_test", "collection_presentation", "COLLECTION_PRESENTATION_TEST: 0 failures"),
@@ -95,6 +96,9 @@ def main() -> None:
         execute(name, [str(ENGINE), "--headless", "--path", str(ROOT / "game"),
                        f"res://tests/{scene}.tscn", "--", f"--test-profile={profile}", "--lang=zh_CN"], marker)
     if args.visual:
+        execute("fish-meal-visual", [str(ENGINE), "--path", str(ROOT / "game"),
+                "res://tests/fish_meal_visual_test.tscn", "--", "--test-profile=fish_meal",
+                f"--out={out / 'fish-meal-visual'}"], "FISH_MEAL_VISUAL_TEST PASS", 180)
         execute("random-shift-visual", [str(ENGINE), "--path", str(ROOT / "game"),
                 "res://tests/random_shift_test.tscn", "--", "--test-profile=random_shift",
                 f"--out={out / 'random-shift-visual'}"], "RANDOM_SHIFT_TEST PASS failures=0", 180)

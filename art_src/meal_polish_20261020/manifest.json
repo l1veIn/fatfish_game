@@ -1,0 +1,118 @@
+{
+  "date": "2026-10-20",
+  "provider": "built-in image_gen.imagegen",
+  "transparent_background": true,
+  "master_policy": "PNG files in game/assets are the unmodified generated masters; Godot import settings bound runtime textures. Original outputs remain under CODEX_HOME/generated_images.",
+  "retained_original": "game/assets/canteen/food_bun.png: user rejected the exposed-filling replacement; only its display name changes to 鑲夊寘.",
+  "assets": [
+    {
+      "path": "game/assets/canteen/food_mantou.png",
+      "reference": "5c5351e:game/assets/canteen/food_mantou.png",
+      "prompt": "Edit this food icon into ONE unmistakable Chinese plain KNIFE-CUT MANTOU steamed bread. Squat rectangular pillow with round smooth ivory dome and a flat cut end showing fine fluffy crumb. NO pleats, NO pinch, NO filling, no plate. Keep warm hand-painted casual game food-icon rendering, thin brown outline, creamy soft shading. Large simple silhouette readable at 32px. Centered, isolated, transparent, no text, no sparkles. Output square.",
+      "size": [
+        1254,
+        1254
+      ],
+      "mode": "RGBA",
+      "alpha_extrema": [
+        0,
+        255
+      ],
+      "sha256": "334c39860edc92bb17eb138d3daaabbd97a29e643854cca8d866444ebefd1634"
+    },
+    {
+      "path": "game/assets/canteen/food_lotus_rice.png",
+      "reference": "game/assets/canteen/food_gold.png",
+      "prompt": "Replace the gold rice-ball food icon with ONE Chinese LOTUS-LEAF STICKY RICE parcel. Same polished warm hand-painted casual game asset style and thin warm brown ink line. Broad dark jade green lotus leaf opened in four folded corners around a squat square mound of ivory sticky rice, 2 brown chestnut pieces on top. Distinct square leaf-wrapped silhouette, readable at 32px. NO triangular onigiri, NO seaweed band, NO gold glow/sparkles, NO utensils/plate, NO meat, NO text. Centered and fully contained, transparent background. Output square.",
+      "size": [
+        1254,
+        1254
+      ],
+      "mode": "RGBA",
+      "alpha_extrema": [
+        0,
+        255
+      ],
+      "sha256": "bf5ced67f060b17688f59bc3012ca95510a21f73c276395cec23756fd64b57ba"
+    },
+    {
+      "path": "art_src/meal_polish_20261020/exploration/pose_meal_spoon.png",
+      "reference": "game/assets/fatfish/rig_seat/pose_eat_scoop.png",
+      "prompt": "Use case: precise-object-edit. Production 2D game animation pose, edit target attached. Preserve the EXACT original 1024x1024 square canvas registration, blue-haired chibi maid identity, proportions, head/hair silhouette/position, face shape, headband, outfit, colors, shading, linework and waist cutoff. Do NOT zoom, rescale, shift character or redraw the head. Change ONLY the food and facial mouth. Remove ALL white rice from the basin AND from the spoon, and the tiny grains on her cheeks. Reconstruct the EMPTY stainless-steel basin's oval visible interior, rear rim, and front wall. The spoon must be bare clean steel. Keep spoon and hands at EXACT original positions. Mouth small neutral closed, keep deadpan eyes. Output one full aligned waist-up character, true transparent background. No extra objects, no lettering. The empty basin must still be present. Critical: absolutely NO baked-in food. Match the original artwork closely.",
+      "size": [
+        1254,
+        1254
+      ],
+      "mode": "RGBA",
+      "alpha_extrema": [
+        0,
+        255
+      ],
+      "sha256": "29dafcb839e9e934057af796cb0ef9d7f272b61b10f024dfc8ce181f34eb96b6",
+      "status": "Superseded by comic eating after user feedback; excluded from game export."
+    },
+    {
+      "path": "art_src/meal_polish_20261020/exploration/pose_meal_hand.png",
+      "reference": "game/assets/fatfish/rig_seat/pose_eat_scoop.png",
+      "prompt": "Use case: precise-object-edit. Production 2D game animation pose, edit target attached. Preserve the EXACT original 1024x1024 square canvas registration, blue-haired chibi maid identity, proportions, head/hair silhouette/position, face shape, headband, outfit, colors, shading, linework and waist cutoff. Do NOT zoom, rescale, shift character or redraw the head. Change ONLY front left arm/hand, food, and facial mouth. Keep right hand cradling the basin exactly. Remove ALL white rice and cheek grains, show EMPTY stainless-steel basin with visible oval interior. Replace the spoon with her bare raised left hand: thumb and fingers loosely pinching space just LEFT of her mouth at same spot where spoon bowl was. Hand is ready to hold a separately rendered bun, but draw NO food and NO utensil. Keep deadpan eyes, mouth slightly open, ready to bite. Natural five-finger hand. Output one full aligned waist-up character, true transparent background. No extra objects, no lettering. The empty basin must still be present. Critical: absolutely NO baked-in food. Match the original artwork closely.",
+      "size": [
+        1254,
+        1254
+      ],
+      "mode": "RGBA",
+      "alpha_extrema": [
+        0,
+        255
+      ],
+      "sha256": "7470756ea13a916576adefa36c88dcf1323a78c5bc7277da23bb3b63d812e218",
+      "status": "Superseded by comic eating after user feedback; excluded from game export."
+    },
+    {
+      "path": "art_src/meal_polish_20261020/exploration/pose_meal_sip.png",
+      "reference": "game/assets/fatfish/rig_seat/pose_eat_scoop.png",
+      "prompt": "Use case: precise-object-edit. Production 2D game animation pose, edit target attached. Preserve the EXACT original 1024x1024 square canvas registration, blue-haired chibi maid identity, proportions, head/hair silhouette/position, face shape, headband, outfit, colors, shading, linework and waist cutoff. Do NOT zoom, rescale, shift character or redraw the head. Change ONLY arms/basin and facial mouth: remove ALL rice and spoon and cheek grains. With BOTH hands, lift the EMPTY stainless-steel basin upward so the far rim just touches her mouth at y about 550/1024; its bottom ends about y 760/1024, opening at about y 570. Basin slightly tilted toward her so she can sip. Show a narrow EMPTY interior ellipse, no rice, no soup; contents will be rendered dynamically. Keep deadpan eyes, small sipping mouth, fingers hold outside rim. Keep original head perfectly aligned. Output one full aligned waist-up character, true transparent background. No extra objects, no lettering. The empty basin must still be present. Critical: absolutely NO baked-in food. Match the original artwork closely.",
+      "size": [
+        1254,
+        1254
+      ],
+      "mode": "RGBA",
+      "alpha_extrema": [
+        0,
+        255
+      ],
+      "sha256": "a2c2746ea0526ad2009259f92a10c89f0d782df39b5b1dfa022d5a5954b624a5",
+      "status": "Superseded by comic eating after user feedback; excluded from game export."
+    },
+    {
+      "path": "game/assets/fatfish/rig_seat/pose_meal_take.png",
+      "reference": "art_src/meal_polish_20261020/exploration/pose_meal_spoon.png",
+      "prompt": "Use case: precise-object-edit. Animation downstroke keyframe for attached exact game character. Keep same square canvas registration, head, hair, outfit, empty basin, RIGHT supporting hand, proportions and every untouched pixel unchanged. Change ONLY her LEFT spoon hand and forearm: lower the spoon into the EMPTY basin interior, its oval bowl now around x=0.44 canvas width,y=0.72 canvas height. Spoon handle extends toward x=0.23,y=0.70, hand grips it around x=0.30,y=0.71; elbow bent naturally beside basin. This is the scooping DOWN pose, paired with the attached UP pose. No rice or any food anywhere. Keep face mouth small neutral/deadpan, same as attached. No additional objects, no text, truly transparent background, full waist-up character same scale.",
+      "size": [
+        1254,
+        1254
+      ],
+      "mode": "RGBA",
+      "alpha_extrema": [
+        0,
+        255
+      ],
+      "sha256": "3956774fa8eac1228f06cccfa63c356ea639e697377d1357e74ba2f1fd75ed9e"
+    },
+    {
+      "path": "game/assets/fatfish/rig_seat/pose_meal_comic.png",
+      "reference": "art_src/meal_polish_20261020/exploration/pose_meal_sip.png",
+      "prompt": "Use case: precise-object-edit. Production 2D game comic eating keyframe. Edit target is the attached blue-haired chibi maid lifting a stainless-steel basin. Preserve the exact square canvas registration, head/hair silhouette and position, blue deadpan eyes, face proportions, headband, bows, maid costume, shading and line style, waist cutoff and character identity. Change ONLY basin angle and arm pose: tip and raise the basin toward her mouth so the front wall and rounded underside hide its entire interior and cover her mouth and lower cheeks. Viewer sees the broad brushed-steel OUTSIDE/UNDERSIDE, absolutely NO visible interior ellipse and no visible food. Top rim is a thin curved edge just below her nose, at about y=0.51 canvas height. Basin bottom ends about y=0.73. On the viewer's RIGHT, one hand firmly supports the basin at its side. On the viewer's LEFT, her other hand holds a short metal spoon beside the top rim in a quick scooping pose, spoon bowl disappears BEHIND the raised basin, never visible empty in front of face. Keep both deadpan eyes entirely visible and unchanged: comic contrast is calm face and frantic eating, no sparkles or excited expression. Anatomically clean hands, one spoon total, no duplicated arms. No speed lines or motion effects baked in, no words, no rice, no floating food. Full waist-up drawing at same scale as reference, transparent background.",
+      "size": [
+        1254,
+        1254
+      ],
+      "mode": "RGBA",
+      "alpha_extrema": [
+        0,
+        255
+      ],
+      "sha256": "6080cb5de1bd7c8d665c650604934caf63d8ceda80eecfb309cf9afc56769a79"
+    }
+  ],
+  "comic_revision": "User rejected food-texture compositing. Runtime now uses only take + comic poses, occluded basin contents, bounded ink accents and a chewing hold; original food remains readable in the lunchbox."
+}
