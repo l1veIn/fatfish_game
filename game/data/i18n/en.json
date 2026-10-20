@@ -3,6 +3,7 @@
  "吃白饭的大肥鱼 —— 免费、开源、非商用的粉丝作品，与 DeepSeek 官方无关\n素材按 CC BY-NC-SA 4.0 发布，代码按 MIT 发布\n\n角色\n原型「溟月」：上善无形（B站）· CC BY-NC-SA 4.0\n女仆版「蓝色大肥鱼」：ZipZipPipe（B站）· CC BY-NC-SA 4.0\n\n大肥鱼立绘与动画：依上述角色重新绘制的高清立绘（AI 辅助生成后人工修整），在游戏里拆成网格实时变形动画\n\n字体：Noto Sans SC、站酷快乐体 · SIL Open Font License\n引擎：Godot Engine · MIT": "Fatfish's Free Lunch - a free, open-source, non-commercial fan game. Not affiliated with DeepSeek.\nAssets: CC BY-NC-SA 4.0. Code: MIT.\n\nCharacters\nOriginal character Mingyue: 上善无形 (Bilibili) - CC BY-NC-SA 4.0\nMaid version Blue Fatfish: ZipZipPipe (Bilibili) - CC BY-NC-SA 4.0\n\nFatfish art and animation: high-resolution redraws based on these characters, AI-assisted and retouched by hand, animated in-game with real-time mesh deformation.\n\nFonts: Noto Sans SC, ZCOOL KuaiLe - SIL Open Font License\nEngine: Godot Engine - MIT",
  "部分美术（场景、梁阿姨、食物、饭盒）、音效和音乐由 AI 辅助生成（gpt-image、ElevenLabs），再由人工挑选、修整和拼装。": "Some of the art (the canteen, Auntie Liang, the food, the lunch boxes), the sound effects and the music were made with AI tools (gpt-image, ElevenLabs), then picked, edited and assembled by hand.",
  "鸣谢": "Credits",
+ "作者：%s": "Created by %s",
  "返回": "Back",
  "查看结局": "View ending",
  "大肥鱼 V3": "Fatfish V3",

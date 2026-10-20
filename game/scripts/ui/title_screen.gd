@@ -136,12 +136,31 @@ func _ready() -> void:
 	_wire_focus()
 	start.grab_focus.call_deferred()
 
-	var credit := UiKit.label(tr("角色「蓝色大肥鱼」：原型「溟月」© 上善无形，女仆版 © ZipZipPipe，依 CC BY-NC-SA 4.0 二创。本作为免费粉丝作品，与 DeepSeek 官方无关。"), 20, Color(0.85, 0.78, 0.68), 6)
-	credit.position = Vector2(70, 1026)
-	credit.size = Vector2(1780, 50)
-	credit.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	credit.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	add_child(credit)
+	var author := LinkButton.new()
+	author.name = "AuthorLink"
+	author.text = tr("作者：%s") % "夸夸家族族长"
+	author.uri = "https://space.bilibili.com/2501012"
+	author.tooltip_text = author.uri
+	author.focus_mode = Control.FOCUS_ALL
+	author.underline = LinkButton.UNDERLINE_MODE_ON_HOVER
+	author.position = Vector2(150, 1000)
+	author.custom_minimum_size.y = 40
+	author.add_theme_font_override("font", load("res://assets/ui/ui_font.tres"))
+	author.add_theme_font_size_override("font_size", 22)
+	author.add_theme_color_override("font_color", Color(0.85, 0.78, 0.68))
+	author.add_theme_color_override("font_hover_color", UiKit.GOLD)
+	author.add_theme_color_override("font_focus_color", UiKit.GOLD)
+	author.add_theme_constant_override("outline_size", 6)
+	author.add_theme_color_override("font_outline_color", Color(0.12, 0.06, 0.03))
+	add_child(author)
+	author.focus_previous = author.get_path_to(_buttons.back())
+	author.focus_next = author.get_path_to(start)
+	author.focus_neighbor_top = author.focus_previous
+	author.focus_neighbor_bottom = author.focus_next
+	_buttons.back().focus_next = _buttons.back().get_path_to(author)
+	_buttons.back().focus_neighbor_bottom = _buttons.back().focus_next
+	start.focus_previous = start.get_path_to(author)
+	start.focus_neighbor_top = start.focus_previous
 	var ver := UiKit.label("v" + str(ProjectSettings.get_setting("application/config/version", "")), 20, Color(0.8, 0.72, 0.62), 6)
 	ver.position = Vector2(1700, 1000)
 	ver.size = Vector2(190, 30)
@@ -249,7 +268,6 @@ func _draw() -> void:
 		draw_set_transform(f.pos, f.rot, Vector2(s, s))
 		draw_texture(tex, -tex.get_size() * 0.5, Color(1, 1, 1, 0.35 + s * 0.6))
 	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
-	draw_rect(Rect2(0, 1020, 1920, 60), Color(0.04, 0.02, 0.01, 0.55))
 
 
 func _gui_input(event: InputEvent) -> void:
