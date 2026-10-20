@@ -104,22 +104,11 @@ func _draw() -> void:
 			var b: Vector2 = a + dir * (7.0 - t * 3.0)
 			_stroke(PackedVector2Array([a, b]), fade)
 	if _current.is_empty() or fish._meal_pose != "comic": return
-	var hand := to_local(fish.meal_anchor("utensil"))
 	var ph := fish.meal_phase
 	var fast := fish.meal_fast
 	var sip := fish.meal_style == "sip"
-	# A few short curved ink strokes, confined to the working hand. The head stays calm.
 	var beat := fmod(ph * (4.0 if fast else 2.0), 1.0)
 	var alpha := (0.5 if sip else 0.76) * sin(beat * PI)
-	var n := 4 if fast else 2
-	for i in n:
-		var points := PackedVector2Array()
-		for j in 9:
-			var t := j / 8.0
-			var a := lerpf(-2.7, -0.9, t)
-			var radius := 14.0 + i * 7.0 + beat * 3.0
-			points.append(hand + Vector2(cos(a) * radius, sin(a) * radius * 0.62))
-		_stroke(points, alpha * (1.0 - i * 0.12))
 	# Two small impact ticks at the basin edge; never a screen flash or a text bubble.
 	if fast:
 		var edge := to_local(fish.meal_anchor("basin")) + Vector2(56, 0)
