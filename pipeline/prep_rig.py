@@ -245,6 +245,14 @@ def build_crew() -> None:
     """外包 helpers: crew_<id>_0.png (gen_rig.sh crew) cropped and scaled to 320 px tall."""
     os.makedirs(CREW_OUT, exist_ok=True)
     for cid in CREW:
+        # The user-requested Gemini redesign uses intact generated masters. Godot's
+        # import size limit supplies runtime resolution; never rebuild her old maid art.
+        if cid == "zi":
+            import shutil
+            source = os.path.join(ROOT, "art_src", "crew_zi_redesign_20261020")
+            for pose, suffix in [("stand", ""), ("run", "_run"), ("cheer", "_cheer"), ("sleep", "_sleep")]:
+                shutil.copyfile(os.path.join(source, pose + ".png"), os.path.join(CREW_OUT, cid + suffix + ".png"))
+            continue
         f = os.path.join(SRC, f"crew_{cid}_0.png")
         if not os.path.exists(f):
             print("missing crew", cid)

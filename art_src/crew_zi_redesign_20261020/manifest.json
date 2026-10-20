@@ -1,0 +1,150 @@
+{
+  "provider": "built-in image_gen.imagegen",
+  "reference": "refs/ai_girl/gemini.jpg",
+  "assets": [
+    {
+      "pose": "stand",
+      "prompt": "Use case: identity-preserve. This is one production pose of the EXACT chibi Gemini cat girl in the attached reference. Keep her design IDENTICAL across poses: lavender-periwinkle-to-magenta hair, small side buns, pink inner cat ears, large gold-rim iridescent four-point hair star on viewer-right, heterochromia (viewer-left eye rose pink, viewer-right amber gold), navy celestial crop top, violet sash, detached wide gold-edged sleeves, asymmetric white/navy skirt, purple cat tail and white slouch boots. Same soft cel shading, warm dark-indigo outlines, same head size and body proportions. No maid elements or fish features. Full body on square transparent RGBA canvas, all extremities inside a safe 3 percent margin. Similar large character coverage to reference, exactly one character, no panels, no ground shadow, no words or symbols floating outside her body. Change ONLY both arms/hands from the reference: raise both forearms HIGH above shoulder level. Palms are flat facing UP beside the upper half of her cat ears, at about 20 percent canvas height, fingers point outward. Elbows bent, wide sleeves hang down on either side of her face. This is an overhead-lunchbox supporting pose; the hands MUST be above her forehead, not down near the chin. Draw NO lunchbox or any held object. Stand front-facing with boots aligned at 96 percent canvas height, ears near 3 percent, confident friendly smile. Keep hair/tail entirely contained. Lock this as the ready-to-catch stance.",
+      "reference": "art_src/crew_zi_redesign_20261020/identity.png",
+      "master": "art_src/crew_zi_redesign_20261020/stand.png",
+      "runtime": "game/assets/crew/zi.png",
+      "sha256": "42ed5ffe46b3136a6b5aac6e5c44c3ae0e5b20ac3b63f97a009e72443b867ce4",
+      "size": [
+        1254,
+        1254
+      ],
+      "mode": "RGBA",
+      "alpha_extrema": [
+        0,
+        255
+      ],
+      "alpha_bounds": [
+        0,
+        0,
+        1240,
+        1254
+      ]
+    },
+    {
+      "pose": "run",
+      "prompt": "Use case: identity-preserve. This is one production pose of the EXACT chibi Gemini cat girl in the attached reference. Keep her design IDENTICAL across poses: lavender-periwinkle-to-magenta hair, small side buns, pink inner cat ears, large gold-rim iridescent four-point hair star on viewer-right, heterochromia (viewer-left eye rose pink, viewer-right amber gold), navy celestial crop top, violet sash, detached wide gold-edged sleeves, asymmetric white/navy skirt, purple cat tail and white slouch boots. Same soft cel shading, warm dark-indigo outlines, same head size and body proportions. No maid elements or fish features. Full body on square transparent RGBA canvas, all extremities inside a safe 3 percent margin. Similar large character coverage to reference, exactly one character, no panels, no ground shadow, no words or symbols floating outside her body. Change pose to RUNNING to the viewer's RIGHT, lively three-quarter view with one boot reaching forward and the other knee kicked back. Both hands held HIGH beside the top half of the ears, palms UP, as if supporting a lunchbox above the forehead (draw NO box). Arms must not swing downward. Hair and cat tail stream to the left, do not exceed the frame. Keep face turned enough toward viewer to clearly show BOTH different eye colors, delighted focused expression. Keep head and face the SAME pixel scale as reference, feet near bottom, no stretching the body.",
+      "reference": "art_src/crew_zi_redesign_20261020/identity.png",
+      "master": "art_src/crew_zi_redesign_20261020/run.png",
+      "runtime": "game/assets/crew/zi_run.png",
+      "sha256": "1df902c3bf596667d60bfa6b46672ecd83fdadd62e8dd7176cdae436be74a511",
+      "size": [
+        1254,
+        1254
+      ],
+      "mode": "RGBA",
+      "alpha_extrema": [
+        0,
+        255
+      ],
+      "alpha_bounds": [
+        30,
+        13,
+        1231,
+        1254
+      ]
+    },
+    {
+      "pose": "cheer",
+      "prompt": "Use case: identity-preserve. This is one production pose of the EXACT chibi Gemini cat girl in the attached reference. Keep her design IDENTICAL across poses: lavender-periwinkle-to-magenta hair, small side buns, pink inner cat ears, large gold-rim iridescent four-point hair star on viewer-right, heterochromia (viewer-left eye rose pink, viewer-right amber gold), navy celestial crop top, violet sash, detached wide gold-edged sleeves, asymmetric white/navy skirt, purple cat tail and white slouch boots. Same soft cel shading, warm dark-indigo outlines, same head size and body proportions. No maid elements or fish features. Full body on square transparent RGBA canvas, all extremities inside a safe 3 percent margin. Similar large character coverage to reference, exactly one character, no panels, no ground shadow, no words or symbols floating outside her body. Change pose to a cheerful small victory celebration: front-facing, BOTH arms raised HIGH with open empty palms beside the upper ears as if proudly lifting a tray overhead (NO tray drawn). Big happy open smile, BOTH eyes OPEN to show pink-and-gold heterochromia, no star-shaped pupils. One heel raised slightly, a playful small lean. Hair and tail bounce gently but remain completely inside frame. Same head size and costume, feet near bottom. No floating confetti, no external effects; game draws those separately.",
+      "reference": "art_src/crew_zi_redesign_20261020/identity.png",
+      "master": "art_src/crew_zi_redesign_20261020/cheer.png",
+      "runtime": "game/assets/crew/zi_cheer.png",
+      "sha256": "7b76a933b8d9174d5a5ece911231909457046124cf86e02e64e5e4ac05b5038d",
+      "size": [
+        1254,
+        1254
+      ],
+      "mode": "RGBA",
+      "alpha_extrema": [
+        0,
+        255
+      ],
+      "alpha_bounds": [
+        33,
+        0,
+        1238,
+        1254
+      ]
+    },
+    {
+      "pose": "sleep",
+      "prompt": "Use case: identity-preserve. This is one production pose of the EXACT chibi Gemini cat girl in the attached reference. Keep her design IDENTICAL across poses: lavender-periwinkle-to-magenta hair, small side buns, pink inner cat ears, large gold-rim iridescent four-point hair star on viewer-right, heterochromia (viewer-left eye rose pink, viewer-right amber gold), navy celestial crop top, violet sash, detached wide gold-edged sleeves, asymmetric white/navy skirt, purple cat tail and white slouch boots. Same soft cel shading, warm dark-indigo outlines, same head size and body proportions. No maid elements or fish features. Full body on square transparent RGBA canvas, all extremities inside a safe 3 percent margin. Similar large character coverage to reference, exactly one character, no panels, no ground shadow, no words or symbols floating outside her body. Change pose to RESTING: sitting low on the floor with knees gently tucked to one side, boots visible, hands folded loosely over lap, eyes softly CLOSED in peaceful sleep, cat ears slightly relaxed. Fluffy purple tail curls around feet; long purple-magenta hair pools compactly around her, NOT spread into a huge fan. Same character and head size as reference: do NOT enlarge the head to fill the square; the seated silhouette is only about 70 percent of the standing height, with transparent space above. Bottom resting baseline at 96 percent canvas height. No pillow, bed, blanket, ground, Z letters or extra props.",
+      "reference": "art_src/crew_zi_redesign_20261020/identity.png",
+      "master": "art_src/crew_zi_redesign_20261020/sleep.png",
+      "runtime": "game/assets/crew/zi_sleep.png",
+      "sha256": "1a20af0cfb557f221ff14f916e2e6144a602f0295b9855dcee9fe3ec988e38f2",
+      "size": [
+        1254,
+        1254
+      ],
+      "mode": "RGBA",
+      "alpha_extrema": [
+        0,
+        255
+      ],
+      "alpha_bounds": [
+        0,
+        8,
+        1234,
+        1254
+      ]
+    }
+  ],
+  "identity_prompt": "Use case: stylized-concept. Production transparent full-body 2D game helper sprite, single character, square canvas. Character identity reference: attached gemini.jpg. Redraw THIS purple cosmic cat girl as a polished 2.3-head-tall super-deformed chibi for a warm hand-drawn canteen game. Preserve her identity instead of turning her into a blue-haired maid. Mandatory large readable identifiers: tall triangular PURPLE CAT EARS with pink inner fur; lavender/periwinkle roots transitioning into strong PURPLE and MAGENTA flowing hair tips (NOT cyan tips); small curled side buns at both temples with long gently flowing hair; heterochromia, viewer-left eye bright ROSE PINK, viewer-right eye warm AMBER GOLD; one large gold-edged iridescent FOUR-POINT diamond/star hair ornament beside viewer-right ear. Costume faithfully simplified from reference: dark navy sleeveless celestial crop top, violet diagonal waist sash and a large four-point star jewel, detached wide navy sleeves with white/lilac inner fabric and gold edging, asymmetrical white pleated short skirt with dark navy/purple angular side panels and a few large star accents, white slouch boots with navy soles and purple accents. Small visible midriff, playful confident smile. One fluffy purple CAT TAIL with magenta tip curls to the viewer-left side, separate readable silhouette. NO maid headband, no apron, no maid collar/bib, no huge maid bows, no fish fins, no matching blue eyes, no blue ocean hairstyle, no text, no logos, no other characters, no floating stars outside her silhouette. Clean warm dark-indigo lineart, soft cel shading, slightly chunky readable shape language. Pose: front view, standing feet planted, BOTH empty hands raised beside the ears with palms upwards, ready to support a lunchbox drawn separately by the game; hands around 25 percent canvas height, do NOT draw any box or food. Entire character including ears, tail, hands and shoes must fit inside canvas with small 3-5 percent transparent margin. Center at x=50 percent; sole baseline at y=96 percent. Keep the face big, eyes highly legible at 160px sprite height. Genuine transparent RGBA background, no ground, no contact shadow. Only one full character, no sheet or inset.",
+  "created": "2026-10-20",
+  "identity": {
+    "path": "art_src/crew_zi_redesign_20261020/identity.png",
+    "sha256": "2132f2b93e5ec3a32f68f9a2d1c1c4c95c9f5adaa21f0137d16066497b5671c9",
+    "size": [
+      1254,
+      1254
+    ],
+    "mode": "RGBA",
+    "alpha_extrema": [
+      0,
+      255
+    ],
+    "alpha_bounds": [
+      0,
+      0,
+      1240,
+      1254
+    ]
+  },
+  "reference_sha256": "12b6c2be570c1368fbc5d990f4a5562c1d7e1a8ff9bd4eb994c269491c0b3f43",
+  "asset_policy": "Generated masters copied unchanged; no raster post-edit. Godot import generates mipmaps and limits the runtime textures to 512 px (standing/running/cheering) or 448 px (seated rest, for comparable head scale). Original gameplay size, speed, catch areas and save IDs are unchanged.",
+  "preview": "art_src/crew_zi_redesign_20261020/preview.png",
+  "visual_capture": {
+    "directory": "build/zi-art-20261020-verified",
+    "script_sha256": "f86ba299a1ef8d2c00487becdb965ca594b1ba23e21626ab62e3000b34c1097e",
+    "report_sha256": "df454daf44488e8d8058384b93b3b8104d157c6be2fa6b38a1a547fac6e0e2aa",
+    "scope": "Actual GPU rendering, four manually selected texture states alongside five unchanged helpers, light/dark background sheet. Positions and states are visual fixtures, not proof of human gameplay."
+  },
+  "verification": {
+    "report": "build/verification-20261020T031249Z/report.json",
+    "report_sha256": "7cd45ba8c687943b284d06085f17c2c84813799005909b1865bd42f2997e91a2",
+    "scenarios": [
+      {
+        "name": "crew-planner-zh_CN-1920x1080",
+        "passed": true
+      },
+      {
+        "name": "helper-shift-zh_CN",
+        "passed": true
+      }
+    ],
+    "source_unchanged": true,
+    "player_files_unchanged": true,
+    "packaged_smoke_report": "build/candidate-0.4.2-20261020T031249Z/smoke-report-20261020T031401Z.json",
+    "packaged_smoke_report_sha256": "be61b06e3c7c2d2263ea9fe77a68996a1a3ca1cdb3b23536a69d3e687831e32f",
+    "packaged_smoke_passed": true,
+    "packaged_source_matches_verification": true,
+    "exe": "build/candidate-0.4.2-20261020T031249Z/windows/FatFish.exe",
+    "exe_sha256": "eecc2e080fd72594d531192c9599c70ec304926eb75f355f37ea603adc0556fa"
+  }
+}
