@@ -485,6 +485,7 @@ var _mouse_steering := true
 var _hint_input_device := "keyboard"
 var _think_transitions := 0           # state transitions, also useful for bounded audio QA
 var _pause: PauseMenu
+var _focus_pause_pending := false
 var _coach = null
 var _learning_time := 0.0             # tutorial time never consumes the first meal's clock
 var _recipes_made := 0
@@ -1345,7 +1346,7 @@ func _unhandled_input(event: InputEvent) -> void:
 
 
 func pause(from_focus := false) -> void:
-	if is_instance_valid(_pause) or _ended or get_tree().paused:
+	if not is_inside_tree() or is_queued_for_deletion() or is_instance_valid(_pause) or _ended or get_tree().paused:
 		return
 	_interrupt_thinking()
 	_pause = PauseMenu.new()
@@ -1359,11 +1360,25 @@ func pause(from_focus := false) -> void:
 		_end("提前下班", false)
 		to_title.emit())
 	add_child(_pause)
+	# Never freeze gameplay unless the player can actually reach a resume control.
+	if not _pause.is_inside_tree():
+		_pause.queue_free()
+		_pause = null
+		return
 	get_tree().paused = true
 
 
 func _notification(what: int) -> void:
-	if what == NOTIFICATION_APPLICATION_FOCUS_OUT and Settings.pause_unfocused and not autotest and not _ended and is_inside_tree():
+	if what == NOTIFICATION_APPLICATION_FOCUS_OUT and Settings.pause_unfocused and not autotest and not _ended and is_inside_tree() and not _focus_pause_pending:
+		# OS focus notifications lock the child list while walking the scene tree.
+		# Installing a menu here fails, leaving a paused game with no way to resume.
+		_focus_pause_pending = true
+		_pause_after_focus_loss.call_deferred()
+
+
+func _pause_after_focus_loss() -> void:
+	_focus_pause_pending = false
+	if Settings.pause_unfocused and is_node_ready():
 		pause(true)
 
 
