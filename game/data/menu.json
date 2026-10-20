@@ -49,14 +49,14 @@
   },
   {
    "id": "gold",
-   "name": "金饭团",
+   "name": "荷叶饭",
    "stall": "main",
    "level": 4,
    "w": 0.3,
    "cells": 1,
    "value": 10,
    "fall": 1.6,
-   "art": "gold",
+   "art": "lotus_rice",
    "rare": true,
    "cat": [
     "主"
@@ -295,7 +295,7 @@
   },
   {
    "id": "bun",
-   "name": "包子",
+   "name": "肉包",
    "stall": "dim",
    "level": 1,
    "w": 3,
