@@ -28,6 +28,7 @@ func _ready() -> void:
 	Settings.vsync = false
 	Settings.apply()
 	ThemeDB.get_default_theme().merge_with(UiKit.build_theme())
+	await _progression()
 	Game.version = Game.VERSIONS.size() - 1
 	Game.runs = 25
 	Game.levels = {}
@@ -37,7 +38,7 @@ func _ready() -> void:
 	Game.struck = []
 	Game.helper_plan = {}
 	Game.automation = {}
-	Game.seen_buttons = {"menu": true, "sigs": true, "menu_card": true, "sigs_card": true}
+	Game.seen_buttons = {"menu": true, "sigs": true, "menu_card": true, "sigs_card": true, "crew": true, "crew_card": true}
 	Game._recompute()
 	_tree = TreeScreen.new()
 	_tree.start_run.connect(func(): _starts += 1)
@@ -174,6 +175,59 @@ func _ready() -> void:
 	await get_tree().create_timer(0.15).timeout
 	UiKit.clear_cache()
 	get_tree().quit(_failures.size())
+
+
+func _progression() -> void:
+	Game.version = 0
+	Game.runs = 1
+	Game.levels = {"start": 1}
+	Game.tokens = 10000
+	Game.seen_buttons = {"crew_card": true}
+	Game.helper_plan = {}
+	Game.automation = {}
+	Game._recompute()
+	_tree = TreeScreen.new()
+	add_child(_tree)
+	await _frames()
+	_check(not is_instance_valid(_tree._crew_button), "fresh start has no automation toolbar entry")
+	_tree._open_crew()
+	_check(not is_instance_valid(_tree._crew_planner), "locked automation cannot be opened indirectly")
+	_check(Game.buy("skills"), "purchase the actual automatic push/reclaim skill")
+	await _frames()
+	_check(is_instance_valid(_tree._crew_button) and _tree._new_buttons.has(_tree._crew_button), "first skill unlock reveals a marked toolbar entry")
+	await _click(_tree._crew_button.get_global_rect().get_center())
+	var panel = _tree._crew_planner
+	_check(panel.mode == "automation" and panel._cards.is_empty(), "automatic skill opens only skill switches")
+	_check(not panel._tabs[0].visible and panel._tabs[1].visible, "helper tab stays hidden before recruitment")
+	panel.show_mode("crew")
+	_check(panel.mode == "automation", "locked helper page rejects direct navigation")
+	await _shot("first_automation_skill")
+	for i in 10:
+		await _key(KEY_TAB)
+		_check(get_viewport().gui_get_focus_owner().is_visible_in_tree(), "keyboard never visits a hidden tab")
+	await _key(KEY_ESCAPE)
+	_check(Game.buy("hire"), "purchase the first helper slot")
+	await _frames()
+	await _click(_tree._crew_button.get_global_rect().get_center())
+	panel = _tree._crew_planner
+	_check(panel._tabs[0].visible and panel._tabs[1].visible and panel._cards.size() == 6, "first helper unlocks roster beside skill switches")
+	await _shot("first_helper")
+	Game.refund("hire")
+	await _frames()
+	_check(panel.mode == "automation" and not panel._tabs[0].visible, "refunding last helper returns to the available skill page")
+	Game.refund("skills")
+	await _frames()
+	_check(not is_instance_valid(_tree._crew_planner) and not is_instance_valid(_tree._crew_button), "refunding both entry skills closes and hides automation")
+	_check(_tree.has_focus(), "removing the entry restores tree navigation")
+	_check(Game.buy("hire"), "helpers can unlock before the automatic push skill")
+	await _frames()
+	await _click(_tree._crew_button.get_global_rect().get_center())
+	panel = _tree._crew_planner
+	_check(panel.mode == "crew" and not panel._tabs[1].visible and panel._auto_buttons.is_empty(), "helper-first route exposes only the roster")
+	await _shot("helper_before_automation")
+	await _key(KEY_ESCAPE)
+	_tree.queue_free()
+	await _frames()
 
 
 func _bounds(node: Node) -> void:

@@ -66,7 +66,11 @@ func _ready() -> void:
 	add_child(_body)
 	Game.changed.connect(_refresh)
 	_refresh()
-	_cards[_selected].grab_focus.call_deferred()
+	if not _closed:
+		if mode == "crew":
+			_cards[_selected].grab_focus.call_deferred()
+		else:
+			_tabs[1].grab_focus.call_deferred()
 
 
 func _draw() -> void:
@@ -78,6 +82,7 @@ func _draw() -> void:
 
 
 func show_mode(page: String) -> void:
+	if not Game.automation_pages().has(page): return
 	mode = page
 	_notice = ""
 	_refresh()
@@ -85,7 +90,12 @@ func show_mode(page: String) -> void:
 
 
 func _refresh() -> void:
-	if not is_instance_valid(_body): return
+	if not is_instance_valid(_body) or _closed: return
+	var pages := Game.automation_pages()
+	if pages.is_empty():
+		close()
+		return
+	if not pages.has(mode): mode = pages[0]
 	var focus := get_viewport().gui_get_focus_owner()
 	var focus_key: String = str(focus.get_meta("crew_key", "")) if focus != null else ""
 	for child in _body.get_children():
@@ -96,8 +106,16 @@ func _refresh() -> void:
 	_recipe_buttons.clear()
 	_auto_buttons.clear()
 	_controls.clear()
-	_controls.append_array(_tabs)
-	for i in 2: _style(_tabs[i], (mode == "crew") == (i == 0))
+	var tab_position := 0
+	for i in 2:
+		var available := pages.has("crew" if i == 0 else "automation")
+		_tabs[i].visible = available
+		_tabs[i].disabled = not available
+		if available:
+			_tabs[i].position.x = 112 + 300 * tab_position
+			tab_position += 1
+			_controls.append(_tabs[i])
+		_style(_tabs[i], (mode == "crew") == (i == 0))
 	if mode == "crew":
 		_build_crew()
 	else:

@@ -119,12 +119,14 @@ func _build_bar() -> void:
 		specs.append(["menu", tr("今日菜单"), _open_menu])
 	if Game.stat("sig_slots") > 0.0:
 		specs.append(["sigs", tr("招牌菜"), _open_signatures])
-	specs.append(["crew", tr("自动化"), _open_crew])
+	if not Game.automation_pages().is_empty():
+		specs.append(["crew", tr("自动化"), _open_crew])
 	specs.append_array([["respec", tr("回滚"), _on_respec], ["settings", tr("设置"), func(): open_settings.emit()], ["title", tr("标题"), func(): to_title.emit()]])
 	var key := ",".join(specs.map(func(x): return x[0]))
 	if key == _bar_key:
 		return
 	_bar_key = key
+	_crew_button = null
 	for c in _bar.get_children():
 		_bar.remove_child(c)
 		c.queue_free()
@@ -144,7 +146,7 @@ func _build_bar() -> void:
 			fn.call())
 		_bar.add_child(b)
 		if id == "crew": _crew_button = b
-		if id in ["menu", "sigs"] and not Game.seen_buttons.has(id):
+		if id in ["menu", "sigs", "crew"] and not Game.seen_buttons.has(id):
 			_new_buttons[b] = id
 			var dot := Control.new()   # the red dot sits on the button itself, above its art
 			dot.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -199,6 +201,7 @@ func _has_input_modal() -> bool:
 const FEATURES := {
 	"menu": ["新功能：今日菜单", "开饭前划掉不想要的菜，想要的出得更多。"],
 	"sigs": ["新功能：招牌菜", "选一道招牌菜，这顿它有特别加成。"],
+	"crew": ["自动化", "开饭前安排好，所有改动下顿生效。"],
 }
 
 
@@ -231,11 +234,13 @@ func _feature_card(id: String, open: Callable) -> void:
 	var go := UiKit.button(tr("去看看"), 24, Vector2(160, 54))
 	go.position = Vector2(246, 170)
 	card.add_child(go)
+	var card_ref: WeakRef = weakref(card)
 	var hide := func():
-		if is_instance_valid(card):
-			var tw2 := create_tween()
-			tw2.tween_property(card, "position:x", 1940.0, 0.25)
-			tw2.tween_callback(card.queue_free)
+		var target = card_ref.get_ref()
+		if is_instance_valid(target) and not target.is_queued_for_deletion():
+			var tw2 := create_tween().bind_node(target)
+			tw2.tween_property(target, "position:x", 1940.0, 0.25)
+			tw2.tween_callback(target.queue_free)
 	go.pressed.connect(func():
 		Game.seen_buttons[id] = true
 		Game.save_game()
@@ -243,7 +248,7 @@ func _feature_card(id: String, open: Callable) -> void:
 		_build_bar()
 		hide.call()
 		open.call())
-	var tw := create_tween()
+	var tw := create_tween().bind_node(card)
 	tw.tween_property(card, "position:x", 1460.0, 0.35).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 	tw.tween_interval(7.0)
 	tw.tween_callback(hide)
@@ -342,7 +347,7 @@ func _open_planner(page: String) -> void:
 
 
 func _open_crew() -> void:
-	if is_instance_valid(_crew_planner) or is_instance_valid(_planner) or is_instance_valid(_book) or get_children().any(func(c): return c is SettingsPanel):
+	if Game.automation_pages().is_empty() or is_instance_valid(_crew_planner) or is_instance_valid(_planner) or is_instance_valid(_book) or get_children().any(func(c): return c is SettingsPanel):
 		return
 	var opener := get_viewport().gui_get_focus_owner()
 	var previous: WeakRef = weakref(opener) if opener != null else null
@@ -371,8 +376,10 @@ func _open_crew() -> void:
 		var target = previous.get_ref() if previous != null else null
 		if is_instance_valid(target) and target.is_inside_tree():
 			target.grab_focus.call_deferred()
+		elif is_instance_valid(_crew_button):
+			_crew_button.grab_focus.call_deferred()
 		else:
-			_crew_button.grab_focus.call_deferred())
+			grab_focus.call_deferred())
 	add_child(panel)
 
 

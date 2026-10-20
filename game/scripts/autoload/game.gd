@@ -468,6 +468,16 @@ func helper_capacity() -> int:
 	return clampi(int(stat("helper")), 0, HELPER_IDS.size())
 
 
+## Reveal each planning page only when its corresponding skill has been learned.
+func automation_pages() -> Array[String]:
+	var pages: Array[String] = []
+	if helper_capacity() > 0:
+		pages.append("crew")
+	if stat("auto_push") > 0:
+		pages.append("automation")
+	return pages
+
+
 func active_helpers() -> Array:
 	var out: Array = []
 	var cap := helper_capacity()
