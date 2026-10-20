@@ -427,7 +427,7 @@
  "11 · 助手有分工，接饭更从容": "11 · Give every helper a job",
  "开饭前在「自动化」选择出场角色。补漏接好菜；点单后可指定一道套餐；营养师会算上还没吃到的饭，补主荤素缺口。编排让每种完成的职责存一份接力，最多三份；下一盒亲手送出的饭每份再 +15%／30%。": "Choose your team in Automation. Sweep catches good food; Recipe follows your chosen order; Nutrition fills dietary gaps, including food still on its way. Orchestration stores one relay per completed role, up to three. Each adds +15% / +30% to your next delivered box.",
  "12 · 自动技能，自己决定": "12 · Choose your automation",
- "在「助手分工 → 自动操作」分别开关推空盒、满盒回收、融合和变菜。关闭满盒回收可以从容放保温箱；关闭融合可保留单品拼盘；青菜流可关闭随机变菜。已买等级与数值保留，设置下顿生效。": "Automation → Automation lets you toggle each behavior. Pause full-box returns to use the warmer, fusion to preserve platters, or random dish changes for a greens build. Purchased levels remain. Changes apply next meal.",
+ "在「自动化 → 技能开关」分别开关推空盒、满盒回收、融合和变菜。关闭满盒回收可以从容放保温箱；关闭融合可保留单品拼盘；青菜流可关闭随机变菜。已买等级与数值保留，设置下顿生效。": "Automation → Skill toggles lets you toggle each behavior. Pause full-box returns to use the warmer, fusion to preserve platters, or random dish changes for a greens build. Purchased levels remain. Changes apply next meal.",
  "跳过引导 · View": "Skip lesson · View",
  "跳过引导 · T": "Skip lesson · T",
  "开饭啦！计时开始": "Lunch is on! The clock has started",
