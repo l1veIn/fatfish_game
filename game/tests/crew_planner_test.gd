@@ -43,7 +43,9 @@ func _ready() -> void:
 	_tree.start_run.connect(func(): _starts += 1)
 	add_child(_tree)
 	await _frames()
-	_check(_tree._bar.get_child_count() <= 6, "helper entry does not become a seventh toolbar button")
+	_check(_tree._crew_button.get_parent() == _tree._bar and _tree._crew_button.text == tr("自动化"), "automation is a top toolbar entry")
+	_check(not _tree._bar.get_rect().intersects(_tree._header_rect()), "toolbar clears the original chalkboard in this language")
+	_check(_tree._tool_targets().size() == _tree._bar.get_child_count() + 1 + int(_tree._trial.visible), "toolbar focus contains no duplicate automation entry")
 	await _click(_tree._crew_button.get_global_rect().get_center())
 	var panel = _tree._crew_planner
 	_check(is_instance_valid(panel), "mouse opens the helper planner")
@@ -74,12 +76,37 @@ func _ready() -> void:
 	_check(get_viewport().gui_get_focus_owner().get_meta("crew_key", "") == "activate", "state refresh restores the edited control's focus")
 	panel._role_buttons.recipe.grab_focus()
 	await _key(KEY_ENTER)
-	_check(Game.helper_config("ge").role == "recipe" and panel._recipe_buttons.size() > 0, "Enter selects available recipe work")
+	_check(Game.helper_config("ge").role == "recipe" and is_instance_valid(panel._recipe_open), "Enter selects recipe work with a dedicated chooser")
 	var options := Game.helper_recipe_options()
 	var recipe_id: String = options.back().id
-	panel._recipe_buttons[recipe_id].grab_focus()
+	var old_recipe: String = Game.helper_config("ge").recipe
+	await _click(panel._recipe_open.get_global_rect().get_center())
+	var picker = panel._recipe_picker
+	_check(is_instance_valid(picker) and picker._scroll.size.y >= 500, "recipe chooser has a full-height illustrated grid")
+	panel._open_recipes()
+	_check(panel._recipe_picker == picker, "repeated requests reuse the same recipe chooser")
+	picker._cards[recipe_id].grab_focus()
 	await _pad(JOY_BUTTON_A)
-	_check(Game.helper_config("ge").recipe == recipe_id, "pad picks the focused pictured recipe")
+	_check(picker._pending == recipe_id and Game.helper_config("ge").recipe == old_recipe, "inspecting a recipe does not silently change the assignment")
+	await _shot("recipe_picker")
+	for i in 20:
+		await _key(KEY_TAB)
+		_check(picker.is_ancestor_of(get_viewport().gui_get_focus_owner()), "Tab stays within the recipe chooser")
+	await _key(KEY_ESCAPE)
+	_check(not is_instance_valid(panel._recipe_picker) and panel._recipe_open.has_focus() and Game.helper_config("ge").recipe == old_recipe, "cancel keeps assignment and returns focus to recipe card")
+	await _click(panel._recipe_open.get_global_rect().get_center())
+	picker = panel._recipe_picker
+	picker._search.text = "no_such_meal_123"
+	picker._search.text_changed.emit(picker._search.text)
+	_check(picker._cards.is_empty(), "search filters unavailable text without changing the assignment")
+	await _shot("recipe_no_matches")
+	picker._search.text = ""
+	picker._search.text_changed.emit("")
+	picker._cards[recipe_id].grab_focus()
+	await _pad(JOY_BUTTON_A)
+	picker._confirm.grab_focus()
+	await _pad(JOY_BUTTON_A)
+	_check(Game.helper_config("ge").recipe == recipe_id and not is_instance_valid(panel._recipe_picker), "pad confirms the pictured recipe and returns to the roster")
 	await _shot("recipe_work")
 	Game.levels.fc = 0
 	Game._recompute()
@@ -137,7 +164,7 @@ func _ready() -> void:
 	_check(FileAccess.get_file_as_bytes(Settings.PATH) == settings_before, "player settings bytes unchanged")
 	if _out != "":
 		var report := {"checks": _checks, "failures": _failures, "language": Settings.language, "window": str(_window), "scope": "State fixtures with real mouse/keyboard/simulated-pad GUI events", "source_sha256": {}}
-		for path in ["scripts/tree/tree_screen.gd", "scripts/ui/crew_planner_panel.gd", "scripts/autoload/game.gd", "tests/crew_planner_test.gd", "data/i18n/en.json"]:
+		for path in ["scripts/tree/tree_screen.gd", "scripts/ui/crew_planner_panel.gd", "scripts/ui/helper_recipe_picker.gd", "scripts/autoload/game.gd", "tests/crew_planner_test.gd", "data/i18n/en.json"]:
 			report.source_sha256[path] = FileAccess.get_sha256("res://" + path)
 		FileAccess.open(_out.path_join("report.json"), FileAccess.WRITE).store_string(JSON.stringify(report, "  "))
 	print("CREW_PLANNER_TEST %s failures=%d checks=%d" % ["PASS" if _failures.is_empty() else "FAIL", _failures.size(), _checks])
@@ -150,6 +177,8 @@ func _ready() -> void:
 
 
 func _bounds(node: Node) -> void:
+	if node is Button and node.has_meta("crew_rect"):
+		_check(node.size.is_equal_approx(node.get_meta("crew_rect")), "button fits reserved bounds: " + node.text)
 	if node is Label and node.has_meta("crew_rect"):
 		if Settings.language == "en":
 			var chinese := RegEx.create_from_string("[\u4e00-\u9fff]")

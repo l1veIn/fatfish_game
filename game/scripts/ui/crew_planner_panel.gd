@@ -5,6 +5,7 @@ const INK := Color("4a2914")
 const SOFT := Color("79604b")
 const RED := Color("a2422b")
 const PAPER := preload("res://assets/canteen/ui_paper.png")
+const RecipePicker := preload("res://scripts/ui/helper_recipe_picker.gd")
 const ROLES := ["sweep", "recipe", "nutrition"]
 const ROLE_NAMES := ["补漏", "配餐", "营养"]
 const TRICKS := {
@@ -39,6 +40,9 @@ var _count: Label
 var _reason: Label
 var _notice := ""
 var _closed := false
+var _recipe_picker: Control
+var _recipe_open: Button
+var _saved_focus: Array = []
 
 
 func _ready() -> void:
@@ -47,10 +51,10 @@ func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_STOP
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	CanteenRun.load_menu()
-	_label(self, tr("助手分工"), Rect2(112, 80, 1200, 64), 48)
+	_label(self, tr("自动化"), Rect2(112, 80, 1200, 64), 48)
 	_label(self, tr("开饭前安排好，所有改动下顿生效。"), Rect2(114, 156, 1280, 46), 27, SOFT)
 	for i in 2:
-		var button := _button(self, tr("助手分工") if i == 0 else tr("自动操作"), Rect2(112 + 300 * i, 218, 280, 66), "page_" + str(i))
+		var button := _button(self, tr("助手排班") if i == 0 else tr("技能开关"), Rect2(112 + 300 * i, 218, 280, 66), "page_" + str(i))
 		button.pressed.connect(show_mode.bind("crew" if i == 0 else "automation"))
 		_tabs.append(button)
 	_close = _button(self, tr("返回"), Rect2(1600, 88, 200, 64), "close")
@@ -157,11 +161,18 @@ func _build_crew() -> void:
 	_label(_body, tr(str(TRICKS[_selected][1])), Rect2(112, 858, 1130, 50), 26)
 	if current.role == "recipe":
 		var selected_recipe := ""
+		var selected_kind := -1
 		for option in Game.helper_recipe_options():
-			if str(option.id) == str(current.recipe): selected_recipe = tr(str(option.name))
-		_label(_body, tr("目标：%s") % selected_recipe, Rect2(1300, 642, 470, 74), 25)
-		_label(_body, tr("配齐才送；稀有原料等得更久。"), Rect2(1300, 720, 470, 68), 23, SOFT)
-		_build_recipes(str(current.recipe))
+			if str(option.id) == str(current.recipe):
+				selected_recipe = tr(str(option.name))
+				selected_kind = int(option.kind)
+		if selected_kind >= 0:
+			_picture(_body, "res://assets/canteen/food_%s.png" % CanteenRun.FOOD_ART[selected_kind], Rect2(1300, 650, 100, 100))
+		_label(_body, tr("目标：%s") % selected_recipe, Rect2(1414, 648, 356, 100), 25)
+		_recipe_open = _button(_body, tr("选择套餐"), Rect2(1300, 766, 470, 62), "choose_recipe")
+		_recipe_open.pressed.connect(_open_recipes)
+		_controls.append(_recipe_open)
+		_label(_body, tr("配齐才送；稀有原料等得更久。"), Rect2(1300, 840, 470, 68), 23, SOFT)
 	else:
 		var description := tr("接住有用的漏菜，帮你补上顾不到的地方。") if current.role == "sweep" else tr("按主食、荤菜、素菜 4:3:3 的缺口补餐，也会考虑正在收集和等待的饭盒。")
 		_label(_body, description, Rect2(1300, 662, 470, 220), 27, SOFT)
@@ -189,26 +200,34 @@ func _role_mark(parent: Node, role: String, rect: Rect2) -> void:
 	mark.draw.connect(func(): CanteenRun.draw_helper_role(mark, Rect2(Vector2.ZERO, mark.size), role))
 
 
-func _build_recipes(selected: String) -> void:
-	var scroll := ScrollContainer.new()
-	scroll.position = Vector2(1294, 798)
-	scroll.size = Vector2(494, 110)
-	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	scroll.follow_focus = true
-	_body.add_child(scroll)
-	var grid := GridContainer.new()
-	grid.columns = 1
-	grid.add_theme_constant_override("h_separation", 10)
-	grid.add_theme_constant_override("v_separation", 10)
-	scroll.add_child(grid)
-	for recipe in Game.helper_recipe_options():
-		var button := _button(grid, "", Rect2(0, 0, 470, 96), "recipe_" + str(recipe.id))
-		_style(button, str(recipe.id) == selected)
-		_picture(button, "res://assets/canteen/food_%s.png" % CanteenRun.FOOD_ART[recipe.kind], Rect2(8, 14, 68, 68))
-		_label(button, tr(str(recipe.name)), Rect2(90, 9, 362, 78), 24)
-		button.pressed.connect(_choose_recipe.bind(str(recipe.id)))
-		_recipe_buttons[str(recipe.id)] = button
-		_controls.append(button)
+func _open_recipes() -> void:
+	if is_instance_valid(_recipe_picker): return
+	_saved_focus.clear()
+	for control in _controls:
+		_saved_focus.append([weakref(control), control.focus_mode])
+		control.focus_mode = Control.FOCUS_NONE
+	var picker := RecipePicker.new()
+	picker.selected = str(Game.helper_config(_selected).recipe)
+	picker.member_name = tr(CanteenRun.CREW[_selected].name)
+	_recipe_picker = picker
+	picker.cancelled.connect(_close_recipes)
+	picker.chosen.connect(func(id: String):
+		_close_recipes(false)
+		_choose_recipe(id)
+		_recipe_open.grab_focus.call_deferred())
+	add_child(picker)
+
+
+func _close_recipes(restore_focus := true) -> void:
+	if not is_instance_valid(_recipe_picker): return
+	remove_child(_recipe_picker)
+	_recipe_picker.queue_free()
+	_recipe_picker = null
+	for state in _saved_focus:
+		var control = state[0].get_ref()
+		if is_instance_valid(control): control.focus_mode = state[1]
+	_saved_focus.clear()
+	if restore_focus and is_instance_valid(_recipe_open): _recipe_open.grab_focus.call_deferred()
 
 
 func _select_member(id: String) -> void:
@@ -287,6 +306,7 @@ func _wire_focus() -> void:
 
 
 func _unhandled_input(event: InputEvent) -> void:
+	if is_instance_valid(_recipe_picker): return
 	if event.is_action_pressed("ui_cancel") or event.is_action_pressed("pause"):
 		get_viewport().set_input_as_handled()
 		close()

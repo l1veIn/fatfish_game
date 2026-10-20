@@ -73,16 +73,9 @@ func _ready() -> void:
 	_trial.size = Vector2(400, 90)
 	_trial.pressed.connect(_on_trial)
 	add_child(_trial)
-	_crew_button = UiKit.button(tr("助手分工"), 29, Vector2(280, 72))
-	_crew_button.name = "Tree_crew"
-	_crew_button.position = Vector2(1580, 736)
-	_crew_button.pressed.connect(_open_crew)
-	add_child(_crew_button)
-	_start.focus_neighbor_top = _start.get_path_to(_crew_button)
-	_crew_button.focus_neighbor_bottom = _crew_button.get_path_to(_start)
 	_update_trial_button()
 	_bar = HBoxContainer.new()
-	_bar.add_theme_constant_override("separation", 14)
+	_bar.add_theme_constant_override("separation", 12)
 	_bar.resized.connect(func(): _bar.position = Vector2(1860 - _bar.size.x, 30))
 	add_child(_bar)
 	_build_bar()
@@ -126,6 +119,7 @@ func _build_bar() -> void:
 		specs.append(["menu", tr("今日菜单"), _open_menu])
 	if Game.stat("sig_slots") > 0.0:
 		specs.append(["sigs", tr("招牌菜"), _open_signatures])
+	specs.append(["crew", tr("自动化"), _open_crew])
 	specs.append_array([["respec", tr("回滚"), _on_respec], ["settings", tr("设置"), func(): open_settings.emit()], ["title", tr("标题"), func(): to_title.emit()]])
 	var key := ",".join(specs.map(func(x): return x[0]))
 	if key == _bar_key:
@@ -136,7 +130,9 @@ func _build_bar() -> void:
 		c.queue_free()
 	_new_buttons.clear()
 	for spec in specs:
-		var b := UiKit.button(spec[1], 26, Vector2(170, 64))
+		var fs := 21 if Settings.is_english() else 26
+		var width := maxf(100.0, get_theme_font("font", "Button").get_string_size(spec[1], HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x + 44.0)
+		var b := UiKit.button(spec[1], fs, Vector2(width, 64))
 		var id: String = spec[0]
 		b.name = "Tree_" + id
 		var fn: Callable = spec[2]
@@ -147,11 +143,12 @@ func _build_bar() -> void:
 				Game.save_game()
 			fn.call())
 		_bar.add_child(b)
+		if id == "crew": _crew_button = b
 		if id in ["menu", "sigs"] and not Game.seen_buttons.has(id):
 			_new_buttons[b] = id
 			var dot := Control.new()   # the red dot sits on the button itself, above its art
 			dot.mouse_filter = Control.MOUSE_FILTER_IGNORE
-			dot.position = Vector2(164, 6)
+			dot.position = Vector2(width - 6, 6)
 			dot.draw.connect(func():
 				dot.draw_circle(Vector2.ZERO, 13.0, Color(1, 1, 1))
 				dot.draw_circle(Vector2.ZERO, 10.0, Color(0.78, 0.22, 0.18)))
@@ -170,7 +167,7 @@ func _tool_targets() -> Array[Control]:
 	if is_instance_valid(_bar):
 		for button in _bar.get_children():
 			if button is Button and button.visible and not button.disabled: targets.append(button)
-	for button in [_crew_button, _trial, _start]:
+	for button in [_trial, _start]:
 		if is_instance_valid(button) and button.visible and not button.disabled: targets.append(button)
 	return targets
 
@@ -396,7 +393,7 @@ func _at(n: Dictionary) -> Vector2:
 
 
 func node_at(p: Vector2) -> String:
-	if _header_rect().has_point(p) or _bar.get_rect().grow(10).has_point(p) or _crew_button.get_rect().grow(10).has_point(p):
+	if _header_rect().has_point(p) or _bar.get_rect().grow(10).has_point(p):
 		return ""
 	for n in Game.nodes:
 		if _is_displayed(n["id"]) and Rect2(_at(n) - TICKET * _zoom * 0.5, TICKET * _zoom).has_point(p):
@@ -820,7 +817,7 @@ func _tooltip_rect(n: Dictionary, dimensions: Vector2) -> Rect2:
 	var at := _at(n)
 	var preferred := at + Vector2(TICKET.x * _zoom * 0.5 + 18, -60)
 	var blocked := [_header_rect().grow(12), _bar.get_rect().grow(12)]
-	for action in [_start, _trial, _crew_button]:
+	for action in [_start, _trial]:
 		if action.visible:
 			blocked.append(action.get_rect().grow(18))
 	for child in get_children():
