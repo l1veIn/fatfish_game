@@ -42,9 +42,6 @@ const KB := {
 }
 ## [shot arg, from, to, text, style, position, size]; times are seconds into that shot
 var captions := [
-	["p1_hungry", BAR, 7.4, "目标：实现 AGI", "chip", Vector2(330, 170), 40],
-	["p1_hungry", 2 * BAR, 7.4, "当前进度——", "big", Vector2(420, 470), 92],
-	["p1_hungry", 3 * BAR, 7.4, "饿了。", "gold", Vector2(420, 690), 200],
 	["title", 0.25, 5.8, "超可爱的大肥鱼增量小游戏", "big", Vector2(960, 135), 76],
 	["title", 2 * BEAT, 5.8, "要实现 AGI，得先吃饱！", "stamp", Vector2(960, 900), 84],
 	["growl", 0.15, 1.7, "咕噜噜噜——", "big", Vector2(1260, 860), 110],
@@ -98,7 +95,7 @@ func _ready() -> void:
 	body_font = load("res://promo/NotoSansSC-full.ttf")
 	for k in KB:
 		art[k] = load("res://promo/art/%s.png" % k)
-	for k in ["ticket", "ticket_gold", "stamp", "stamp_ring", "cork_bg", "fx_burst", "fx_star", "pin"]:
+	for k in ["ui_chalkboard", "ticket", "ticket_gold", "stamp", "stamp_ring", "cork_bg", "fx_burst", "fx_star", "pin"]:
 		tex[k] = load("res://assets/canteen/%s.png" % k)
 	tex["logo"] = load("res://assets/ui/premium/logo_zh.png")
 	tex["qr"] = load("res://promo/toy_qr.png")
@@ -403,6 +400,7 @@ func _draw_overlay() -> void:
 		if lt < c[1] or lt > to: continue
 		var a: float = lt - c[1]
 		_draw_caption(c[3], c[4], c[5], c[6], a, clampf(a / 0.12, 0, 1) * clampf((to - lt) / 0.15, 0, 1))
+	if arg() == "p1_hungry": _draw_chalk(lt)
 	if kind() == "end": _draw_end(lt)
 	# opening fade from black, closing fade to black
 	if t < 0.8: overlay.draw_rect(Rect2(0, 0, 1920, 1080), Color(0, 0, 0, 1.0 - t / 0.8))
@@ -434,3 +432,30 @@ func _draw_end(lt: float) -> void:
 		o.draw_string(big_font, Vector2(290, 950), "B站 Toy 免费开玩 · 手机电脑都能玩", HORIZONTAL_ALIGNMENT_LEFT, -1, 50, Color(GOLD, al))
 		o.draw_string(body_font, Vector2(292, 1005), "免费 · 开源 · 非商用同人作品   作者：夸夸家族族长", HORIZONTAL_ALIGNMENT_LEFT, -1, 30, Color(CREAM, al))
 		o.draw_string(body_font, Vector2(292, 1046), "角色原型「溟月」：上善无形 · 女仆版设计：ZipZipPipe · 素材 CC BY-NC-SA 4.0 · 与 DeepSeek 官方无关", HORIZONTAL_ALIGNMENT_LEFT, -1, 21, Color(0.75, 0.83, 0.85, al))
+
+## The HUD chalkboard (ui_chalkboard.png) with chalk lines written on it one bar at a time.
+func _draw_chalk(lt: float) -> void:
+	var o := overlay
+	var a := ease_out((lt - 0.5) / 0.5)
+	if a <= 0 or lt > 7.4: return
+	var out_a := clampf((7.4 - lt) / 0.15, 0, 1)
+	var pos := Vector2(70, 120) + Vector2(0, (1.0 - a) * -40)
+	var sz := Vector2(790, 478)
+	o.draw_set_transform(pos + sz * 0.5, -0.02, Vector2.ONE)
+	o.draw_texture_rect(tex["ui_chalkboard"], Rect2(-sz * 0.5, sz), false, Color(1, 1, 1, a * out_a))
+	var chalk := Color(0.96, 0.96, 0.9)
+	var lines := [[BAR, "今日计划", 66, Vector2(-300, -125), chalk],
+		[2 * BAR, "① 实现 AGI　进度：1%", 56, Vector2(-300, -15), chalk],
+		[3 * BAR, "② 先吃饭。", 80, Vector2(-300, 100), Color(1.0, 0.9, 0.55)]]
+	for l in lines:
+		var w: float = clampf((lt - l[0]) / 0.35, 0, 1)
+		if w <= 0: continue
+		var f := big_font
+		var full: float = text_w(f, l[1], l[2])
+		# chalk "writing": the line is revealed left to right with a clip rect
+		o.draw_set_transform(pos + sz * 0.5, -0.02, Vector2.ONE)
+		o.draw_string(f, l[3] + Vector2(0, l[2] * 0.36), l[1], HORIZONTAL_ALIGNMENT_LEFT, full * w + 2, l[2], Color(l[4], out_a * 0.92))
+	# a chalk underline and a tick under the plan
+	if lt > BAR + 0.4:
+		o.draw_line(Vector2(-300, -62), Vector2(-300 + 330 * clampf((lt - BAR - 0.4) / 0.3, 0, 1), -59), Color(chalk, 0.7 * out_a), 3, true)
+	o.draw_set_transform(Vector2.ZERO)
