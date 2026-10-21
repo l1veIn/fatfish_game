@@ -488,7 +488,6 @@ var _think_transitions := 0           # state transitions, also useful for bound
 var _pause: PauseMenu
 var _focus_pause_pending := false
 var _touch_controls: Control
-var _touch_finger := -1
 var _coach = null
 var _learning_time := 0.0             # tutorial time never consumes the first meal's clock
 var _recipes_made := 0
@@ -620,15 +619,21 @@ func _touch_deliver() -> void:
 	# The pickup button is on the table. A carried box must still be moved back
 	# there (or to the warmer) before the shared delivery path accepts it.
 	if _hand == null:
-		_aim = Vector2(STACK_AT.x, BAND.y)
+		_aim = Vector2(STACK_AT.x, _hand_bottom())
 		_mouse_steering = true
 	_try_deliver()
 
 
 func _cancel_touch() -> void:
-	_touch_finger = -1
 	if is_instance_valid(_touch_controls):
 		_touch_controls.cancel_touch()
+
+
+func _hand_bottom() -> float:
+	# A stable bottom dock replaces the old tutorial that chased the held tray.
+	if is_instance_valid(_touch_controls) or (is_instance_valid(_coach) and _coach.visible):
+		return TOUCH_UI.PLAY_BOTTOM
+	return BAND.y
 
 
 func _exit_tree() -> void:
@@ -1338,20 +1343,6 @@ func _magnet() -> float:
 
 # --- input --------------------------------------------------------------------------------------
 
-func _input(event: InputEvent) -> void:
-	# A drag begun in the playfield remains ours even when it ends over a GUI.
-	# Otherwise that GUI can consume the release and leave a stale finger captured.
-	if _touch_finger < 0 or _ended:
-		return
-	if event is InputEventScreenTouch and event.index == _touch_finger and (not event.pressed or event.canceled):
-		_touch_finger = -1
-		get_viewport().set_input_as_handled()
-	elif event is InputEventScreenDrag and event.index == _touch_finger:
-		_aim = get_canvas_transform().affine_inverse() * event.position
-		_mouse_steering = true
-		get_viewport().set_input_as_handled()
-
-
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventMouse and event.device == InputEvent.DEVICE_ID_EMULATION:
 		return
@@ -1362,17 +1353,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		_hint_input_device = "touch"
 		if _journal != null:
 			_journal.data.input_devices["touch"] = true
-		if event is InputEventScreenTouch:
-			if event.canceled or not event.pressed:
-				if event.index == _touch_finger:
-					_touch_finger = -1
-			elif _touch_finger < 0:
-				_touch_finger = event.index
-				_aim = get_canvas_transform().affine_inverse() * event.position
-				_mouse_steering = true
-		elif event.index == _touch_finger:
-			_aim = get_canvas_transform().affine_inverse() * event.position
-			_mouse_steering = true
+		# Touching food or the tray never teleports it. Only the bottom stick steers.
 		get_viewport().set_input_as_handled()
 		return
 	if _journal != null and not _ended:
@@ -1525,7 +1506,7 @@ func _update_skills(delta: float) -> void:
 	if auto_push and _hand == null and _empty > 0 and _push_cd <= 0.0:
 		_empty -= 1
 		_hand = _new_basin(STACK_AT + Vector2(0, -20))
-		_hand.pos = Vector2(_aim.x, clampf(_aim.y, BAND.x, BAND.y))
+		_hand.pos = Vector2(_aim.x, clampf(_aim.y, BAND.x, _hand_bottom()))
 		if _learning():
 			_coach.took_box()
 		_push_cd = 0.6
@@ -1714,7 +1695,7 @@ func _process(delta: float) -> void:
 	var stick := Input.get_vector("move_left", "move_right", "move_up", "move_down")
 	if stick != Vector2.ZERO and not autotest:
 		_mouse_steering = false
-		_aim = (_aim + stick * PAD_SPEED * delta).clamp(Vector2(40, BAND.x), Vector2(1880, BAND.y))
+		_aim = (_aim + stick * PAD_SPEED * delta).clamp(Vector2(40, BAND.x), Vector2(1880, _hand_bottom()))
 	var wdt := delta * (think_slow if _thinking else 1.0)
 	_t += wdt
 	if _journal != null and not _learning():
@@ -1980,13 +1961,14 @@ func _roll_kind() -> int:
 func _update_hand(delta: float) -> void:
 	if _hand == null:
 		return
+	_aim.y = clampf(_aim.y, BAND.x, _hand_bottom())
 	_hand["previous_pos"] = _hand.pos
 	var fill := float(_space(_hand)) / _cap()
 	var heavy := clampf(fill * box_n / 4.0, 0.0, 1.0)   # a full 2x4 box is the heaviest
 	var old_vel: Vector2 = _hand.vel
 	if _mouse_steering and not autotest:
 		# The pointer is the hand. Weight is conveyed by a little food sway, not input lag.
-		_hand.pos = _aim.clamp(Vector2(40, BAND.x), Vector2(1880, BAND.y))
+		_hand.pos = _aim.clamp(Vector2(40, BAND.x), Vector2(1880, _hand_bottom()))
 		var measured: Vector2 = (_hand.pos - _hand.previous_pos) / maxf(delta, 0.0001)
 		_hand.vel = old_vel.lerp(measured.limit_length(SPEED.x), minf(1.0, delta * 18.0))
 	else:
@@ -1994,8 +1976,8 @@ func _update_hand(delta: float) -> void:
 		want = want.limit_length(lerpf(SPEED.x, 1600.0, heavy))
 		_hand.vel = old_vel.move_toward(want, lerpf(ACCEL.x, 9000.0, heavy) * delta)
 		_hand.pos += _hand.vel * delta
-	if _hand.pos.y < BAND.x or _hand.pos.y > BAND.y:
-		_hand.pos.y = clampf(_hand.pos.y, BAND.x, BAND.y)
+	if _hand.pos.y < BAND.x or _hand.pos.y > _hand_bottom():
+		_hand.pos.y = clampf(_hand.pos.y, BAND.x, _hand_bottom())
 		_hand.vel.y = 0.0
 	var acc_x: float = (_hand.vel.x - old_vel.x) / maxf(delta, 0.0001)
 	var sway := 0.4 if _mouse_steering and not autotest else 1.0

@@ -11,7 +11,8 @@ var _shots: Array = []
 const SOURCES := ["project.godot", "scripts/main.gd", "scripts/run/canteen_run.gd",
 	"scripts/tree/tree_screen.gd", "scripts/ui/touch_controls.gd", "scripts/ui/run_coach.gd",
 	"scripts/ui/pause_menu.gd", "scripts/autoload/settings.gd", "scripts/autoload/game.gd",
-	"tests/toy_touch_test.gd", "data/i18n/en.json"]
+	"tests/toy_touch_test.gd", "data/i18n/en.json", "scripts/ui/recipe_book.gd",
+	"scripts/ui/settings_panel.gd", "assets/ui/NotoSansSC-VF.ttf", "assets/ui/ZCOOLKuaiLe.ttf"]
 
 
 func _ready() -> void:
@@ -109,39 +110,67 @@ func _meal_route(run: CanteenRun) -> void:
 	if run._hand == null:
 		return
 	_check(run._coach._device == "touch", "tutorial describes the actual touch device")
+	_check(ui.joystick is VirtualJoystick, "engine joystick drives the shared gamepad actions")
 	await shot("run_touch_lesson")
 	var empty_before := run._empty
-	await _touch(0, Vector2(1350, 865), true)
-	await _drag(0, Vector2(1350, 865), Vector2(800, 700))
-	_check(run._hand != null and run._hand.pos.distance_to(Vector2(800, 700)) < 1, "touch drag moves actual box through production hand controller")
+	var initial: Vector2 = run._hand.pos
+	var dock: Vector2 = run._coach.position
+	var center: Vector2 = ui.joystick.get_global_rect().get_center()
+	_check(not ui.joystick.get_global_rect().intersects(run._coach.get_global_rect()) and not ui.think_button.get_global_rect().intersects(run._coach.get_global_rect()), "fixed lesson leaves both thumbs clear")
+	_check(ui.deliver_button.size.x * ui.deliver_button.size.y > ui.think_button.size.x * ui.think_button.size.y, "primary action is larger than held secondary action")
+	await _touch(0, initial, true)
+	await _drag(0, initial, Vector2(800, 700))
 	await _touch(0, Vector2(800, 700), false)
-	_check(run._hand != null and run._empty == empty_before, "releasing a drag never returns or serves the box")
+	_check(run._hand.pos.distance_to(initial) < 1, "touching or dragging food area never moves the tray")
+	await _touch(0, center, true)
+	await _drag(0, center, center + Vector2(3, 0))
+	await _wait(0.12)
+	_check(run._hand.pos.distance_to(initial) < 1, "stick dead zone ignores small resting-thumb motion")
+	await _touch(0, center, false)
+	await _steer_to(run, Vector2(800, 700))
+	await _wait(0.3) # Existing gamepad hand physics settle toward the last aim.
+	var stopped: Vector2 = run._hand.pos
+	await _wait(0.15)
+	_check(run._hand.pos.distance_to(stopped) < 1 and run._empty == empty_before, "releasing stick stops movement without returning or serving")
 	await _emulated_mouse(Vector2(1385, 865))
-	_check(run._hand != null and run._hand.pos.distance_to(Vector2(800, 700)) < 1, "synthetic mouse cannot move or deliver a touch-held box")
+	_check(run._hand != null and run._hand.pos.distance_to(stopped) < 1, "synthetic mouse cannot move or deliver a touch-held box")
 	await _touch_tap(ui.deliver_button.get_global_rect().get_center())
-	_check(run._hand != null and run._hand.pos.distance_to(Vector2(800, 700)) < 1, "disabled serve control neither delivers nor steals steering")
+	_check(run._hand != null and run._hand.pos.distance_to(stopped) < 1, "unavailable primary action cannot remotely serve or steal steering")
 	run._add_item(run._hand.pos + Vector2(0, -8), Vector2(0, 140), CanteenRun.I.BALL)
 	await _wait(0.18)
 	_check(run.caught > 0 and run._coach.step == RunCoach.Step.SERVE, "real food collision advances touch lesson")
-	await _touch(0, Vector2(800, 700), true)
-	await _drag(0, Vector2(800, 700), Vector2(1385, 865))
-	await _touch(0, Vector2(1385, 865), false)
-	_check(run._hand != null, "dragging back to table still waits for explicit serve")
+	await _steer_to(run, Vector2(1385, 820))
+	_check(run._hand != null and run._coach.position == dock, "lesson remains at bottom while tray returns to table")
+	await shot("run_touch_serve")
 	await _touch_tap(ui.deliver_button.get_global_rect().get_center())
-	_check(run._hand == null and not run._learning(), "serve touch GUI completes tutorial through real meal event")
+	_check(run._hand == null and not run._learning(), "same primary button serves and completes the tutorial")
+	_check(run._coach.position == dock, "completion message uses the same bottom dock")
 	await _touch_tap(ui.deliver_button.get_global_rect().get_center())
-	await _touch(0, Vector2(800, 700), true)
+	await _steer_to(run, Vector2(800, 700))
+	await _touch(0, center, true)
 	await _touch(1, ui.think_button.get_global_rect().get_center(), true)
 	await _wait(0.10)
-	_check(run._thinking and ui.think_held, "second finger holds thought while first finger steers")
-	await _drag(0, Vector2(800, 700), Vector2(960, 690))
-	_check(run._thinking and run._hand.pos.x > 950, "multitouch steering and thought coexist")
+	_check(run._thinking and ui.think_held, "second finger holds thought while first finger owns stick")
+	var before: Vector2 = run._hand.pos
+	await _drag(0, center, center + Vector2(76, 0))
+	await _wait(0.12)
+	_check(run._thinking and run._hand.pos.x > before.x + 80, "multitouch stick movement and thought coexist")
 	await _touch(1, ui.think_button.get_global_rect().get_center(), false)
-	await _touch(0, Vector2(960, 690), false)
-	_check(not run._thinking and not ui.think_held, "releasing thinking finger stops thought")
-	await _touch(0, Vector2(800, 700), true)
-	await _touch(0, Vector2(800, 700), false, true)
-	_check(run._touch_finger == -1, "canceled screen contact releases steering")
+	await _touch(0, center + Vector2(76, 0), false)
+	_check(not run._thinking and not ui.think_held, "releasing secondary button stops thought")
+	await _touch(0, center, true)
+	await _drag(0, center, center + Vector2(-76, 0))
+	var owned_value: Vector2 = _movement()
+	await _touch(1, center, true)
+	await _drag(1, center, center + Vector2(76, 0))
+	await _touch(1, center + Vector2(76, 0), false)
+	_check(_movement() == owned_value, "second finger cannot steal or release the stick")
+	await _touch(0, center, false, true)
+	_check(_movement() == Vector2.ZERO, "canceled contact releases steering")
+	await _touch(0, center, true)
+	await _drag(0, center, Vector2(1100, 500))
+	await _touch(0, Vector2(1100, 500), false)
+	_check(_movement() == Vector2.ZERO, "release outside the stick and over gameplay cannot leave movement stuck")
 	await _wait(1.15)
 	await _touch(1, ui.think_button.get_global_rect().get_center(), true)
 	await _wait(0.08)
@@ -149,25 +178,31 @@ func _meal_route(run: CanteenRun) -> void:
 	_check(not run._thinking and not ui.think_held, "dragging thought finger off button cancels held action")
 	await _touch(1, Vector2(1000, 850), false)
 	await _wait(1.15)
-	await _touch(0, Vector2(800, 700), true)
+	await _touch(0, center, true)
+	await _drag(0, center, center + Vector2(-76, 0))
 	await _touch(1, ui.think_button.get_global_rect().get_center(), true)
 	await _wait(0.08)
 	await _touch_tap(ui.pause_button.get_global_rect().get_center(), 2)
 	_check(get_tree().paused and is_instance_valid(run._pause), "pause touch GUI freezes gameplay through production pause")
-	_check(not ui.think_held and not run._thinking and run._touch_finger == -1, "pause releases thought and steering fingers")
+	_check(not ui.think_held and not run._thinking and _movement() == Vector2.ZERO, "pause releases thought and steering fingers")
 	await _touch(1, ui.think_button.get_global_rect().get_center(), false)
-	await _touch(0, Vector2(800, 700), false)
-	await _key(KEY_ESCAPE)
+	await _touch(0, center, false)
+	await _touch_tap(run._pause._first.get_global_rect().get_center())
 	await _wait(0.25)
-	_check(not get_tree().paused and not run._thinking, "resume cannot resurrect held touch")
+	_check(not get_tree().paused and not run._thinking and _movement() == Vector2.ZERO, "touch resume cannot resurrect held controls")
 	Settings.pause_unfocused = false
 	await _wait(1.05)
+	await _touch(0, center, true)
+	await _drag(0, center, center + Vector2(-76, 0))
 	await _touch(1, ui.think_button.get_global_rect().get_center(), true)
 	get_tree().root.propagate_notification(NOTIFICATION_APPLICATION_FOCUS_OUT)
 	await wait_frames()
-	_check(not ui.think_held and not run._thinking, "focus loss clears thought even when auto-pause is disabled")
+	_check(not ui.think_held and not run._thinking and _movement() == Vector2.ZERO, "focus loss clears both held controls even when auto-pause is disabled")
 	get_tree().root.propagate_notification(NOTIFICATION_APPLICATION_FOCUS_IN)
+	await _drag(0, center, center + Vector2(76, 0))
+	_check(_movement() == Vector2.ZERO, "old finger cannot restart joystick after focus returns")
 	await _touch(1, ui.think_button.get_global_rect().get_center(), false)
+	await _touch(0, center, false)
 	await _desktop_controls(run)
 	await shot("run_touch")
 	await _touch_tap(ui.pause_button.get_global_rect().get_center())
@@ -178,6 +213,28 @@ func _meal_route(run: CanteenRun) -> void:
 	_check(not Input.is_action_pressed("think") and not Input.is_action_pressed("deliver"), "scene exit leaves no held gameplay actions")
 	await _key(KEY_ENTER)
 	_check(_main._screen is TreeScreen, "re-entering continues through normal main screen flow")
+
+
+func _movement() -> Vector2:
+	return Input.get_vector("move_left", "move_right", "move_up", "move_down")
+
+
+func _steer_to(run: CanteenRun, target: Vector2) -> void:
+	# A bounded feedback driver operates only real joystick touch events; no position assignment.
+	var center: Vector2 = run._touch_controls.joystick.get_global_rect().get_center()
+	await _touch(0, center, true)
+	var at := center
+	for i in 180:
+		var remaining: Vector2 = target - run._aim
+		if remaining.length() < 8:
+			break
+		var amount := minf(remaining.length() / 180.0, 1.0)
+		var next := center + remaining.normalized() * (0.25 + amount * 0.75) * 76
+		await _drag(0, at, next)
+		at = next
+	await _touch(0, at, false)
+	await _wait(0.3)
+	_check(run._hand.pos.distance_to(target) < 12, "joystick reaches gameplay target " + str(target))
 
 
 func _desktop_controls(run: CanteenRun) -> void:

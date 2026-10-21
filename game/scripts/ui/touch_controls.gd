@@ -11,6 +11,11 @@ var deliver_button: Button
 var think_button: Button
 var pause_button: Button
 var hint: Label
+var joystick: VirtualJoystick
+var _joystick_held := false
+var _joystick_reset_pending := false
+
+const PLAY_BOTTOM := 820.0 # Keep the whole tray above the bottom controls and lesson.
 
 
 class FingerButton extends Button:
@@ -87,11 +92,12 @@ func _ready() -> void:
 	size = Vector2(1920, 1080)
 	z_index = 100
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
-	deliver_button = make_button("", Rect2(1480, 954, 394, 100))
+	_add_joystick()
+	deliver_button = make_button(tr("交互"), Rect2(1648, 888, 236, 176), 36)
 	deliver_button.name = "TouchDeliver"
 	deliver_button.pressed.connect(func(): deliver_requested.emit())
 	add_child(deliver_button)
-	think_button = make_button(tr("按住思考"), Rect2(1140, 954, 290, 100))
+	think_button = make_button("", Rect2(1474, 936, 150, 128), 26)
 	think_button.name = "TouchThink"
 	think_button.held_changed.connect(func(held: bool): think_held = held)
 	add_child(think_button)
@@ -100,9 +106,10 @@ func _ready() -> void:
 	pause_button.pressed.connect(func(): pause_requested.emit())
 	add_child(pause_button)
 	hint = UiKit.label("", 25, UiKit.TEXT, 4)
-	hint.position = Vector2(1140, 910)
-	hint.size = Vector2(730, 38)
-	hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	hint.position = Vector2(312, 956)
+	hint.size = Vector2(1080, 70)
+	hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	hint.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(hint)
 	Settings.changed.connect(_refresh)
@@ -117,8 +124,8 @@ func _refresh() -> void:
 	if not is_instance_valid(run) or not is_instance_valid(deliver_button):
 		return
 	visible = not run._ended
-	think_button.visible = run.can_think
-	think_button.text = tr("按住思考")
+	think_button.disabled = not run.can_think
+	think_button.text = tr("按住\n思考") if run.can_think else tr("思考\n未解锁")
 	pause_button.text = tr("暂停游戏")
 	if not visible:
 		cancel_touch()
@@ -126,13 +133,53 @@ func _refresh() -> void:
 	var has_box: bool = run._hand != null
 	var at_table: bool = has_box and run.TABLE.grow(60).has_point(run._hand.pos)
 	var at_warmer: bool = has_box and run.warm and run.WARM_RECT.grow(20).has_point(run._hand.pos) and not run._hand.items.is_empty()
-	deliver_button.text = tr("拿起饭盒") if not has_box else (tr("放入保温箱") if at_warmer else (tr("放回饭盒") if run._hand.items.is_empty() else tr("送饭")))
+	deliver_button.text = tr("交互")
 	deliver_button.disabled = run._empty <= 0 if not has_box else not (at_table or at_warmer)
-	hint.text = tr("拖动接菜 · 移回餐桌后送饭") if has_box else tr("点「拿起饭盒」开始接菜")
+	hint.visible = not (is_instance_valid(run._coach) and run._coach.visible)
+	hint.text = tr("左摇杆移动 · 回到餐桌后点「交互」送饭") if has_box else tr("点「交互」拿盒 · 左摇杆移动")
 
 
 func cancel_touch() -> void:
 	think_held = false
+	if _joystick_held:
+		_joystick_held = false
+		for action in [&"move_left", &"move_right", &"move_up", &"move_down"]:
+			Input.action_release(action)
+		# Godot 4.7.2 has no public joystick reset and retains contact on focus loss.
+		# Retire the control, then recreate it outside the notification traversal.
+		joystick.hide()
+		joystick.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		if not _joystick_reset_pending:
+			_joystick_reset_pending = true
+			_replace_joystick.call_deferred()
 	for button in [deliver_button, think_button, pause_button]:
 		if is_instance_valid(button):
 			button.cancel_touch()
+
+
+func _add_joystick() -> void:
+	joystick = VirtualJoystick.new()
+	joystick.name = "TouchJoystick"
+	joystick.action_left = &"move_left"
+	joystick.action_right = &"move_right"
+	joystick.action_up = &"move_up"
+	joystick.action_down = &"move_down"
+	joystick.position = Vector2(56, 884)
+	joystick.size = Vector2(184, 184)
+	joystick.joystick_size = 152.0
+	joystick.tip_size = 68.0
+	joystick.joystick_mode = VirtualJoystick.JOYSTICK_FIXED
+	# Movement already uses the shared InputMap dead zone, just like a gamepad.
+	joystick.deadzone_ratio = 0.0
+	joystick.pressed.connect(func(): _joystick_held = true)
+	joystick.released.connect(func(_direction: Vector2): _joystick_held = false)
+	add_child(joystick)
+
+
+func _replace_joystick() -> void:
+	_joystick_reset_pending = false
+	if not is_inside_tree() or is_queued_for_deletion():
+		return
+	remove_child(joystick)
+	joystick.queue_free()
+	_add_joystick()

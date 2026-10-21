@@ -7,6 +7,7 @@ signal completed(skipped: bool)
 
 enum Step { TAKE, CATCH, SERVE, DONE }
 const HOME := Vector2(24, 890)
+const TOUCH_HOME := Vector2(312, 890)
 
 var step := Step.TAKE
 var active := true
@@ -17,7 +18,7 @@ var _instruction: Label
 var _footer: Label
 var _skip: Button
 var _paper: Texture2D
-var _raised := false
+var _touch_layout := false
 
 
 func _ready() -> void:
@@ -58,28 +59,10 @@ func _draw() -> void:
 
 
 func _process(delta: float) -> void:
-	_avoid_hand()
 	if _dismiss_in > 0.0:
 		_dismiss_in -= delta
 		if _dismiss_in <= 0.0:
 			hide()
-
-
-func _avoid_hand() -> void:
-	# Keep the original warm-paper lesson clear of the actual box, including its done message.
-	var run := get_parent() as CanteenRun
-	if not visible or run == null or run._hand == null:
-		_raised = false
-		position = HOME
-		return
-	var n := run._cols()
-	var tex: Texture2D = run._box_tex[n]
-	var grid: Rect2 = run._box_grid[n]
-	var width := n * CanteenRun.CELL / grid.size.x
-	var height := width * tex.get_height() / tex.get_width()
-	var box_rect := Rect2(run._hand.pos - Vector2(width * (grid.position.x + grid.size.x * 0.5), height * (grid.position.y + grid.size.y * 0.5)), Vector2(width, height)).grow(18)
-	_raised = Rect2(HOME, size).grow(80 if _raised else 18).intersects(box_rect)
-	position = Vector2(HOME.x, maxf(450, box_rect.position.y - size.y - 24)) if _raised else HOME
 
 
 func _input(event: InputEvent) -> void:
@@ -163,6 +146,8 @@ func _finish(skipped: bool) -> void:
 func _refresh() -> void:
 	if not is_instance_valid(_title):
 		return
+	_touch_layout = _touch_layout or _device == "touch"
+	position = TOUCH_HOME if _touch_layout else HOME
 	_skip.visible = active
 	_skip.text = tr("跳过引导") if _device == "touch" else (tr("跳过引导 · View") if _device == "pad" else tr("跳过引导 · T"))
 	if not active:
@@ -175,9 +160,9 @@ func _refresh() -> void:
 	var instructions: Array
 	match _device:
 		"touch":
-			instructions = [tr("点右下角「拿起饭盒」。"),
-				tr("在接菜区拖动，把饭盒放在落下的菜下面。"),
-				tr("拖回右下角餐桌，再点「送饭」。")]
+			instructions = [tr("点右侧大按钮「交互」拿起饭盒。"),
+				tr("拨动左下角摇杆，让饭盒接住落下的菜。"),
+				tr("用摇杆移回右侧餐桌，再点「交互」送饭。")]
 		"keyboard", "pad":
 			var device := "gamepad" if _device == "pad" else "keyboard"
 			var deliver := Settings.binding_label("deliver", device)

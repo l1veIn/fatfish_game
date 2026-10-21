@@ -80,7 +80,7 @@ func _build(focus_key := "") -> void:
 	_content.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_content.add_theme_constant_override("separation", 18)
 	_scroll.add_child(_content)
-	var footer := _hint(tr("方向键选择 · Enter / A 确认 · Esc / B 返回"))
+	var footer := _hint(tr("轻触选项调整 · 点「返回」关闭") if preload("res://scripts/ui/touch_controls.gd").available() else tr("方向键选择 · Enter / A 确认 · Esc / B 返回"))
 	footer.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	col.add_child(footer)
 	_back = UiKit.button(tr("返回"), 32, Vector2(300, 70))
