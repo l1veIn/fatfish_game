@@ -4,14 +4,14 @@
 
 ## 候选与复现
 
-- 当前实现提交：`f2114edf9a6b77460c6bffe94af6199ef9bd2af8`，分支 `codex/toy-release`，已推送远端；在 RC3 基础上加入触控布局编辑、半透明交互键、5 token 自动化、长按回滚与 App 容器修复。
+- 当前实现提交：`1570c787dfd02404a0c6f57e720d3481b1e6f9a3`，分支 `codex/toy-release`，已推送远端；RC5 在 RC4 基础上加入玩家之手端盒、可调手臂距离、触摸兼容鼠标去重及构建配置隔离。
 - 前置作者链接修改：`f99bf7e`，已推送 `main`。
-- ZIP：`build/toy-final-rc4/FatFish-0.4.2-toy-compressed.zip`。
-- ZIP 字节数：48,012,892（48.01 MB，十进制）；当前 Toy 账号上限 50 MB。
-- SHA-256：`fdcb34cb600af36cd8868c8682ad768a5001a6872f206819a6587b997087ea64`。
-- 完整构建、输入和输出摘要：`build/toy-final-rc4/build-manifest.json`。
+- ZIP：`build/toy-final-rc5b/FatFish-0.4.2-toy-compressed.zip`。
+- ZIP 字节数：48,021,233（48.02 MB，十进制）；当前 Toy 账号上限 50 MB。
+- SHA-256：`14c9149d0e4aa4c2524d77b3c8855252d9b323ee38b9c9218c92f861504d74e8`。
+- 完整构建、输入和输出摘要：`build/toy-final-rc5b/build-manifest.json`。
 - 复现：`py -3 pipeline/build_toy.py --output build/toy-release-rebuild --max-zip-mb 50`。
-- Web 本地预览：从 `build` 目录启动 HTTP 服务，访问 `/toy-final-rc4/web/index.html`。请勿直接用 `file://` 打开。
+- Web 本地预览：从 `build` 目录启动 HTTP 服务，访问 `/toy-final-rc5b/web/index.html`。请勿直接用 `file://` 打开。
 
 Godot 4.7.2 Compatibility、WebGL 2、单线程，不要求跨源隔离。资源路径相对入口，主资源包改用 Toy 允许的 `.data` 扩展名；代码许可、素材署名和字体许可随包保留。编辑器插件、测试和调试工具不进入发行包。
 
@@ -26,6 +26,28 @@ Godot 4.7.2 Compatibility、WebGL 2、单线程，不要求跨源隔离。资源
 证据：`build/toy-final-rc1/qa/texture-quality.json`、`texture-comparison.jpg`。
 
 压缩减少下载体积，不减少解码后的纹理内存。没有据此宣称手机帧率、内存或低端设备表现合格。
+
+## RC5 玩家之手与可调握持距离
+
+按用户后续实测反馈，将移动端接菜改为显式的单指持盒操作。饭盒中心默认位于触点左上方各 200 个设计像素（1920×1080 坐标，随画面缩放）；手掌托住饭盒右下侧，手指叠在外沿，前臂与袖口延伸到触点。手臂在饭盒背后绘制，握持手指在前沿绘制，避开食物格。松手后保持端盒位置，不自动送饭；拿盒、送饭仍使用「交互」。原生摇杆继续可用。
+
+设置的触控布局编辑器新增「手臂距离」，范围 80～360，实时展示端盒关系；与控件布局一起保存，取消不落盘，恢复默认回到 200。屏幕左侧限制完整饭盒外框，右侧和底部逐渐收臂，最长距离也能把盒子送回餐桌。引导和帮助说明已同步更新，底部引导位置不变。
+
+新增持盒触点所有权：只有未被 GUI 消费的起始触点能接管饭盒，该触点经过交互按钮时不会变成按钮点击。第二指可按住思考，不能抢走持盒手。暂停、取消和失焦均释放触点，旧拖动事件不能继续移动。实体鼠标及手柄操作保留。
+
+RC4 只忽略 Godot 标为模拟设备的鼠标事件，未覆盖浏览器可能额外产生的、没有该标记的兼容鼠标事件。RC5 在 Web 捕获阶段过滤画布触摸后的这类鼠标事件，保留原生触摸及 HTML 按钮；真正的鼠标 PointerEvent 可立即切回。未捕获用户手机当时的原始事件流，因此此处是对遗漏路径的修复，不宣称已证明用户设备上的唯一根因。
+
+- RC5b 构建再次通过 50 MB 上限、894 个所需汉字覆盖及 123 张纹理尺寸/透明通道检查。
+- 中英触控最终各 89 项、0 失败，GPU 960×540；包含偏移跟随、握持食物截图、双指思考、触点独占、边缘送饭、滑过交互键、可调距离存取、暂停/失焦恢复及原摇杆路线。
+- 桌面输入回归 260 项通过；JS 桥接 19 项通过。
+- Chrome 的真实 DOM 事件传播测试通过：原生触摸事件进入下游，额外兼容鼠标事件被阻止，真实鼠标指针能切回。事件是合成测试输入，未运行 Godot，不代替物理手机验收。
+- 中英文 GPU 报告记录源码、字体及截图摘要；构建输入已逐项核对。测试使用独立存档/设置，前后用户文件摘要一致；显式进度与落菜夹具不是完整人工游玩。
+
+初轮英文检查与构建并行时发现本机设置摘要变化：构建的纹理解码进程会启动自动加载脚本并写入新增默认手臂距离。已将两条解码命令设为 `toy_build` 独立测试配置，重新构建时另行比对本机存档和设置的前后摘要，确认两份文件均未变化。失败轮保留于 `build/qa/toy-hand-en3/`，不计入最终通过结果。
+
+RC5b 已通过 Toy 上传校验。Chrome 线上完成标题、设置、游戏标签、触控布局与取消返回检查，手臂距离显示 200，饭盒右下侧握持预览正常。用户现有进度为第 9 顿、大肥鱼 V3、95 token，本次浏览器检查未修改设置或开始新一轮。控制台仅捕获 B 站 reporter 的 spmId 告警，未捕获游戏错误；页面明确显示云存档暂不可用、进度保存在本机。`toy-online-hand-layout.jpg` 记录新增控件与握持预览，`toy-ready-unpublished.jpg` 记录未点击发布的草稿。
+
+证据位于 `build/toy-final-rc5b/qa/`：`touch-zh/`、`touch-en/`、`browser-input/`、桌面与 JS 日志及 `release-evidence.json`。手机手感、真实 App 容器留边和正式 Toy 云同步仍待真机确认；RC2 音频修复保留，本轮未重测输出。正式发布未点击。
 
 ## RC4 触控设置、回滚与 App 容器
 
@@ -101,7 +123,9 @@ RC2 已通过 Toy 上传校验，线上预览启动及设置入口可用，并�
 
 ## Toy 预览及发布资料
 
-- 当前 RC4 发布表单预览：https://www.bilibili.com/toy/preview/preview_pqnld0Bu/index.html
+- 当前 RC5 发布表单预览：https://www.bilibili.com/toy/preview/preview_oOHbkkVQ/index.html
+
+- RC4 历史预览：https://www.bilibili.com/toy/preview/preview_pqnld0Bu/index.html
 
 - RC3 历史预览：https://www.bilibili.com/toy/preview/preview_o7QvaLNs/index.html
 - RC2 历史预览：https://www.bilibili.com/toy/preview/preview_uquvmFbj/index.html
