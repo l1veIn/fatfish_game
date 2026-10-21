@@ -144,8 +144,9 @@ func _make_buses() -> void:
 	lim.ceiling_db = -0.5
 	AudioServer.add_bus_effect(master, lim)
 	if AudioServer.get_bus_index("SFXBed") < 0:
-		AudioServer.add_bus()
-		var i := AudioServer.bus_count - 1
+		var i := AudioServer.bus_count
+		# Match Settings' Web-safe append; add_bus() breaks sample bus routing.
+		AudioServer.bus_count = i + 1
 		AudioServer.set_bus_name(i, "SFXBed")
 		AudioServer.set_bus_send(i, "SFX")
 	_bed_amp = AudioEffectAmplify.new()

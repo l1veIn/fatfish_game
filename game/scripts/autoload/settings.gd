@@ -43,8 +43,10 @@ func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	for b in BUSES:
 		if AudioServer.get_bus_index(b) < 0:
-			AudioServer.add_bus()
-			var i := AudioServer.bus_count - 1
+			var i := AudioServer.bus_count
+			# Godot Web 4.7.2 add_bus(-1) reorders sample buses and disconnects Master.
+			# Growing the count appends without that path (godotengine/godot#119026).
+			AudioServer.bus_count = i + 1
 			AudioServer.set_bus_name(i, b)
 			AudioServer.set_bus_send(i, "Master")
 	_load_translations()
