@@ -139,7 +139,7 @@ func _refresh() -> void:
 	deliver_button.text = tr("交互")
 	deliver_button.disabled = run._empty <= 0 if not has_box else not (at_table or at_warmer)
 	hint.visible = not (is_instance_valid(run._coach) and run._coach.visible)
-	hint.text = tr("左摇杆移动 · 回到餐桌后点「交互」送饭") if has_box else tr("点「交互」拿盒 · 左摇杆移动")
+	hint.text = tr("拖动玩家之手或拨动摇杆 · 回到餐桌后点「交互」") if has_box else tr("点「交互」拿盒 · 拖动玩家之手移动")
 
 
 func cancel_touch() -> void:

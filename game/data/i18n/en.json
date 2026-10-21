@@ -799,5 +799,13 @@
  "所有已购技能全额退款，保留版本和门票。\n长按回滚 3 秒确认；松手或移开即取消本次长按。": "Refund all purchased skills; keep versions and tickets.\nHold Rollback for 3 seconds. Release or move away to cancel the hold.",
  "长按回滚 3 秒": "Hold Rollback for 3s",
  "继续按住 %.1f 秒": "Keep holding: %.1fs",
- "取消": "Cancel"
+ "取消": "Cancel",
+ "拖动玩家之手或拨动摇杆 · 回到餐桌后点「交互」": "Drag your hand or use the stick · Return to the table, then tap Interact",
+ "点「交互」拿盒 · 拖动玩家之手移动": "Tap Interact to take a box · Drag your hand to move",
+ "拖动玩家之手，饭盒在手指左上方接菜；也可用摇杆。": "Drag your hand: the box stays above-left of your finger. The stick also works.",
+ "端着饭盒移回右侧餐桌，再点「交互」送饭。": "Carry the box back to the table on the right, then tap Interact to serve.",
+ "触点是玩家之手，饭盒位于左上方；下方预览握持距离。": "Your touch controls the hand; the box stays above-left. Preview the reach below.",
+ "手臂距离 · %d": "Arm reach · %d",
+ "拖动玩家之手，端着手指左上方的饭盒接菜，也可用摇杆。右侧「交互」拿盒、送饭或放入保温箱；手臂距离可在设置中调整。": "Drag your hand to carry the box above-left of your finger, or use the stick. Interact takes a box, serves, or stores it in the warmer. Adjust arm reach in Settings.",
+ "解锁后按住右侧小按钮「思考」，另一根手指仍可拖动手臂或摇杆。松手后冷却 1 秒，攒够能量后可再次使用。": "Once unlocked, hold the small Think button; another finger can still drag the hand or stick. Release for a 1-second cooldown, then use it again when energy recovers."
 }

@@ -12,7 +12,7 @@ const SOURCES := ["project.godot", "scripts/main.gd", "scripts/run/canteen_run.g
 	"scripts/tree/tree_screen.gd", "scripts/ui/touch_controls.gd", "scripts/ui/run_coach.gd",
 	"scripts/ui/pause_menu.gd", "scripts/autoload/settings.gd", "scripts/autoload/game.gd",
 	"tests/toy_touch_test.gd", "data/i18n/en.json", "scripts/ui/recipe_book.gd",
-	"scripts/ui/settings_panel.gd", "scripts/ui/touch_layout_panel.gd", "scripts/ui/rollback_confirm.gd", "data/skill_tree.json", "assets/ui/NotoSansSC-VF.ttf", "assets/ui/ZCOOLKuaiLe.ttf"]
+	"scripts/ui/settings_panel.gd", "scripts/ui/touch_layout_panel.gd", "scripts/ui/player_hand.gd", "assets/canteen/box_2.png", "scripts/ui/rollback_confirm.gd", "data/skill_tree.json", "assets/ui/NotoSansSC-VF.ttf", "assets/ui/ZCOOLKuaiLe.ttf"]
 
 
 func _ready() -> void:
@@ -31,6 +31,7 @@ func _ready() -> void:
 	var player_save := FileAccess.get_file_as_bytes("user://save.json")
 	var player_settings := FileAccess.get_file_as_bytes(Settings.PATH)
 	Settings.touch_layout = Settings.TOUCH_DEFAULT.duplicate(true)
+	Settings.touch_arm_distance = 200.0
 	Settings.reset_bindings()
 	Settings.reduced_motion = true
 	Settings.pause_unfocused = false
@@ -107,7 +108,9 @@ func _meal_route(run: CanteenRun) -> void:
 	run._arms.clear() # deterministic falling dish below replaces random spoons only
 	var ui = run._touch_controls
 	_check(ui.joystick.get_global_rect().position.is_equal_approx(Settings.touch_rect("joystick").position) and is_equal_approx(ui.joystick.scale.x, Settings.touch_layout.joystick.scale) and is_equal_approx(ui.deliver_button.scale.x, Settings.touch_layout.interact.scale) and is_equal_approx(ui.think_button.scale.x, Settings.touch_layout.think.scale) and ui.deliver_button.scale.x > 1.0, "saved custom layout is applied to live gameplay controls")
+	_check(Settings.touch_arm_distance > 200, "custom arm reach is loaded for gameplay")
 	Settings.touch_layout = Settings.TOUCH_DEFAULT.duplicate(true)
+	Settings.touch_arm_distance = 200.0
 	Settings.save_settings()
 	Settings.changed.emit()
 	await wait_frames()
@@ -119,16 +122,13 @@ func _meal_route(run: CanteenRun) -> void:
 	_check(run._coach._device == "touch", "tutorial describes the actual touch device")
 	_check(ui.joystick is VirtualJoystick, "engine joystick drives the shared gamepad actions")
 	await shot("run_touch_lesson")
+	await _hand_route(run)
 	var empty_before := run._empty
 	var initial: Vector2 = run._hand.pos
 	var dock: Vector2 = run._coach.position
 	var center: Vector2 = ui.joystick.get_global_rect().get_center()
 	_check(not ui.joystick.get_global_rect().intersects(run._coach.get_global_rect()) and not ui.think_button.get_global_rect().intersects(run._coach.get_global_rect()), "fixed lesson leaves both thumbs clear")
 	_check(ui.deliver_button.size.x * ui.deliver_button.size.y > ui.think_button.size.x * ui.think_button.size.y, "primary action is larger than held secondary action")
-	await _touch(0, initial, true)
-	await _drag(0, initial, Vector2(800, 700))
-	await _touch(0, Vector2(800, 700), false)
-	_check(run._hand.pos.distance_to(initial) < 1, "touching or dragging food area never moves the tray")
 	await _touch(0, center, true)
 	await _drag(0, center, center + Vector2(3, 0))
 	await _wait(0.12)
@@ -230,6 +230,64 @@ func _meal_route(run: CanteenRun) -> void:
 
 func _movement() -> Vector2:
 	return Input.get_vector("move_left", "move_right", "move_up", "move_down")
+
+
+func _hand_route(run: CanteenRun) -> void:
+	var ui = run._touch_controls
+	var at := Vector2(1040, 850)
+	await _touch(0, at, true)
+	_check(run._touch_finger == 0 and run._hand.pos.distance_to(at - Vector2(200, 200)) < 1, "touch holds the tray 200 design pixels above-left")
+	await _drag(0, at, Vector2(1120, 900))
+	at = Vector2(1120, 900)
+	_check(run._hand.pos.distance_to(at - Vector2(200, 200)) < 1 and run._touch_hand_visible, "drag moves the arm and held tray together")
+	await _touch(2, Vector2(600, 700), true)
+	await _drag(2, Vector2(600, 700), Vector2(500, 700))
+	await _touch(2, Vector2(500, 700), false)
+	_check(run._touch_finger == 0 and run._hand.pos.distance_to(at - Vector2(200, 200)) < 1, "another playfield finger cannot steal the holding hand")
+	await _touch(1, ui.think_button.get_global_rect().get_center(), true)
+	await _drag(0, at, Vector2(1160, 900))
+	at = Vector2(1160, 900)
+	_check(run._thinking and run._touch_finger == 0 and run._hand.pos.distance_to(at - Vector2(200, 200)) < 1, "hand dragging and second-finger thinking coexist")
+	await _touch(1, ui.think_button.get_global_rect().get_center(), false)
+	run._add_item(run._hand.pos + Vector2(0, -8), Vector2(0, 140), CanteenRun.I.BALL) # visible-food fixture
+	await _wait(0.18)
+	await shot("player_hand_food")
+	await _drag(0, at, Vector2(20, 780))
+	var art: Rect2 = run._basin_art_rect(run._hand.pos, 1.0)
+	_check(art.position.x >= 15 and art.end.x <= 1905, "touch near left edge keeps the full tray visible")
+	await _drag(0, Vector2(20, 780), ui.deliver_button.get_global_rect().get_center())
+	await _touch(0, ui.deliver_button.get_global_rect().get_center(), false)
+	_check(run._hand != null and run._touch_finger < 0, "dragging across and releasing over Interact cannot serve")
+	var stopped: Vector2 = run._hand.pos
+	await _wait(0.15)
+	_check(run._hand.pos.distance_to(stopped) < 1, "lifting the hand leaves the tray still held at its last position")
+	Settings.touch_arm_distance = 300
+	await _touch(0, Vector2(1150, 900), true)
+	_check(run._hand.pos.distance_to(Vector2(850, 600)) < 1, "configured arm reach changes the actual touch offset")
+	await _touch(0, Vector2(1150, 900), false, true)
+	await _drag(0, Vector2(1150, 900), Vector2(1300, 900))
+	_check(run._touch_finger < 0 and run._hand.pos.distance_to(Vector2(850, 600)) < 1, "canceled hand contact cannot resume on a stale drag")
+	Settings.touch_arm_distance = 360
+	await _touch(0, Vector2(1100, 850), true)
+	await _drag(0, Vector2(1100, 850), Vector2(1780, 1064))
+	_check(run.TABLE.grow(60).has_point(run._hand.pos), "longest arm retracts near the bottom edge so the table remains reachable")
+	await _touch(0, Vector2(1780, 1064), false)
+	Settings.touch_arm_distance = 200
+	await _touch(0, Vector2(1100, 850), true)
+	await _touch_tap(ui.pause_button.get_global_rect().get_center(), 1)
+	_check(get_tree().paused and run._touch_finger < 0, "pause clears an active holding finger")
+	await _touch(0, Vector2(1100, 850), false)
+	await _touch_tap(run._pause._first.get_global_rect().get_center())
+	await _wait(0.25)
+	await _touch(0, Vector2(1100, 850), true)
+	get_tree().root.propagate_notification(NOTIFICATION_APPLICATION_FOCUS_OUT)
+	get_tree().root.propagate_notification(NOTIFICATION_APPLICATION_FOCUS_IN)
+	stopped = run._hand.pos
+	await _drag(0, Vector2(1100, 850), Vector2(1250, 900))
+	_check(run._touch_finger < 0 and run._hand.pos.distance_to(stopped) < 1, "focus loss cancels the hand and rejects stale movement")
+	await _touch(0, Vector2(1250, 900), false)
+	await _touch(0, Vector2(1000, 900), true)
+	await _touch(0, Vector2(1000, 900), false)
 
 
 func _steer_to(run: CanteenRun, target: Vector2) -> void:
@@ -474,19 +532,27 @@ func _mobile_preferences(tree: TreeScreen) -> void:
 		var slider: Rect2 = editor._size_slider.get_global_rect()
 		await _mouse_click(slider.position + Vector2(slider.size.x * [0.55, 0.65, 0.25][i], slider.size.y * 0.5))
 	_check(editor.draft.interact.scale > 1.0 and editor.draft.joystick.scale > 1.0 and editor.draft.think.scale < 1.0 and Settings.touch_layout.interact.scale == 1.0, "all three size previews change independently without saving")
+	var arm_slider: Rect2 = editor._arm_slider.get_global_rect()
+	await _mouse_click(arm_slider.position + Vector2(arm_slider.size.x * 0.78, arm_slider.size.y * 0.5))
+	_check(editor._arm_distance > 200 and Settings.touch_arm_distance == 200, "arm reach slider previews without saving")
 	await _wait(5.0) # Let the fixture's achievement toast leave the preview.
 	await shot("touch_layout_editor")
 	await _mouse_click(editor._buttons[-1].get_global_rect().get_center())
 	var saved := Settings.touch_layout.duplicate(true)
+	var saved_reach := Settings.touch_arm_distance
 	Settings.touch_layout = Settings.TOUCH_DEFAULT.duplicate(true)
+	Settings.touch_arm_distance = 200.0
 	Settings.load_settings()
 	_check(Settings.touch_layout == saved and saved.interact.scale > 1.0, "saved layout round-trips through the isolated settings file")
+	_check(Settings.touch_arm_distance == saved_reach and saved_reach > 200, "arm reach round-trips through isolated settings")
 	await _mouse_click(entry.get_global_rect().get_center())
 	editor = panel._remap
 	await _mouse_click(editor._buttons[3].get_global_rect().get_center())
 	_check(editor.draft == Settings.TOUCH_DEFAULT, "restore defaults resets the draft layout")
 	await _mouse_click(editor._buttons[4].get_global_rect().get_center())
 	_check(Settings.touch_layout == saved, "cancel leaves saved layout unchanged")
+	_check(Settings.touch_arm_distance == saved_reach, "cancel also preserves saved arm reach")
+	_check(Settings.sanitize_arm_distance(INF) == 200 and Settings.sanitize_arm_distance("bad") == 200 and Settings.sanitize_arm_distance(-20) == 80 and Settings.sanitize_arm_distance(500) == 360, "invalid reach settings fall back or stay in range")
 	await _mouse_click(panel._back.get_global_rect().get_center())
 	tree._hover = ""
 	var bad := Settings.sanitize_touch_layout({"joystick": {"x": -10, "y": INF, "scale": 99}, "interact": "bad"})

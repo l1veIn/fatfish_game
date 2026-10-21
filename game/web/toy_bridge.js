@@ -523,6 +523,23 @@
 		retry,
 	};
 	if (env.document && env.addEventListener) {
+		// Browsers can emit compatibility mouse events without Godot's emulation ID.
+		// Keep native touch events; discard only the extra canvas mouse stream.
+		let touchMouseUntil = 0;
+		const onCanvas = event => event.target && event.target.id === "canvas";
+		for (const type of ["touchstart", "touchmove", "touchend", "touchcancel"])
+			env.addEventListener(type, event => { if (onCanvas(event)) touchMouseUntil = clock() + 800; }, true);
+		for (const type of ["pointerdown", "pointermove"])
+			env.addEventListener(type, event => {
+				if (onCanvas(event) && event.pointerType === "mouse" && !event.sourceCapabilities?.firesTouchEvents) touchMouseUntil = 0;
+			}, true);
+		for (const type of ["mousedown", "mousemove", "mouseup"])
+			env.addEventListener(type, event => {
+				if (onCanvas(event) && (event.sourceCapabilities?.firesTouchEvents || clock() < touchMouseUntil)) {
+					event.stopImmediatePropagation();
+					if (event.cancelable) event.preventDefault();
+				}
+			}, true);
 		env.document.addEventListener("visibilitychange", () => {
 			if (env.document.hidden) void flush();
 		});

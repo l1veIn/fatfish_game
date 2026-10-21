@@ -161,8 +161,8 @@ func _refresh() -> void:
 	match _device:
 		"touch":
 			instructions = [tr("点右侧大按钮「交互」拿起饭盒。"),
-				tr("拨动左下角摇杆，让饭盒接住落下的菜。"),
-				tr("用摇杆移回右侧餐桌，再点「交互」送饭。")]
+				tr("拖动玩家之手，饭盒在手指左上方接菜；也可用摇杆。"),
+				tr("端着饭盒移回右侧餐桌，再点「交互」送饭。")]
 		"keyboard", "pad":
 			var device := "gamepad" if _device == "pad" else "keyboard"
 			var deliver := Settings.binding_label("deliver", device)

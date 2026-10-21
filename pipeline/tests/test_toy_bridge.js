@@ -72,7 +72,8 @@ function harness(options = {}) {
 			randomUUID: () => "00000000-0000-0000-0000-" + String(++nextUUID).padStart(12, "0"),
 		},
 		document: doc,
-		addEventListener() {},
+		listeners: {},
+		addEventListener(name, fn) { this.listeners[name] = fn; },
 		open(...args) { calls.push({ type: "open", args }); },
 		location: { reload() { reloaded = true; } },
 	};
@@ -101,6 +102,26 @@ test("missing SDK stays local and init callback fires only once", async () => {
 	await h.api.init(save(2), () => count++);
 	h.api.queueSave(save(3)); await h.advance(60000);
 	assert.equal(count, 1); assert.equal(setCalls(h).length, 0);
+});
+
+test("canvas touch compatibility mouse is suppressed while real mouse can take over", async () => {
+	const h = harness({dom: true});
+	const canvas = {id: "canvas"};
+	let stopped = 0;
+	const mouse = {target: canvas, cancelable: true, preventDefault() {}, stopImmediatePropagation() { stopped++; }};
+	h.env.listeners.touchstart({target: canvas});
+	h.env.listeners.mousemove(mouse);
+	h.env.listeners.touchend({target: canvas});
+	h.env.listeners.mousedown(mouse);
+	assert.equal(stopped, 2, "untagged browser compatibility events cannot steer or serve");
+	h.env.listeners.pointermove({target: canvas, pointerType: "mouse"});
+	h.env.listeners.mousemove(mouse);
+	assert.equal(stopped, 2, "a real mouse switches immediately");
+	h.env.listeners.mousemove({...mouse, sourceCapabilities: {firesTouchEvents: true}});
+	assert.equal(stopped, 3, "explicit touch-generated mouse is always filtered");
+	h.env.listeners.touchstart({target: canvas});
+	h.env.listeners.mousedown({...mouse, target: {id: "start-button"}});
+	assert.equal(stopped, 3, "HTML buttons keep their own event routing");
 });
 
 test("UTF-8 saves are split within Toy limits; latest pending save wins and previous generation remains", async () => {

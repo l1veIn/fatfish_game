@@ -36,6 +36,7 @@ const TOUCH_DEFAULT := {
 	"interact": {"x": 1766.0 / 1920, "y": 976.0 / 1080, "scale": 1.0},
 	"think": {"x": 1549.0 / 1920, "y": 1000.0 / 1080, "scale": 1.0}}
 var touch_layout: Dictionary = TOUCH_DEFAULT.duplicate(true)
+var touch_arm_distance := 200.0
 
 var _focused := true
 var _testing := false      # test profiles / autotest / --lang never write player settings
@@ -105,6 +106,7 @@ func _read_config(cfg: ConfigFile) -> void:
 	hit_pause = bool(cfg.get_value("accessibility", "hit_pause", hit_pause))
 	_read_bindings(cfg.get_value("controls", "bindings", {}))
 	touch_layout = sanitize_touch_layout(cfg.get_value("controls", "touch_layout", {}))
+	touch_arm_distance = sanitize_arm_distance(cfg.get_value("controls", "touch_arm_distance", 200.0))
 
 
 func save_settings() -> void:
@@ -128,6 +130,7 @@ func _create_config() -> ConfigFile:
 	cfg.set_value("accessibility", "hit_pause", hit_pause)
 	cfg.set_value("controls", "bindings", _bindings.duplicate(true))
 	cfg.set_value("controls", "touch_layout", touch_layout.duplicate(true))
+	cfg.set_value("controls", "touch_arm_distance", touch_arm_distance)
 	return cfg
 
 
@@ -447,6 +450,12 @@ func sanitize_touch_layout(raw: Variant) -> Dictionary:
 		result[id].x = center.x / 1920.0
 		result[id].y = center.y / 1080.0
 	return result
+
+
+func sanitize_arm_distance(raw: Variant) -> float:
+	if (raw is float or raw is int) and is_finite(float(raw)):
+		return clampf(float(raw), 80.0, 360.0)
+	return 200.0
 
 
 func touch_rect(id: String, layout: Dictionary = {}) -> Rect2:

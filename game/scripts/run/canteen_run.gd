@@ -35,6 +35,10 @@ signal to_title
 const MEAL_JOURNAL := preload("res://scripts/run/meal_journal.gd")
 const FISH_MEAL_VISUAL := preload("res://scripts/ui/fish_meal_visual.gd")
 const TOUCH_UI := preload("res://scripts/ui/touch_controls.gd")
+const PLAYER_HAND := preload("res://scripts/ui/player_hand.gd")
+var _touch_finger := -1
+var _touch_at := Vector2.ZERO
+var _touch_hand_visible := false
 var _meal_visual = null
 var _journal = null
 var _journal_bite_phase := "live"
@@ -611,11 +615,13 @@ func _enable_touch_controls() -> void:
 	_touch_controls.deliver_requested.connect(_touch_deliver)
 	_touch_controls.pause_requested.connect(pause)
 	add_child(_touch_controls)
+	Settings.changed.connect(_cancel_touch)
 
 
 func _touch_deliver() -> void:
 	if _ended or get_tree().paused:
 		return
+	_touch_hand_visible = true
 	# The pickup button is on the table. A carried box must still be moved back
 	# there (or to the warmer) before the shared delivery path accepts it.
 	if _hand == null:
@@ -625,6 +631,7 @@ func _touch_deliver() -> void:
 
 
 func _cancel_touch() -> void:
+	_touch_finger = -1
 	if is_instance_valid(_touch_controls):
 		_touch_controls.cancel_touch()
 
@@ -1343,6 +1350,32 @@ func _magnet() -> float:
 
 # --- input --------------------------------------------------------------------------------------
 
+func _input(event: InputEvent) -> void:
+	# Once acquired outside GUI, this finger keeps ownership even over a button.
+	if _touch_finger < 0 or _ended or autotest: return
+	if event is InputEventScreenDrag and event.index == _touch_finger:
+		_touch_at = get_canvas_transform().affine_inverse() * event.position
+		_aim = _touch_basin_target(_touch_at)
+		get_viewport().set_input_as_handled()
+	elif event is InputEventScreenTouch and event.index == _touch_finger and (not event.pressed or event.canceled):
+		_touch_finger = -1
+		get_viewport().set_input_as_handled()
+
+
+func _touch_basin_target(at: Vector2) -> Vector2:
+	var art := _basin_art_rect(Vector2.ZERO, 1.0)
+	var offset := Vector2.ONE * Settings.touch_arm_distance
+	var maximum := Vector2(1904 - art.end.x, _hand_bottom())
+	# Retract near the bottom/right edge so even the longest arm can serve a meal.
+	var edge := ((at - Vector2(1784, 944)) / 120.0).clamp(Vector2.ZERO, Vector2.ONE)
+	var retract := (maximum + offset - Vector2(1904, 1064)).max(Vector2.ZERO) * edge
+	return (at - offset + retract).clamp(Vector2(16 - art.position.x, BAND.x), maximum)
+
+
+func _player_arm_end(at: Vector2) -> Vector2:
+	return (_touch_at if _touch_finger >= 0 else at + Vector2.ONE * Settings.touch_arm_distance).clamp(Vector2(16, 16), Vector2(1904, 1064))
+
+
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventMouse and event.device == InputEvent.DEVICE_ID_EMULATION:
 		return
@@ -1353,7 +1386,12 @@ func _unhandled_input(event: InputEvent) -> void:
 		_hint_input_device = "touch"
 		if _journal != null:
 			_journal.data.input_devices["touch"] = true
-		# Touching food or the tray never teleports it. Only the bottom stick steers.
+		if event is InputEventScreenTouch and event.pressed and not event.canceled and _touch_finger < 0 and _hand != null:
+			_touch_finger = event.index
+			_touch_at = get_canvas_transform().affine_inverse() * event.position
+			_touch_hand_visible = true
+			_mouse_steering = true
+			_aim = _touch_basin_target(_touch_at)
 		get_viewport().set_input_as_handled()
 		return
 	if _journal != null and not _ended:
@@ -1373,11 +1411,15 @@ func _unhandled_input(event: InputEvent) -> void:
 		return
 	if event is InputEventMouseMotion:
 		if not autotest:   # a real mouse over the window must not steer the bot
+			if _touch_finger >= 0: return
+			_touch_hand_visible = false
 			_aim = get_canvas_transform().affine_inverse() * event.position
 			if event.relative.length_squared() > 0.01:
 				_mouse_steering = true
 	elif event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
 		if not _ended:
+			if _touch_finger >= 0: return
+			_touch_hand_visible = false
 			if not autotest:
 				_aim = get_canvas_transform().affine_inverse() * event.position
 				_mouse_steering = true
@@ -1693,7 +1735,7 @@ func _process(delta: float) -> void:
 		want_think = can_think and _bot_think()
 	_update_thinking(delta, want_think)
 	var stick := Input.get_vector("move_left", "move_right", "move_up", "move_down")
-	if stick != Vector2.ZERO and not autotest:
+	if stick != Vector2.ZERO and not autotest and _touch_finger < 0:
 		_mouse_steering = false
 		_aim = (_aim + stick * PAD_SPEED * delta).clamp(Vector2(40, BAND.x), Vector2(1880, _hand_bottom()))
 	var wdt := delta * (think_slow if _thinking else 1.0)
@@ -3584,7 +3626,10 @@ func _draw_basin(at: Vector2, b: Dictionary, slosh: float, scale_k: float, font:
 	var aw := gw / g.size.x
 	var ah := aw * tex.get_height() / tex.get_width()
 	var gh := g.size.y * ah
-	var art := Rect2(at - Vector2(aw * (g.position.x + g.size.x * 0.5), ah * (g.position.y + g.size.y * 0.5)), Vector2(aw, ah))
+	var art := _basin_art_rect(at, scale_k)
+	var held_by_player := in_hand and _touch_hand_visible and not _ended
+	if held_by_player:
+		PLAYER_HAND.draw_arm(self, art, _player_arm_end(at))
 	draw_texture_rect(tex, art, false, MATERIALS[mat_level].tint)
 	var gx0 := at.x - gw * 0.5
 	var gy0 := at.y - gh * 0.5
@@ -3617,9 +3662,18 @@ func _draw_basin(at: Vector2, b: Dictionary, slosh: float, scale_k: float, font:
 				var dir := Vector2.from_angle(j * TAU / 6.0 + 0.4)
 				_sprite(self, "fx_star", at + dir * gw * (0.55 + 0.75 * q), 30.0 * (1.0 - 0.5 * q), q * 4.0, Color(1, 1, 1, a))
 	if in_hand:
+		if held_by_player: PLAYER_HAND.draw_fingers(self, art)
 		_draw_hand_tag(Vector2(at.x, art.end.y + 16), b)
 		if combo > 0.0 and _combo_eligible(b):
 			_icon("chain", Vector2(art.end.x - 6, art.position.y + 6), 40)
+
+
+func _basin_art_rect(at: Vector2, scale_k: float) -> Rect2:
+	var tex: Texture2D = _box_tex[_cols()]
+	var grid: Rect2 = _box_grid[_cols()]
+	var width := _cols() * CELL * scale_k / grid.size.x
+	var height := width * tex.get_height() / tex.get_width()
+	return Rect2(at - Vector2(width * (grid.position.x + grid.size.x * 0.5), height * (grid.position.y + grid.size.y * 0.5)), Vector2(width, height))
 
 
 ## Shared by lunchbox rendering and the pick-up cue: the accent belongs to the consumed cell.

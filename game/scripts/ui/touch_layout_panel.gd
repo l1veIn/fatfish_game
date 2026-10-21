@@ -3,6 +3,8 @@ extends Control
 signal closed
 
 const TOUCH_UI := preload("res://scripts/ui/touch_controls.gd")
+const PLAYER_HAND := preload("res://scripts/ui/player_hand.gd")
+const PREVIEW_BOX := preload("res://assets/canteen/box_2.png")
 const NAMES := {"joystick": "摇杆", "interact": "交互", "think": "思考"}
 var draft: Dictionary
 var selected := "joystick"
@@ -14,6 +16,10 @@ var _finger := -1
 var _offset := Vector2.ZERO
 var _toolbar: PanelContainer
 var _buttons: Array[Button] = []
+var _arm_slider: HSlider
+var _arm_label: Label
+var _arm_distance := 200.0
+var _hand_preview: Node2D
 
 
 func _ready() -> void:
@@ -22,11 +28,15 @@ func _ready() -> void:
 	z_index = 300
 	mouse_filter = Control.MOUSE_FILTER_STOP
 	draft = Settings.touch_layout.duplicate(true)
+	_arm_distance = Settings.touch_arm_distance
 	var dim := ColorRect.new()
 	dim.color = Color(0.06, 0.04, 0.02, 0.64)
 	dim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	dim.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(dim)
+	_hand_preview = Node2D.new()
+	_hand_preview.draw.connect(_draw_hand_preview)
+	add_child(_hand_preview)
 	for id in NAMES:
 		var control: Control
 		if id == "joystick":
@@ -83,6 +93,26 @@ func _ready() -> void:
 		draft = Settings.sanitize_touch_layout(draft)
 		_refresh())
 	row.add_child(_size_slider)
+	var arm_row := HBoxContainer.new()
+	arm_row.add_theme_constant_override("separation", 20)
+	col.add_child(arm_row)
+	_arm_label = UiKit.label("", 25)
+	_arm_label.custom_minimum_size.x = 250
+	arm_row.add_child(_arm_label)
+	_arm_slider = HSlider.new()
+	_arm_slider.min_value = 80
+	_arm_slider.max_value = 360
+	_arm_slider.step = 20
+	_arm_slider.custom_minimum_size = Vector2(480, 48)
+	_arm_slider.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_arm_slider.value = _arm_distance
+	_arm_slider.value_changed.connect(func(value):
+		_arm_distance = value
+		_refresh())
+	arm_row.add_child(_arm_slider)
+	var arm_hint := UiKit.label(tr("触点是玩家之手，饭盒位于左上方；下方预览握持距离。"), 23)
+	arm_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	col.add_child(arm_hint)
 	var actions := HBoxContainer.new()
 	col.add_child(actions)
 	for spec in [["恢复默认", _defaults], ["取消", close], ["保存布局", _save]]:
@@ -94,6 +124,7 @@ func _ready() -> void:
 	var focus: Array[Control] = []
 	focus.append_array(_buttons.slice(0, 3))
 	focus.append(_size_slider)
+	focus.append(_arm_slider)
 	focus.append_array(_buttons.slice(3))
 	for i in focus.size():
 		focus[i].focus_next = focus[i].get_path_to(focus[(i + 1) % focus.size()])
@@ -113,12 +144,23 @@ func _refresh() -> void:
 		previews[id].position = Settings.touch_rect(id, draft).position
 		previews[id].scale = Vector2.ONE * draft[id].scale
 	_size_label.text = "%s · %d%%" % [tr(NAMES[selected]), roundi(draft[selected].scale * 100)]
+	_arm_label.text = tr("手臂距离 · %d") % roundi(_arm_distance)
+	_hand_preview.queue_redraw()
 	queue_redraw()
 
 
 func _draw() -> void:
 	if draft != null and not draft.is_empty():
 		draw_style_box(UiKit.box(Color.TRANSPARENT, UiKit.GOLD, 3, 26), Settings.touch_rect(selected, draft).grow(8))
+
+
+func _draw_hand_preview() -> void:
+	var box := Rect2(760, 500, 240, 193)
+	var touch := box.get_center() + Vector2.ONE * _arm_distance
+	PLAYER_HAND.draw_arm(_hand_preview, box, touch)
+	_hand_preview.draw_texture_rect(PREVIEW_BOX, box, false)
+	PLAYER_HAND.draw_fingers(_hand_preview, box)
+	_hand_preview.draw_arc(touch, 33, 0, TAU, 40, UiKit.GOLD, 3, true)
 
 
 func _gui_input(event: InputEvent) -> void:
@@ -178,11 +220,14 @@ func _unhandled_input(event: InputEvent) -> void:
 
 func _defaults() -> void:
 	draft = Settings.TOUCH_DEFAULT.duplicate(true)
+	_arm_distance = 200.0
+	_arm_slider.set_value_no_signal(_arm_distance)
 	_select(selected)
 
 
 func _save() -> void:
 	Settings.touch_layout = Settings.sanitize_touch_layout(draft)
+	Settings.touch_arm_distance = Settings.sanitize_arm_distance(_arm_distance)
 	Settings.save_settings()
 	Settings.changed.emit()
 	close()
