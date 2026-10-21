@@ -30,6 +30,13 @@ var screen_shake := true
 var hit_pause := true
 var window_size := Vector2i(1280, 720)
 
+const TOUCH_BASE := {"joystick": Vector2(184, 184), "interact": Vector2(236, 176), "think": Vector2(150, 128)}
+const TOUCH_DEFAULT := {
+	"joystick": {"x": 148.0 / 1920, "y": 976.0 / 1080, "scale": 1.0},
+	"interact": {"x": 1766.0 / 1920, "y": 976.0 / 1080, "scale": 1.0},
+	"think": {"x": 1549.0 / 1920, "y": 1000.0 / 1080, "scale": 1.0}}
+var touch_layout: Dictionary = TOUCH_DEFAULT.duplicate(true)
+
 var _focused := true
 var _testing := false      # test profiles / autotest / --lang never write player settings
 var _applied_window_size := Vector2i.ZERO
@@ -97,6 +104,7 @@ func _read_config(cfg: ConfigFile) -> void:
 	screen_shake = bool(cfg.get_value("accessibility", "screen_shake", screen_shake))
 	hit_pause = bool(cfg.get_value("accessibility", "hit_pause", hit_pause))
 	_read_bindings(cfg.get_value("controls", "bindings", {}))
+	touch_layout = sanitize_touch_layout(cfg.get_value("controls", "touch_layout", {}))
 
 
 func save_settings() -> void:
@@ -119,6 +127,7 @@ func _create_config() -> ConfigFile:
 	cfg.set_value("accessibility", "screen_shake", screen_shake)
 	cfg.set_value("accessibility", "hit_pause", hit_pause)
 	cfg.set_value("controls", "bindings", _bindings.duplicate(true))
+	cfg.set_value("controls", "touch_layout", touch_layout.duplicate(true))
 	return cfg
 
 
@@ -164,7 +173,9 @@ func safe_window_rect(requested: Vector2i, usable: Rect2i) -> Rect2i:
 func toggle_fullscreen() -> void:
 	fullscreen = not fullscreen
 	if OS.has_feature("web"):
-		DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_FULLSCREEN if fullscreen else DisplayServer.WINDOW_MODE_WINDOWED)
+		var handled = JavaScriptBridge.eval("window.FatFishToy && window.FatFishToy.setFullscreen(%s)" % ("true" if fullscreen else "false"))
+		if not handled:
+			DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_FULLSCREEN if fullscreen else DisplayServer.WINDOW_MODE_WINDOWED)
 	apply()
 
 
@@ -418,3 +429,27 @@ func _read_bindings(saved: Variant) -> void:
 				_bindings.clear()
 				_apply_bindings()
 				return
+
+
+func sanitize_touch_layout(raw: Variant) -> Dictionary:
+	var result: Dictionary = TOUCH_DEFAULT.duplicate(true)
+	if not raw is Dictionary:
+		return result
+	for id in TOUCH_BASE:
+		if not raw.get(id) is Dictionary:
+			continue
+		for key in ["x", "y", "scale"]:
+			var value = raw[id].get(key)
+			if (value is float or value is int) and is_finite(float(value)):
+				result[id][key] = clampf(float(value), 0.65 if key == "scale" else 0.0, 1.6 if key == "scale" else 1.0)
+		var half: Vector2 = TOUCH_BASE[id] * result[id].scale * 0.5
+		var center := Vector2(result[id].x * 1920, result[id].y * 1080).clamp(half + Vector2(16, 16), Vector2(1904, 1064) - half)
+		result[id].x = center.x / 1920.0
+		result[id].y = center.y / 1080.0
+	return result
+
+
+func touch_rect(id: String, layout: Dictionary = {}) -> Rect2:
+	var spec: Dictionary = (touch_layout if layout.is_empty() else layout)[id]
+	var dimensions: Vector2 = TOUCH_BASE[id] * spec.scale
+	return Rect2(Vector2(spec.x * 1920, spec.y * 1080) - dimensions * 0.5, dimensions)

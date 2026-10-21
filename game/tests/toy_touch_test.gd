@@ -12,7 +12,7 @@ const SOURCES := ["project.godot", "scripts/main.gd", "scripts/run/canteen_run.g
 	"scripts/tree/tree_screen.gd", "scripts/ui/touch_controls.gd", "scripts/ui/run_coach.gd",
 	"scripts/ui/pause_menu.gd", "scripts/autoload/settings.gd", "scripts/autoload/game.gd",
 	"tests/toy_touch_test.gd", "data/i18n/en.json", "scripts/ui/recipe_book.gd",
-	"scripts/ui/settings_panel.gd", "assets/ui/NotoSansSC-VF.ttf", "assets/ui/ZCOOLKuaiLe.ttf"]
+	"scripts/ui/settings_panel.gd", "scripts/ui/touch_layout_panel.gd", "scripts/ui/rollback_confirm.gd", "data/skill_tree.json", "assets/ui/NotoSansSC-VF.ttf", "assets/ui/ZCOOLKuaiLe.ttf"]
 
 
 func _ready() -> void:
@@ -30,6 +30,7 @@ func _ready() -> void:
 		_source[path] = FileAccess.get_sha256("res://" + path)
 	var player_save := FileAccess.get_file_as_bytes("user://save.json")
 	var player_settings := FileAccess.get_file_as_bytes(Settings.PATH)
+	Settings.touch_layout = Settings.TOUCH_DEFAULT.duplicate(true)
 	Settings.reset_bindings()
 	Settings.reduced_motion = true
 	Settings.pause_unfocused = false
@@ -42,7 +43,7 @@ func _ready() -> void:
 	Game.runs = 1
 	Game.tokens = 50000
 	Game.levels = {"start": 1, "stall_main": 1, "think": 1}
-	Game.seen_buttons = {"intro_think": true, "intro_canteen_started": true}
+	Game.seen_buttons = {"intro_think": true, "intro_canteen_started": true, "crew": true, "crew_card": true}
 	Game._recompute()
 	_main = load("res://scenes/main.tscn").instantiate()
 	add_child(_main)
@@ -52,6 +53,7 @@ func _ready() -> void:
 	if not _main._screen is TreeScreen:
 		await _finish(player_save, player_settings)
 		return
+	await _mobile_preferences(_main._screen)
 	await _tree_route(_main._screen)
 	var tree: TreeScreen = _main._screen
 	await _mouse_click(tree._start.get_global_rect().get_center())
@@ -104,6 +106,11 @@ func _tree_route(tree: TreeScreen) -> void:
 func _meal_route(run: CanteenRun) -> void:
 	run._arms.clear() # deterministic falling dish below replaces random spoons only
 	var ui = run._touch_controls
+	_check(ui.joystick.get_global_rect().position.is_equal_approx(Settings.touch_rect("joystick").position) and is_equal_approx(ui.joystick.scale.x, Settings.touch_layout.joystick.scale) and is_equal_approx(ui.deliver_button.scale.x, Settings.touch_layout.interact.scale) and is_equal_approx(ui.think_button.scale.x, Settings.touch_layout.think.scale) and ui.deliver_button.scale.x > 1.0, "saved custom layout is applied to live gameplay controls")
+	Settings.touch_layout = Settings.TOUCH_DEFAULT.duplicate(true)
+	Settings.save_settings()
+	Settings.changed.emit()
+	await wait_frames()
 	_check(is_instance_valid(ui) and run._learning(), "meal mounts touch controls and existing tutorial")
 	await _touch_tap(ui.deliver_button.get_global_rect().get_center())
 	_check(run._hand != null and run._coach.step == RunCoach.Step.CATCH, "touch pickup GUI takes one real box and advances tutorial")
@@ -132,6 +139,12 @@ func _meal_route(run: CanteenRun) -> void:
 	var stopped: Vector2 = run._hand.pos
 	await _wait(0.15)
 	_check(run._hand.pos.distance_to(stopped) < 1 and run._empty == empty_before, "releasing stick stops movement without returning or serving")
+	var fake_motion := InputEventMouseMotion.new()
+	fake_motion.device = InputEvent.DEVICE_ID_EMULATION
+	fake_motion.position = Vector2(1400, 500)
+	fake_motion.relative = Vector2(600, -200)
+	get_viewport().push_input(fake_motion, true)
+	await wait_frames()
 	await _emulated_mouse(Vector2(1385, 865))
 	_check(run._hand != null and run._hand.pos.distance_to(stopped) < 1, "synthetic mouse cannot move or deliver a touch-held box")
 	await _touch_tap(ui.deliver_button.get_global_rect().get_center())
@@ -391,3 +404,90 @@ func _finish(player_save: PackedByteArray, player_settings: PackedByteArray) -> 
 	await _wait(0.15)
 	UiKit.clear_cache()
 	get_tree().quit(0 if _failures.is_empty() else 1)
+
+
+func _mobile_preferences(tree: TreeScreen) -> void:
+	# Exactly five tokens and only the root are an explicit affordability fixture.
+	var old_levels := Game.levels.duplicate(true)
+	var old_tokens := Game.tokens
+	Game.levels = {"start": 1}
+	Game.tokens = 5
+	Game._recompute()
+	Game.changed.emit()
+	await wait_frames()
+	_check(Game.cost("skills") == 5 and Game.is_visible("skills"), "automation costs five tokens and is available from the root")
+	await _touch_tap(tree._at(Game.node("skills")))
+	await _touch_tap(tree._touch_buy.get_global_rect().get_center())
+	_check(Game.level("skills") == 1 and Game.tokens == 0 and Game.automation_enabled("auto_push") and Game.automation_enabled("auto_return"), "five-token player can buy the real automation node through touch GUI")
+	await _mouse_click(tree._bar.get_node("Tree_respec").get_global_rect().get_center())
+	var dialog = tree._rollback
+	_check(is_instance_valid(dialog), "rollback click opens a confirmation dialog")
+	if is_instance_valid(dialog):
+		var at: Vector2 = dialog.hold_button.get_global_rect().get_center()
+		await _touch_tap(at)
+		await _touch_tap(at)
+		_check(Game.level("skills") == 1 and Game.tokens == 0, "repeated quick taps cannot refund skills")
+		await _touch(0, at, true)
+		await _wait(2.4)
+		_check(Game.level("skills") == 1, "holding less than three seconds never refunds")
+		await shot("rollback_hold")
+		await _touch(0, at, false)
+		await _touch(0, at, true)
+		await _wait(0.8)
+		await _touch(0, at, false)
+		_check(Game.level("skills") == 1, "separate holds do not accumulate")
+		await _touch(0, at, true)
+		await _drag(0, at, Vector2(200, 200))
+		await _wait(3.1)
+		_check(Game.level("skills") == 1, "moving off the confirmation button cancels the hold")
+		await _touch(0, Vector2(200, 200), false)
+		await _touch(0, at, true)
+		get_tree().root.propagate_notification(NOTIFICATION_APPLICATION_FOCUS_OUT)
+		await _wait(3.1)
+		get_tree().root.propagate_notification(NOTIFICATION_APPLICATION_FOCUS_IN)
+		await _touch(0, at, false)
+		_check(Game.level("skills") == 1, "focus loss cancels rollback hold")
+		await _touch(0, at, true)
+		await _wait(3.15)
+		await _touch(0, at, false)
+		_check(Game.level("skills") == 0 and Game.tokens == 5 and not is_instance_valid(tree._rollback), "one continuous hold refunds exactly once and closes dialog")
+	Game.levels = old_levels
+	Game.tokens = old_tokens
+	Game._recompute()
+	Game.changed.emit()
+	await wait_frames()
+	await _mouse_click(tree._bar.get_node("Tree_settings").get_global_rect().get_center())
+	var panel = tree.get_children().filter(func(c): return c is SettingsPanel)[0]
+	await _mouse_click(panel._tabs[3].get_global_rect().get_center())
+	var entry = panel._controls.filter(func(c): return c.get_meta("focus_key", "") == "touch_layout")[0]
+	await _mouse_click(entry.get_global_rect().get_center())
+	var editor = panel._remap
+	var targets := {"joystick": Vector2(190, 920), "interact": Vector2(1760, 920), "think": Vector2(1510, 920)}
+	for id in targets:
+		var at: Vector2 = Settings.touch_rect(id, editor.draft).get_center()
+		await _touch(0, at, true)
+		await _drag(0, at, targets[id])
+		await _touch(0, targets[id], false)
+		_check(Settings.touch_rect(id, editor.draft).get_center().distance_to(targets[id]) < 1, "drag repositions layout preview: " + id)
+	for i in 3:
+		await _mouse_click(editor._buttons[i].get_global_rect().get_center())
+		var slider: Rect2 = editor._size_slider.get_global_rect()
+		await _mouse_click(slider.position + Vector2(slider.size.x * [0.55, 0.65, 0.25][i], slider.size.y * 0.5))
+	_check(editor.draft.interact.scale > 1.0 and editor.draft.joystick.scale > 1.0 and editor.draft.think.scale < 1.0 and Settings.touch_layout.interact.scale == 1.0, "all three size previews change independently without saving")
+	await _wait(5.0) # Let the fixture's achievement toast leave the preview.
+	await shot("touch_layout_editor")
+	await _mouse_click(editor._buttons[-1].get_global_rect().get_center())
+	var saved := Settings.touch_layout.duplicate(true)
+	Settings.touch_layout = Settings.TOUCH_DEFAULT.duplicate(true)
+	Settings.load_settings()
+	_check(Settings.touch_layout == saved and saved.interact.scale > 1.0, "saved layout round-trips through the isolated settings file")
+	await _mouse_click(entry.get_global_rect().get_center())
+	editor = panel._remap
+	await _mouse_click(editor._buttons[3].get_global_rect().get_center())
+	_check(editor.draft == Settings.TOUCH_DEFAULT, "restore defaults resets the draft layout")
+	await _mouse_click(editor._buttons[4].get_global_rect().get_center())
+	_check(Settings.touch_layout == saved, "cancel leaves saved layout unchanged")
+	await _mouse_click(panel._back.get_global_rect().get_center())
+	tree._hover = ""
+	var bad := Settings.sanitize_touch_layout({"joystick": {"x": -10, "y": INF, "scale": 99}, "interact": "bad"})
+	_check(Rect2(0, 0, 1920, 1080).encloses(Settings.touch_rect("joystick", bad)) and bad.interact == Settings.TOUCH_DEFAULT.interact, "malformed layouts cannot put controls off screen")

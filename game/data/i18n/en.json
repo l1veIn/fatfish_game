@@ -191,7 +191,6 @@
  "新功能：招牌菜": "New: Signature dishes",
  "选一道招牌菜，这顿它有特别加成。": "Choose a signature dish for a special bonus this meal.",
  "去看看": "Take a look",
- "再点一次「回滚」：所有技能全额退款，重新加点": "Click Rollback again: every skill is refunded in full",
  "回滚完成：退回 %s token": "Rolled back: %s tokens refunded",
  "满足前置技能与版本条件后，空白便签才会揭晓。": "Meet the prerequisite skills and release the required version to reveal this note.",
  "尚未购买，无需退款。": "Nothing to refund: this skill has not been purchased.",
@@ -789,5 +788,16 @@
  "左下摇杆移动饭盒；右侧大按钮「交互」拿盒、送饭或放入保温箱。把饭盒移回餐桌再送饭，吃下食物才有收益。": "Move the box with the bottom-left stick. The large Interact button takes a box, serves it, or stores it in the warmer. Return to the table to serve; food only earns income when eaten.",
  "解锁后按住右侧小按钮「思考」，让食物放慢；左摇杆仍可移动饭盒。松手后冷却 1 秒，攒够能量后可再次使用。": "Once unlocked, hold the small Think button to slow food while moving with the left stick. Release to start the 1-second cooldown; use it again once enough energy has recovered.",
  "点画面上方「暂停游戏」休息，再点「继续上班」恢复。设置和图鉴关闭后仍保持暂停。": "Tap Pause at the top, then Resume shift to continue. Closing Settings or the Recipe Book keeps the game paused.",
- "轻触选项调整 · 点「返回」关闭": "Tap an option to adjust · Tap Back to close"
+ "轻触选项调整 · 点「返回」关闭": "Tap an option to adjust · Tap Back to close",
+ "摇杆": "Joystick",
+ "触控布局": "Touch layout",
+ "触控布局：位置与尺寸": "Touch layout: position and size",
+ "拖动控件调整位置，选择控件后调整大小。": "Drag a control to move it. Select one to adjust its size.",
+ "恢复默认": "Reset to defaults",
+ "保存布局": "Save layout",
+ "回滚全部技能": "Refund all skills",
+ "所有已购技能全额退款，保留版本和门票。\n长按回滚 3 秒确认；松手或移开即取消本次长按。": "Refund all purchased skills; keep versions and tickets.\nHold Rollback for 3 seconds. Release or move away to cancel the hold.",
+ "长按回滚 3 秒": "Hold Rollback for 3s",
+ "继续按住 %.1f 秒": "Keep holding: %.1fs",
+ "取消": "Cancel"
 }

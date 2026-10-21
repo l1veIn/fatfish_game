@@ -11,11 +11,12 @@
 	const clock = () => env.Date ? env.Date.now() : Date.now();
 	const timer = (fn, ms) => env.setTimeout(fn, ms);
 	const clearTimer = id => env.clearTimeout(id);
-	let sdk, support = {}, preparePromise, initialized = false, writable = false;
+	let sdk, support = {}, preparePromise, preparing = false, initialized = false, writable = false;
 	let waitingRestore = false, expectedHead = "", head = null, activeMeta = null, currentSave = "", pendingSave = "";
 	let flight = false, scheduled = null, lastAttempt = 0, retryAt = 0, failures = 0;
-	let status = "loading", english = false, offContainer = null, desiredMode = null, confirmedMode = false;
+	let status = "loading", english = false, offContainer = null, desiredMode = { orientation: "landscape", immersive: true }, confirmedMode = false;
 	let statusNode, retryButton, hideTimer, modal, initialCallback, initPromise;
+	let containerRevision = 0, modeTimer, resizeTimer, modeButton, lastContainer;
 	const messages = {
 		loading: ["正在检查云存档…", "Checking cloud save…"],
 		synced: ["云存档已同步", "Cloud save synced"],
@@ -160,19 +161,19 @@
 	}
 	function applyContainer(state) {
 		if (!state || !env.document) return;
+		lastContainer = state;
 		const style = env.document.documentElement.style, safe = state.safeArea || {};
 		for (const side of ["top", "right", "bottom", "left"])
 			style.setProperty("--toy-safe-" + side, Math.max(0, Number(safe[side]) || 0) + "px");
-		if (state.viewport && Number(state.viewport.width) > 0 && Number(state.viewport.height) > 0) {
-			style.setProperty("--toy-viewport-width", Number(state.viewport.width) + "px");
-			style.setProperty("--toy-viewport-height", Number(state.viewport.height) + "px");
-		}
 		if (state.deviceType) env.document.documentElement.dataset.toyDevice = state.deviceType;
-		confirmedMode = !!(desiredMode && state.orientation === desiredMode.orientation && state.immersive === desiredMode.immersive);
+		confirmedMode = !!(desiredMode && (desiredMode.orientation === "auto" || state.orientation === desiredMode.orientation) && state.immersive === desiredMode.immersive);
 		env.document.documentElement.dataset.toyLandscape = confirmedMode ? "confirmed" : "unconfirmed";
+		if (confirmedMode) clearTimer(modeTimer);
+		updateModeButton();
 	}
 	async function prepare() {
-		if (preparePromise) return preparePromise;
+		if (preparePromise && (preparing || sdk === env.toy)) return preparePromise;
+		preparing = true;
 		preparePromise = (async () => {
 			// Do not let a blocked SDK request delay engine loading indefinitely.
 			if (!env.toy && env.document) {
@@ -187,13 +188,14 @@
 				catch (_) { support[ability] = false; }
 			}));
 			if (support.onContainerChange) {
-				try { offContainer = sdk.onContainerChange(applyContainer); }
+				try { offContainer = sdk.onContainerChange(state => { containerRevision++; applyContainer(state); }); }
 				catch (_) { support.onContainerChange = false; }
 			}
-			if (support.getContainerState) {
-				try { applyContainer(await timeout(sdk.getContainerState(), 2000)); } catch (_) { /* CSS safe-area remains. */ }
-			}
-		})();
+			// Enter the App's landscape immersive container as soon as its SDK is ready.
+			// This also runs when the async SDK script arrives after the initial timeout.
+			requestMode();
+			await refreshContainer();
+		})().finally(() => { preparing = false; });
 		return preparePromise;
 	}
 	function describe(value) {
@@ -373,12 +375,59 @@
 		} catch (error) { failure(error); }
 		finally { flight = false; schedule(); }
 	}
-	function startGesture() {
-		if (sdk && support.setContainerMode && support.onContainerChange) {
-			desiredMode = { orientation: "landscape", immersive: true };
-			try { Promise.resolve(sdk.setContainerMode(desiredMode)).catch(() => { confirmedMode = false; }); }
-			catch (_) { confirmedMode = false; }
+	function updateModeButton(show = false) {
+		if (!env.document) return;
+		if (!modeButton && show) {
+			modeButton = env.document.createElement("button");
+			modeButton.id = "toy-fullscreen";
+			modeButton.type = "button";
+			modeButton.addEventListener("click", () => setFullscreen(true));
+			env.document.body.appendChild(modeButton);
 		}
+		if (modeButton) {
+			modeButton.textContent = text(["全屏", "Fullscreen"]);
+			modeButton.hidden = isFullscreen();
+		}
+	}
+	function isFullscreen() {
+		return !!((lastContainer && lastContainer.immersive && lastContainer.orientation === "landscape") ||
+			(env.document && env.document.fullscreenElement));
+	}
+	function requestMode() {
+		if (!sdk || !support.setContainerMode) return false;
+		clearTimer(modeTimer);
+		confirmedMode = false;
+		try {
+			Promise.resolve(sdk.setContainerMode(desiredMode)).catch(() => updateModeButton(true));
+		} catch (_) { updateModeButton(true); }
+		// A fulfilled Promise<void> is not a mode confirmation. Keep a retry available.
+		modeTimer = timer(() => { if (!confirmedMode && desiredMode.immersive) updateModeButton(true); }, 2500);
+		return true;
+	}
+	async function refreshContainer() {
+		if (!sdk || !support.getContainerState) return;
+		const revision = containerRevision;
+		try {
+			const state = await timeout(sdk.getContainerState(), 2000);
+			if (revision === containerRevision) applyContainer(state);
+		} catch (_) { /* The actual DOM viewport remains authoritative for canvas size. */ }
+	}
+	function setFullscreen(on) {
+		desiredMode = { orientation: on ? "landscape" : "auto", immersive: on };
+		if (!requestMode() && env.document) {
+			try {
+				const result = on ? env.document.documentElement.requestFullscreen?.() : env.document.exitFullscreen?.();
+				Promise.resolve(result).catch(() => updateModeButton(true));
+			} catch (_) { updateModeButton(true); }
+			if (on) updateModeButton(true);
+		}
+		return true;
+	}
+	function startGesture() {
+		desiredMode = { orientation: "landscape", immersive: true };
+		if (support.setContainerMode) requestMode();
+		else if (env.matchMedia && env.matchMedia("(pointer: coarse)").matches) setFullscreen(true);
+		void prepare();
 		const canvas = env.document && env.document.getElementById("canvas");
 		if (canvas) canvas.focus();
 	}
@@ -437,7 +486,7 @@
 		return result;
 	}
 	const api = {
-		prepare, startGesture, openAuthor, saveImage,
+		prepare, startGesture, setFullscreen, isFullscreen, openAuthor, saveImage,
 		init(local, callback) {
 			if (!initPromise) initPromise = initialize(local, callback);
 			return initPromise;
@@ -469,12 +518,18 @@
 			english = String(locale).toLowerCase().startsWith("en");
 			if (env.document) env.document.documentElement.lang = english ? "en" : "zh-CN";
 			setStatus(status);
+			updateModeButton();
 		},
 		retry,
 	};
 	if (env.document && env.addEventListener) {
 		env.document.addEventListener("visibilitychange", () => {
 			if (env.document.hidden) void flush();
+		});
+		env.document.addEventListener("fullscreenchange", () => updateModeButton(true));
+		env.addEventListener("resize", () => {
+			clearTimer(resizeTimer);
+			resizeTimer = timer(refreshContainer, 150);
 		});
 		env.addEventListener("pagehide", () => { void flush(); });
 		env.addEventListener("unload", () => { if (typeof offContainer === "function") offContainer(); });

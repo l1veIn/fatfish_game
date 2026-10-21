@@ -57,7 +57,7 @@ function harness(options = {}) {
 		navigate(req) { calls.push({ type: "navigate", req }); return Promise.resolve(); },
 		saveImageToAlbum(req) { calls.push({ type: "album", req }); return Promise.resolve({ localPath: "album/image.png" }); },
 		onContainerChange(fn) { calls.push({ type: "listen" }); options.containerListener = fn; return () => {}; },
-		getContainerState: async () => ({ deviceType: "phone", orientation: "portrait", immersive: false, safeArea: {} }),
+		getContainerState: async () => options.containerState ? options.containerState() : ({ deviceType: "phone", orientation: "portrait", immersive: false, safeArea: {} }),
 		setContainerMode(req) { calls.push({ type: "mode", req }); return Promise.resolve(); },
 	};
 	const env = {
@@ -266,4 +266,47 @@ test("App container listener precedes request; resolving request is not confirma
 	assert.equal(result.ok, true); assert.equal(h.calls.at(-1).type, "album");
 	const tooBig = await h.api.saveImage("A".repeat(5242881), "a.png");
 	assert.equal(tooBig.ok, false);
+});
+
+
+test("late SDK still automatically requests App immersion after an early entry gesture", async () => {
+	const h = harness({ noSDK: true, dom: true, abilities: ["onContainerChange", "getContainerState", "setContainerMode"] });
+	h.api.startGesture();
+	await h.advance(2100);
+	assert.equal(h.calls.filter(c => c.type === "mode").length, 0);
+	h.env.toy = h.sdk;
+	await h.api.prepare();
+	assert.deepEqual(h.calls.find(c => c.type === "mode").req, { orientation: "landscape", immersive: true });
+	await h.advance(2600);
+	assert.equal(h.doc.getElementById("toy-fullscreen").hidden, false, "unconfirmed request offers a retry");
+	h.options.containerListener({ orientation: "landscape", immersive: true, safeArea: {} });
+	assert.equal(h.api.isFullscreen(), true);
+	assert.equal(h.doc.getElementById("toy-fullscreen").hidden, true);
+	h.api.setFullscreen(false);
+	assert.deepEqual(h.calls.at(-1).req, { orientation: "auto", immersive: false });
+});
+
+test("SDK arriving during startup shares the pending preparation and registers one listener", async () => {
+	const h = harness({ noSDK: true, dom: true, abilities: ["onContainerChange", "getContainerState", "setContainerMode"] });
+	const first = h.api.prepare();
+	await h.advance(500);
+	h.env.toy = h.sdk;
+	const onload = h.api.prepare();
+	await h.advance(50);
+	await Promise.all([first, onload]);
+	assert.equal(h.calls.filter(c => c.type === "listen").length, 1);
+	assert.equal(h.calls.filter(c => c.type === "mode").length, 1);
+});
+
+test("stale initial container read cannot override a newer landscape notification", async () => {
+	let finish;
+	const h = harness({ dom: true, abilities: ["onContainerChange", "getContainerState", "setContainerMode"],
+		containerState: () => new Promise(resolve => { finish = resolve; }) });
+	const prepared = h.api.prepare();
+	await h.settle();
+	h.options.containerListener({ orientation: "landscape", immersive: true, safeArea: {}, viewport: { width: 900, height: 400 } });
+	finish({ orientation: "portrait", immersive: false, safeArea: {}, viewport: { width: 400, height: 700 } });
+	await prepared;
+	assert.equal(h.doc.documentElement.dataset.toyLandscape, "confirmed");
+	assert.equal(h.api.isFullscreen(), true);
 });

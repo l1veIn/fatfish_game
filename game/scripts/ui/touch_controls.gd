@@ -101,6 +101,8 @@ func _ready() -> void:
 	think_button.name = "TouchThink"
 	think_button.held_changed.connect(func(held: bool): think_held = held)
 	add_child(think_button)
+	style_action(deliver_button)
+	style_action(think_button)
 	pause_button = make_button(tr("暂停游戏"), Rect2(420, 24, 170, 96), 28)
 	pause_button.name = "TouchPause"
 	pause_button.pressed.connect(func(): pause_requested.emit())
@@ -112,7 +114,8 @@ func _ready() -> void:
 	hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	hint.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(hint)
-	Settings.changed.connect(_refresh)
+	Settings.changed.connect(_apply_layout)
+	_apply_layout()
 	_refresh()
 
 
@@ -174,6 +177,7 @@ func _add_joystick() -> void:
 	joystick.pressed.connect(func(): _joystick_held = true)
 	joystick.released.connect(func(_direction: Vector2): _joystick_held = false)
 	add_child(joystick)
+	_place_control(joystick, "joystick")
 
 
 func _replace_joystick() -> void:
@@ -183,3 +187,26 @@ func _replace_joystick() -> void:
 	remove_child(joystick)
 	joystick.queue_free()
 	_add_joystick()
+
+
+static func style_action(button: Button) -> void:
+	for state in ["normal", "hover", "pressed", "disabled"]:
+		var alpha := 0.55 if state == "pressed" else (0.18 if state == "disabled" else 0.32)
+		button.add_theme_stylebox_override(state, UiKit.box(Color(0.12, 0.08, 0.05, alpha), Color(1, 0.93, 0.8, 0.5), 2, 24))
+	for state in ["font_color", "font_hover_color", "font_pressed_color"]:
+		button.add_theme_color_override(state, Color(1, 0.96, 0.86))
+	button.add_theme_color_override("font_disabled_color", Color(1, 0.96, 0.86, 0.45))
+	button.add_theme_color_override("font_outline_color", Color(0.05, 0.03, 0.01, 0.7))
+	button.add_theme_constant_override("outline_size", 3)
+
+
+func _place_control(control: Control, id: String) -> void:
+	control.position = Settings.touch_rect(id).position
+	control.scale = Vector2.ONE * Settings.touch_layout[id].scale
+
+
+func _apply_layout() -> void:
+	cancel_touch()
+	for pair in [[joystick, "joystick"], [deliver_button, "interact"], [think_button, "think"]]:
+		if is_instance_valid(pair[0]):
+			_place_control(pair[0], pair[1])

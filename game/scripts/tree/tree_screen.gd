@@ -38,6 +38,7 @@ var _trial: Button
 var _planner: Control
 var _book: Control
 var _crew_planner: Control
+var _rollback: Control
 var _crew_button: Button
 var _modal_focus: Array = []
 var _tooltip_bounds := Rect2()
@@ -314,7 +315,7 @@ func _tools_have_focus() -> bool:
 
 
 func _has_input_modal() -> bool:
-	return is_instance_valid(_planner) or is_instance_valid(_crew_planner) or is_instance_valid(_book) or get_children().any(func(c): return c is SettingsPanel or c is RecipeBook)
+	return is_instance_valid(_rollback) or is_instance_valid(_planner) or is_instance_valid(_crew_planner) or is_instance_valid(_book) or get_children().any(func(c): return c is SettingsPanel or c is RecipeBook)
 
 
 const FEATURES := {
@@ -385,19 +386,32 @@ func _on_trial() -> void:
 		_fish.play("broke")
 
 
-## 回滚到 checkpoint: refund every skill (two clicks).
-var _respec_armed := 0.0
-
-
+## Open a guarded full-refund dialog. Only a continuous three-second hold confirms.
 func _on_respec() -> void:
-	if _respec_armed <= 0.0:
-		_respec_armed = 3.0
-		_flash_text = tr("再点一次「回滚」：所有技能全额退款，重新加点")
-		return
-	_respec_armed = 0.0
-	var back := Game.respec()
-	_flash_text = tr("回滚完成：退回 %s token") % Game.fmt(back)
-	Audio.sfx("buy", -3.0)
+	if _has_input_modal(): return
+	var previous: WeakRef = weakref(get_viewport().gui_get_focus_owner())
+	var focus_states: Array = [{"node": weakref(self), "mode": focus_mode}]
+	focus_mode = Control.FOCUS_NONE
+	for control in find_children("*", "Control", true, false):
+		focus_states.append({"node": weakref(control), "mode": control.focus_mode})
+		control.focus_mode = Control.FOCUS_NONE
+	_cancel_touch_gesture()
+	var panel := preload("res://scripts/ui/rollback_confirm.gd").new()
+	_rollback = panel
+	panel.confirmed.connect(func():
+		var back := Game.respec()
+		_flash_text = tr("回滚完成：退回 %s token") % Game.fmt(back)
+		Audio.sfx("buy", -3.0))
+	panel.closed.connect(func():
+		if panel.get_parent() == self: remove_child(panel)
+		_rollback = null
+		for state in focus_states:
+			var control = state.node.get_ref()
+			if is_instance_valid(control): control.focus_mode = state.mode
+		var target = previous.get_ref()
+		if is_instance_valid(target) and target.is_inside_tree(): target.grab_focus.call_deferred()
+		else: grab_focus.call_deferred())
+	add_child(panel)
 
 
 var _flash_text := ""
@@ -583,7 +597,6 @@ func _is_refund_input(event: InputEvent) -> bool:
 
 
 func _process(delta: float) -> void:
-	_respec_armed = maxf(_respec_armed - delta, 0.0)
 	_flash_time = maxf(_flash_time - delta, 0.0)
 	if _hover != "" and not _is_displayed(_hover):
 		_hover = ""

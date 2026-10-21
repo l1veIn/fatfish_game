@@ -20,6 +20,7 @@ var _active_tab := 0
 var _return_focus: WeakRef
 var _closing := false
 var _language := ""
+var _web_mode_poll := 0.0
 var _fullscreen_toggle: CheckButton
 var _resolution: OptionButton
 var _remap: Control
@@ -163,6 +164,10 @@ func _accessibility_page() -> void:
 
 
 func _game_page() -> void:
+	var touch := UiKit.button(tr("触控布局：位置与尺寸"), 28, Vector2(0, 66))
+	_register(touch, "touch_layout")
+	touch.pressed.connect(_open_touch_layout)
+	_content.add_child(touch)
 	var row := _row(tr("语言 / Language"))
 	var lang := _option("language")
 	for code in Settings.LANGUAGES:
@@ -333,6 +338,12 @@ func _on_reset() -> void:
 
 
 func _process(delta: float) -> void:
+	if OS.has_feature("web") and is_instance_valid(_fullscreen_toggle):
+		_web_mode_poll -= delta
+		if _web_mode_poll <= 0:
+			_web_mode_poll = 0.25
+			Settings.fullscreen = bool(JavaScriptBridge.eval("window.FatFishToy ? window.FatFishToy.isFullscreen() : !!document.fullscreenElement"))
+			_fullscreen_toggle.set_pressed_no_signal(Settings.fullscreen)
 	if _reset_armed > 0.0:
 		_reset_armed -= delta
 		if _reset_armed <= 0.0 and is_instance_valid(_reset_btn) and not _reset_btn.disabled:
@@ -347,18 +358,35 @@ func _unhandled_input(event: InputEvent) -> void:
 
 
 func _open_remap() -> void:
-	if is_instance_valid(_remap): return
+	_open_controls_panel(InputRemapPanel.new())
+
+
+func _open_touch_layout() -> void:
+	_open_controls_panel(preload("res://scripts/ui/touch_layout_panel.gd").new(), true)
+
+
+func _open_controls_panel(panel: Control, preview := false) -> void:
+	if is_instance_valid(_remap):
+		panel.free()
+		return
 	var opener := get_viewport().gui_get_focus_owner()
 	var previous: WeakRef = weakref(opener) if opener != null else null
 	_remap_focus.clear()
 	for control in find_children("*", "Control", true, false):
 		_remap_focus.append({"node": weakref(control), "mode": control.focus_mode})
 		control.focus_mode = Control.FOCUS_NONE
-	var panel := InputRemapPanel.new()
+	var hidden: Array[CanvasItem] = []
+	if preview:
+		for child in get_children():
+			if child is CanvasItem and child.visible:
+				hidden.append(child)
+				child.hide()
 	_remap = panel
 	panel.closed.connect(func():
 		if panel.get_parent() == self: remove_child(panel)
 		_remap = null
+		for child in hidden:
+			if is_instance_valid(child): child.show()
 		for state in _remap_focus:
 			var control = state.node.get_ref()
 			if is_instance_valid(control): control.focus_mode = state.mode

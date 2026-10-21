@@ -1214,7 +1214,7 @@
     "start"
    ],
    "max": 1,
-   "cost": 90,
+   "cost": 5,
    "growth": 1.0,
    "effects": {
     "auto_push": {
