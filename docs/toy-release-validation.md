@@ -1,6 +1,6 @@
 # Toy 0.4.2 发布候选验收
 
-更新：2026-10-21（北京时间）。状态：**候选包已上传，未发布、未提交审核；线上运行验收尚有网络阻碍。**
+更新：2026-10-21（北京时间）。状态：**候选包已上传，Toy 线上预览可运行；未发布、未提交审核，等待用户决定。真实云同步与物理手机仍未验收。**
 
 ## 候选与复现
 
@@ -45,11 +45,12 @@ Godot 4.7.2 Compatibility、WebGL 2、单线程，不要求跨源隔离。资源
 
 自动化报告：`build/qa/toy-touch-final-zh/report.json`、`toy-touch-final-en/report.json`、`toy-touch-desktop-regression02/report.json`、`toy-ending-final/report.json`。这些报告记录各自源码摘要；触控报告先于最终字体补全，最终字体和浏览器路径由 RC1 构建及浏览器复查覆盖。
 
-浏览器截图位于 `build/toy-final-rc1/qa/`：`browser-delivery.jpg`、`browser-settings.jpg`、`browser-settlement.jpg`、`browser-tree.jpg`、`browser-reload-persistence.jpg`、`toy-uploaded-unpublished.jpg`。浏览器视口覆盖请求没有改变实际 2125×841 的页面尺寸，因此不计为窄屏浏览器验收；960×540 结果来自 Godot 触控测试。`browser-console.json` 保存最终包的启动日志，实测期间未捕获到错误或警告；没有进行实际音频输出录制或听觉验收。
+浏览器截图位于 `build/toy-final-rc1/qa/`：`browser-delivery.jpg`、`browser-settings.jpg`、`browser-settlement.jpg`、`browser-tree.jpg`、`browser-reload-persistence.jpg`、`toy-uploaded-unpublished.jpg`。浏览器视口覆盖请求未可靠改变实际页面尺寸（本地 2125×841，线上本轮 2656×995），因此不计为窄屏浏览器验收；960×540 结果来自 Godot 触控测试。`browser-console.json` 保存最终包的启动日志，实测期间未捕获到错误或警告；没有进行实际音频输出录制或听觉验收。
 
 ## Toy 预览及发布资料
 
-- 预览：https://www.bilibili.com/toy/preview/preview_2GHUBKQX/index.html
+- 当前发布表单的预览：https://www.bilibili.com/toy/preview/preview_5fQDiQbe/index.html
+- 完整流程验收先在 `preview_2GHUBKQX` 完成；同一 ZIP 重新上传后刷新了旧 DNS 错误的内嵌预览，生成当前链接。两次候选 ZIP 的 SHA-256 相同，当前链接另行确认启动并保留第 2 顿、8 token。最终发布表单截图为 `toy-ready-unpublished.jpg`，独立预览截图为 `toy-final-preview.jpg`。
 - 名称：吃白饭的大肥鱼。
 - 拟用页面地址：`fatfish-free-lunch`；尚未发布，不承诺已占用此地址。
 - 分类：游戏。
@@ -57,8 +58,12 @@ Godot 4.7.2 Compatibility、WebGL 2、单线程，不要求跨源隔离。资源
 - 图标：`game/assets/ui/icon.png`。
 - 当前表单为“链接访问”、深色主题，未参加活动，未启用访客水印。
 
-Toy 上传校验已通过并生成上述预览。Chrome 内的预览 iframe 报 `www.bilibilitoy.com` 无法解析；Windows DNS 查询也失败。公共 DNS-over-HTTPS 查询能解析该域名，使用其返回地址并保留原域名和正常 TLS 校验的独立 HTTP 诊断能取回上传的 HTML（HTTP 200）。这证明预览资源已上传，不能代替浏览器端完整运行验收。
+Toy 上传校验已通过并生成上述预览。此前 `www.bilibilitoy.com` 无法解析的问题已修复：OpenClash 的加密 DNS 上游使用 `#proxy`，但没有对应代理组或网卡，内核返回 `no such device`。备份后将 DNS 引用改为现有代理组并热加载；路由器、Windows DNS 与 Chrome 实际加载均恢复。没有重启路由器，代理节点选择保持不变。修复记录在本地 `build/toy-final-rc1/qa/network-repair.json`，凭据及路由器配置不进入仓库。
 
-尚需在可访问该域名的网络完成 Toy 预览启动、真实云存档读写/刷新恢复；物理手机/B 站 App 的横屏、安全区、触控、音频和保存到相册也尚未实测。预览可供用户用另一网络或手机检查。
+真实 Toy 预览中已确认标题、美术、作者文字、开始游戏、引导拿盘、接菜、送饭计分（8 token）、暂停与设置、倒计时自然结束结账及返回技能树可用。刷新后恢复第 2 顿、8 token，作者链接实际打开正确的 B 站空间。云读取失败时明确提示保存在本机，未阻止游戏。证据为 `toy-online-title.jpg`、`toy-online-delivery.jpg`、`toy-online-settings.jpg`、`toy-online-settlement.jpg`、`toy-online-tree.jpg`、`toy-online-reload.jpg`；日志为 `toy-online-console.json`，其中仅捕获翻译扩展及 B 站 reporter 的无关告警，未捕获游戏运行错误。
+
+云存档仍为未验证：预览页面的内联脚本没有注入正式 Toy ID；检查官方公开的 [toy-host.js](https://s1.hdslb.com/bfs/seed/toy/app/sdk/toy-host.js) 后确认其存储分支先校验该 ID，无有效 ID 会报 `toy id not available on host`。这与当前失败相符，但本轮未捕获 SDK 的具体错误对象，不能据此宣称正式发布后的云同步已通过。官方 [toy-sdk.js](https://s1.hdslb.com/bfs/seed/toy/app/sdk/toy-sdk.js) 的云存储参数与当前接入一致。两份公开脚本的检查副本保存在本地 QA 目录。
+
+物理手机/B 站 App 的横屏、安全区、触控、音频和保存到相册尚未实测。上述限制不以桌面运行或模拟测试代替。
 
 正式发布或提交审核必须等待用户决定。本轮未点击“发布”。
