@@ -160,9 +160,9 @@ func _refresh() -> void:
 	var instructions: Array
 	match _device:
 		"touch":
-			instructions = [tr("点右侧大按钮「交互」拿起饭盒。"),
+			instructions = [tr("点右下角餐桌上的空饭盒拿起。"),
 				tr("拖动玩家之手，饭盒在手指左上方接菜；也可用摇杆。"),
-				tr("端着饭盒移回右侧餐桌，再点「交互」送饭。")]
+				tr("点右侧餐桌，把饭盒放下送饭。拖动后松手不会送饭。")]
 		"keyboard", "pad":
 			var device := "gamepad" if _device == "pad" else "keyboard"
 			var deliver := Settings.binding_label("deliver", device)

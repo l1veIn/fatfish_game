@@ -39,6 +39,12 @@ const PLAYER_HAND := preload("res://scripts/ui/player_hand.gd")
 var _touch_finger := -1
 var _touch_at := Vector2.ZERO
 var _touch_hand_visible := false
+var _touch_start := Vector2.ZERO
+var _touch_started_ms := 0
+var _touch_tap_target := ""
+var _touch_box: Variant
+const TOUCH_TAP_SLOP := 18.0
+const TOUCH_TAP_MS := 450
 var _meal_visual = null
 var _journal = null
 var _journal_bite_phase := "live"
@@ -612,26 +618,34 @@ func _enable_touch_controls() -> void:
 		return
 	_touch_controls = TOUCH_UI.new()
 	_touch_controls.run = self
-	_touch_controls.deliver_requested.connect(_touch_deliver)
 	_touch_controls.pause_requested.connect(pause)
 	add_child(_touch_controls)
 	Settings.changed.connect(_cancel_touch)
 
 
-func _touch_deliver() -> void:
-	if _ended or get_tree().paused:
+func _touch_target(at: Vector2) -> String:
+	if _hand == null:
+		return "stack" if _empty > 0 and Rect2(STACK_AT - Vector2(80, 70), Vector2(160, 125)).has_point(at) else ""
+	if warm and WARM_RECT.has_point(at): return "warmer"
+	return "table" if TABLE.has_point(at) else ""
+
+
+func _touch_activate(target: String, at: Vector2) -> void:
+	if _ended or get_tree().paused or _hand != _touch_box or _touch_target(at) != target:
 		return
 	_touch_hand_visible = true
-	# The pickup button is on the table. A carried box must still be moved back
-	# there (or to the warmer) before the shared delivery path accepts it.
-	if _hand == null:
-		_aim = Vector2(STACK_AT.x, _hand_bottom())
-		_mouse_steering = true
+	_mouse_steering = true
+	# A deliberate tap carries the box to the selected surface, then reuses the
+	# same empty-box, serving, busy-table and warmer rules as desktop input.
+	_aim = WARM_AT if target == "warmer" else Vector2(at.x, _hand_bottom())
+	if _hand != null: _hand.pos = _aim
 	_try_deliver()
 
 
 func _cancel_touch() -> void:
 	_touch_finger = -1
+	_touch_tap_target = ""
+	_touch_box = null
 	if is_instance_valid(_touch_controls):
 		_touch_controls.cancel_touch()
 
@@ -1355,10 +1369,18 @@ func _input(event: InputEvent) -> void:
 	if _touch_finger < 0 or _ended or autotest: return
 	if event is InputEventScreenDrag and event.index == _touch_finger:
 		_touch_at = get_canvas_transform().affine_inverse() * event.position
-		_aim = _touch_basin_target(_touch_at)
+		if _touch_at.distance_to(_touch_start) > TOUCH_TAP_SLOP:
+			_touch_tap_target = ""
+		if _touch_tap_target.is_empty() and _hand != null:
+			_aim = _touch_basin_target(_touch_at)
 		get_viewport().set_input_as_handled()
 	elif event is InputEventScreenTouch and event.index == _touch_finger and (not event.pressed or event.canceled):
+		var at: Vector2 = get_canvas_transform().affine_inverse() * event.position
+		if not event.canceled and not _touch_tap_target.is_empty() and at.distance_to(_touch_start) <= TOUCH_TAP_SLOP and Time.get_ticks_msec() - _touch_started_ms <= TOUCH_TAP_MS:
+			_touch_activate(_touch_tap_target, at)
 		_touch_finger = -1
+		_touch_tap_target = ""
+		_touch_box = null
 		get_viewport().set_input_as_handled()
 
 
@@ -1380,18 +1402,24 @@ func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventMouse and event.device == InputEvent.DEVICE_ID_EMULATION:
 		return
 	if event is InputEventScreenTouch or event is InputEventScreenDrag:
-		if _ended or autotest:
+		if _ended or autotest or _resume_input_guard > 0.0:
 			return
 		_enable_touch_controls()
 		_hint_input_device = "touch"
 		if _journal != null:
 			_journal.data.input_devices["touch"] = true
-		if event is InputEventScreenTouch and event.pressed and not event.canceled and _touch_finger < 0 and _hand != null:
-			_touch_finger = event.index
+		if event is InputEventScreenTouch and event.pressed and not event.canceled and _touch_finger < 0:
 			_touch_at = get_canvas_transform().affine_inverse() * event.position
-			_touch_hand_visible = true
-			_mouse_steering = true
-			_aim = _touch_basin_target(_touch_at)
+			_touch_tap_target = _touch_target(_touch_at)
+			if _hand != null or not _touch_tap_target.is_empty():
+				_touch_finger = event.index
+				_touch_start = _touch_at
+				_touch_started_ms = Time.get_ticks_msec()
+				_touch_box = _hand
+				_touch_hand_visible = true
+				_mouse_steering = true
+				if _hand != null and _touch_tap_target.is_empty():
+					_aim = _touch_basin_target(_touch_at)
 		get_viewport().set_input_as_handled()
 		return
 	if _journal != null and not _ended:

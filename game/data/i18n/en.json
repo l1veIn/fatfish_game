@@ -807,5 +807,11 @@
  "触点是玩家之手，饭盒位于左上方；下方预览握持距离。": "Your touch controls the hand; the box stays above-left. Preview the reach below.",
  "手臂距离 · %d": "Arm reach · %d",
  "拖动玩家之手，端着手指左上方的饭盒接菜，也可用摇杆。右侧「交互」拿盒、送饭或放入保温箱；手臂距离可在设置中调整。": "Drag your hand to carry the box above-left of your finger, or use the stick. Interact takes a box, serves, or stores it in the warmer. Adjust arm reach in Settings.",
- "解锁后按住右侧小按钮「思考」，另一根手指仍可拖动手臂或摇杆。松手后冷却 1 秒，攒够能量后可再次使用。": "Once unlocked, hold the small Think button; another finger can still drag the hand or stick. Release for a 1-second cooldown, then use it again when energy recovers."
+ "解锁后按住右侧小按钮「思考」，另一根手指仍可拖动手臂或摇杆。松手后冷却 1 秒，攒够能量后可再次使用。": "Once unlocked, hold the small Think button; another finger can still drag the hand or stick. Release for a 1-second cooldown, then use it again when energy recovers.",
+ "点右下角餐桌上的空饭盒拿起。": "Tap the empty trays on the bottom-right table to pick one up.",
+ "点右侧餐桌，把饭盒放下送饭。拖动后松手不会送饭。": "Tap the table on the right to serve. Lifting your dragging finger will not serve.",
+ "点空饭盒拿起，拖动玩家之手接菜，也可用摇杆。点餐桌送饭或归还空盒，点保温箱存放；拖动后松手不会送饭。手臂距离可在设置中调整。": "Tap an empty tray to pick it up. Drag your hand or use the stick to catch food. Tap the table to serve or return an empty tray; tap the warmer to store food. Releasing a drag will not serve. Adjust arm reach in Settings.",
+ "拖动玩家之手或拨动摇杆 · 点餐桌送饭": "Drag your hand or use the stick · Tap the table to serve",
+ "点空饭盒拿起 · 拖动玩家之手移动": "Tap an empty tray to pick up · Drag your hand to move",
+ "解锁后按住摇杆上方的「思考」，另一根手指仍可拖动手臂或摇杆。松手后冷却 1 秒，攒够能量后可再次使用。": "Once unlocked, hold Think above the stick while your other finger drags the arm or stick. Releasing starts a 1-second cooldown; use it again when energy recovers."
 }

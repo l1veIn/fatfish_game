@@ -34,7 +34,7 @@ const TOUCH_BASE := {"joystick": Vector2(184, 184), "interact": Vector2(236, 176
 const TOUCH_DEFAULT := {
 	"joystick": {"x": 148.0 / 1920, "y": 976.0 / 1080, "scale": 1.0},
 	"interact": {"x": 1766.0 / 1920, "y": 976.0 / 1080, "scale": 1.0},
-	"think": {"x": 1549.0 / 1920, "y": 1000.0 / 1080, "scale": 1.0}}
+	"think": {"x": 148.0 / 1920, "y": 770.0 / 1080, "scale": 1.0}}
 var touch_layout: Dictionary = TOUCH_DEFAULT.duplicate(true)
 var touch_arm_distance := 200.0
 
@@ -106,6 +106,11 @@ func _read_config(cfg: ConfigFile) -> void:
 	hit_pause = bool(cfg.get_value("accessibility", "hit_pause", hit_pause))
 	_read_bindings(cfg.get_value("controls", "bindings", {}))
 	touch_layout = sanitize_touch_layout(cfg.get_value("controls", "touch_layout", {}))
+	# Move the old untouched default only; user-positioned/resized controls stay put.
+	if int(cfg.get_value("controls", "touch_layout_version", 1)) < 2:
+		var previous: Dictionary = touch_layout.think
+		if is_equal_approx(previous.x, 1549.0 / 1920) and is_equal_approx(previous.y, 1000.0 / 1080) and is_equal_approx(previous.scale, 1.0):
+			touch_layout.think = TOUCH_DEFAULT.think.duplicate(true)
 	touch_arm_distance = sanitize_arm_distance(cfg.get_value("controls", "touch_arm_distance", 200.0))
 
 
@@ -130,6 +135,7 @@ func _create_config() -> ConfigFile:
 	cfg.set_value("accessibility", "hit_pause", hit_pause)
 	cfg.set_value("controls", "bindings", _bindings.duplicate(true))
 	cfg.set_value("controls", "touch_layout", touch_layout.duplicate(true))
+	cfg.set_value("controls", "touch_layout_version", 2)
 	cfg.set_value("controls", "touch_arm_distance", touch_arm_distance)
 	return cfg
 

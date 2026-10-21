@@ -1,42 +1,45 @@
 extends RefCounted
-## Shared grip art. The forearm sits behind the tray; fingers wrap over its outer rim.
-const INK := Color("372a35")
-const SKIN := Color("f0c9aa")
+## One rigid painted arm in the tray's elevated perspective. Reach exposes more
+## sleeve by clipping UVs; no frame can stretch, shear, rotate or flip the art.
+const ART := preload("res://assets/canteen/player_hand.png")
+const SOURCE_GRIP := Vector2(145, 90)
+const AXIS := Vector2(0.707107, 0.707107)
+const HAND_SCALE := 0.30
+const THUMB := Rect2(95, 45, 190, 115)
 
 
 static func grip(art: Rect2) -> Vector2:
-	return art.end - Vector2(25, 28)
+	return art.end - Vector2(12, maxf(35, art.size.y * 0.17 + 10))
 
 
 static func draw_arm(ci: CanvasItem, art: Rect2, touch: Vector2) -> void:
-	var palm := grip(art)
-	var direction := (touch - palm).normalized()
-	if direction.length_squared() < 0.1: direction = Vector2(1, 1).normalized()
-	var side := direction.orthogonal()
-	var cuff := palm.lerp(touch, 0.42)
-	var wrist := palm + direction * 24
-	var arm := PackedVector2Array([wrist - side * 18, touch - side * 34, touch + side * 34, wrist + side * 18])
-	ci.draw_colored_polygon(arm, SKIN)
-	ci.draw_polyline(PackedVector2Array([arm[0], arm[1], arm[2], arm[3], arm[0]]), INK, 5, true)
-	var sleeve := PackedVector2Array([cuff - side * 25, touch - side * 35, touch + side * 35, cuff + side * 25])
-	ci.draw_colored_polygon(sleeve, Color("647ca6"))
-	ci.draw_polyline(PackedVector2Array([sleeve[0], sleeve[1], sleeve[2], sleeve[3], sleeve[0]]), INK, 5, true)
-	ci.draw_line(cuff - side * 25, cuff + side * 25, Color("fff0d5"), 16, true)
-	ci.draw_line(cuff - side * 25, cuff + side * 25, INK, 2, true)
-	ci.draw_circle(palm, 29, INK, true, -1, true)
-	ci.draw_circle(palm, 25, SKIN, true, -1, true)
-	ci.draw_line(wrist, cuff - direction * 11, Color("ffdfc1"), 13, true)
+	var anchor := grip(art)
+	# Keep the whole wrist/cuff and a short sleeve even at minimum reach.
+	var length := maxf(160.0, (touch - anchor).dot(AXIS)) / HAND_SCALE
+	var corners := PackedVector2Array([Vector2.ZERO, Vector2(ART.get_width(), 0), ART.get_size(), Vector2(0, ART.get_height())])
+	var source := _clip(corners, length)
+	var points := PackedVector2Array()
+	var uv := PackedVector2Array()
+	for p in source:
+		points.append(anchor + (p - SOURCE_GRIP) * HAND_SCALE)
+		uv.append(p / ART.get_size())
+	ci.draw_polygon(points, PackedColorArray([Color.WHITE]), uv, ART)
+
+
+static func _clip(points: PackedVector2Array, length: float) -> PackedVector2Array:
+	var result := PackedVector2Array()
+	for i in points.size():
+		var a := points[i]
+		var b := points[(i + 1) % points.size()]
+		var da := (a - SOURCE_GRIP).dot(AXIS) - length
+		var db := (b - SOURCE_GRIP).dot(AXIS) - length
+		if da <= 0: result.append(a)
+		if (da <= 0) != (db <= 0): result.append(a.lerp(b, da / (da - db)))
+	return result
 
 
 static func draw_fingers(ci: CanvasItem, art: Rect2) -> void:
-	var palm := grip(art)
-	# Curled fingers remain on the outside rim, below the food compartments.
-	for i in 3:
-		var from := palm + Vector2(-22 + i * 12, -5 + i * 3)
-		var to := from + Vector2(3, 18)
-		ci.draw_line(from, to, INK, 12, true)
-		ci.draw_circle(from, 6, INK, true, -1, true)
-		ci.draw_line(from, to, SKIN, 8, true)
-		ci.draw_circle(from, 4, SKIN, true, -1, true)
-	ci.draw_line(palm + Vector2(17, -13), palm + Vector2(25, 4), INK, 16, true)
-	ci.draw_line(palm + Vector2(17, -13), palm + Vector2(25, 4), SKIN, 11, true)
+	# The painted thumb overlaps the near-right lip. The tray occludes the
+	# supporting palm/fingers, keeping the food compartments unobstructed.
+	var destination := Rect2(grip(art) + (THUMB.position - SOURCE_GRIP) * HAND_SCALE, THUMB.size * HAND_SCALE)
+	ci.draw_texture_rect_region(ART, destination, THUMB)

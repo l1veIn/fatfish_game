@@ -2,12 +2,10 @@ extends Control
 ## Touch-only additions use the same serving and thinking code as desktop controls.
 ## Touch buttons own their finger until release; no global Input action is held.
 
-signal deliver_requested
 signal pause_requested
 
 var run: Node
 var think_held := false
-var deliver_button: Button
 var think_button: Button
 var pause_button: Button
 var hint: Label
@@ -93,15 +91,10 @@ func _ready() -> void:
 	z_index = 100
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_add_joystick()
-	deliver_button = make_button(tr("交互"), Rect2(1648, 888, 236, 176), 36)
-	deliver_button.name = "TouchDeliver"
-	deliver_button.pressed.connect(func(): deliver_requested.emit())
-	add_child(deliver_button)
-	think_button = make_button("", Rect2(1474, 936, 150, 128), 26)
+	think_button = make_button("", Rect2(73, 706, 150, 128), 26)
 	think_button.name = "TouchThink"
 	think_button.held_changed.connect(func(held: bool): think_held = held)
 	add_child(think_button)
-	style_action(deliver_button)
 	style_action(think_button)
 	pause_button = make_button(tr("暂停游戏"), Rect2(420, 24, 170, 96), 28)
 	pause_button.name = "TouchPause"
@@ -124,22 +117,22 @@ func _process(_delta: float) -> void:
 
 
 func _refresh() -> void:
-	if not is_instance_valid(run) or not is_instance_valid(deliver_button):
+	if not is_instance_valid(run) or not is_instance_valid(think_button):
 		return
 	visible = not run._ended
+	think_button.visible = run.can_think
 	think_button.disabled = not run.can_think
-	think_button.text = tr("按住\n思考") if run.can_think else tr("思考\n未解锁")
+	if not run.can_think:
+		think_button.cancel_touch()
+		think_held = false
+	think_button.text = tr("按住\n思考")
 	pause_button.text = tr("暂停游戏")
 	if not visible:
 		cancel_touch()
 		return
 	var has_box: bool = run._hand != null
-	var at_table: bool = has_box and run.TABLE.grow(60).has_point(run._hand.pos)
-	var at_warmer: bool = has_box and run.warm and run.WARM_RECT.grow(20).has_point(run._hand.pos) and not run._hand.items.is_empty()
-	deliver_button.text = tr("交互")
-	deliver_button.disabled = run._empty <= 0 if not has_box else not (at_table or at_warmer)
 	hint.visible = not (is_instance_valid(run._coach) and run._coach.visible)
-	hint.text = tr("拖动玩家之手或拨动摇杆 · 回到餐桌后点「交互」") if has_box else tr("点「交互」拿盒 · 拖动玩家之手移动")
+	hint.text = tr("拖动玩家之手或拨动摇杆 · 点餐桌送饭") if has_box else tr("点空饭盒拿起 · 拖动玩家之手移动")
 
 
 func cancel_touch() -> void:
@@ -155,7 +148,7 @@ func cancel_touch() -> void:
 		if not _joystick_reset_pending:
 			_joystick_reset_pending = true
 			_replace_joystick.call_deferred()
-	for button in [deliver_button, think_button, pause_button]:
+	for button in [think_button, pause_button]:
 		if is_instance_valid(button):
 			button.cancel_touch()
 
@@ -207,6 +200,6 @@ func _place_control(control: Control, id: String) -> void:
 
 func _apply_layout() -> void:
 	cancel_touch()
-	for pair in [[joystick, "joystick"], [deliver_button, "interact"], [think_button, "think"]]:
+	for pair in [[joystick, "joystick"], [think_button, "think"]]:
 		if is_instance_valid(pair[0]):
 			_place_control(pair[0], pair[1])

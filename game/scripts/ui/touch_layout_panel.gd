@@ -5,7 +5,7 @@ signal closed
 const TOUCH_UI := preload("res://scripts/ui/touch_controls.gd")
 const PLAYER_HAND := preload("res://scripts/ui/player_hand.gd")
 const PREVIEW_BOX := preload("res://assets/canteen/box_2.png")
-const NAMES := {"joystick": "摇杆", "interact": "交互", "think": "思考"}
+const NAMES := {"joystick": "摇杆", "think": "思考"}
 var draft: Dictionary
 var selected := "joystick"
 var previews := {}
@@ -46,8 +46,8 @@ func _ready() -> void:
 			control = stick
 		else:
 			var button := Button.new()
-			button.text = tr("交互") if id == "interact" else tr("按住\n思考")
-			button.add_theme_font_size_override("font_size", 36 if id == "interact" else 26)
+			button.text = tr("按住\n思考")
+			button.add_theme_font_size_override("font_size", 26)
 			TOUCH_UI.style_action(button)
 			control = button
 		control.size = Settings.TOUCH_BASE[id]
@@ -122,10 +122,10 @@ func _ready() -> void:
 		actions.add_child(b)
 		_buttons.append(b)
 	var focus: Array[Control] = []
-	focus.append_array(_buttons.slice(0, 3))
+	focus.append_array(_buttons.slice(0, NAMES.size()))
 	focus.append(_size_slider)
 	focus.append(_arm_slider)
-	focus.append_array(_buttons.slice(3))
+	focus.append_array(_buttons.slice(NAMES.size()))
 	for i in focus.size():
 		focus[i].focus_next = focus[i].get_path_to(focus[(i + 1) % focus.size()])
 		focus[i].focus_previous = focus[i].get_path_to(focus[(i - 1 + focus.size()) % focus.size()])

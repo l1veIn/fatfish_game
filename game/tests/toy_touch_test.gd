@@ -12,7 +12,7 @@ const SOURCES := ["project.godot", "scripts/main.gd", "scripts/run/canteen_run.g
 	"scripts/tree/tree_screen.gd", "scripts/ui/touch_controls.gd", "scripts/ui/run_coach.gd",
 	"scripts/ui/pause_menu.gd", "scripts/autoload/settings.gd", "scripts/autoload/game.gd",
 	"tests/toy_touch_test.gd", "data/i18n/en.json", "scripts/ui/recipe_book.gd",
-	"scripts/ui/settings_panel.gd", "scripts/ui/touch_layout_panel.gd", "scripts/ui/player_hand.gd", "assets/canteen/box_2.png", "scripts/ui/rollback_confirm.gd", "data/skill_tree.json", "assets/ui/NotoSansSC-VF.ttf", "assets/ui/ZCOOLKuaiLe.ttf"]
+	"scripts/ui/settings_panel.gd", "scripts/ui/touch_layout_panel.gd", "scripts/ui/player_hand.gd", "assets/canteen/box_2.png", "assets/canteen/player_hand.png", "scripts/ui/rollback_confirm.gd", "data/skill_tree.json", "assets/ui/NotoSansSC-VF.ttf", "assets/ui/ZCOOLKuaiLe.ttf"]
 
 
 func _ready() -> void:
@@ -107,7 +107,7 @@ func _tree_route(tree: TreeScreen) -> void:
 func _meal_route(run: CanteenRun) -> void:
 	run._arms.clear() # deterministic falling dish below replaces random spoons only
 	var ui = run._touch_controls
-	_check(ui.joystick.get_global_rect().position.is_equal_approx(Settings.touch_rect("joystick").position) and is_equal_approx(ui.joystick.scale.x, Settings.touch_layout.joystick.scale) and is_equal_approx(ui.deliver_button.scale.x, Settings.touch_layout.interact.scale) and is_equal_approx(ui.think_button.scale.x, Settings.touch_layout.think.scale) and ui.deliver_button.scale.x > 1.0, "saved custom layout is applied to live gameplay controls")
+	_check(ui.joystick.get_global_rect().position.is_equal_approx(Settings.touch_rect("joystick").position) and is_equal_approx(ui.joystick.scale.x, Settings.touch_layout.joystick.scale) and is_equal_approx(ui.think_button.scale.x, Settings.touch_layout.think.scale), "saved custom layout is applied to live gameplay controls")
 	_check(Settings.touch_arm_distance > 200, "custom arm reach is loaded for gameplay")
 	Settings.touch_layout = Settings.TOUCH_DEFAULT.duplicate(true)
 	Settings.touch_arm_distance = 200.0
@@ -115,8 +115,29 @@ func _meal_route(run: CanteenRun) -> void:
 	Settings.changed.emit()
 	await wait_frames()
 	_check(is_instance_valid(ui) and run._learning(), "meal mounts touch controls and existing tutorial")
-	await _touch_tap(ui.deliver_button.get_global_rect().get_center())
-	_check(run._hand != null and run._coach.step == RunCoach.Step.CATCH, "touch pickup GUI takes one real box and advances tutorial")
+	_check(ui.think_button.get_global_rect().end.y < ui.joystick.get_global_rect().position.y and is_equal_approx(ui.think_button.get_global_rect().get_center().x, ui.joystick.get_global_rect().get_center().x), "default thought button sits above the joystick")
+	run.can_think = false # Explicit locked-skill fixture for HUD visibility.
+	await wait_frames()
+	_check(not ui.think_button.is_visible_in_tree(), "locked thought skill has no HUD button")
+	await shot("thought_locked")
+	await _touch_tap(ui.think_button.get_global_rect().get_center())
+	_check(not ui.think_held and not run._thinking, "hidden thought button cannot activate")
+	run.can_think = true
+	await wait_frames()
+	_check(ui.think_button.is_visible_in_tree(), "unlocked thought skill shows its HUD button")
+	await _touch(0, run.STACK_AT, true)
+	_check(run._hand == null, "pickup waits for release")
+	await _touch(0, run.STACK_AT, false, true)
+	_check(run._hand == null, "canceled pickup never takes a tray")
+	await _touch(0, run.STACK_AT, true)
+	await _drag(0, run.STACK_AT, run.STACK_AT + Vector2(40, 0))
+	await _drag(0, run.STACK_AT + Vector2(40, 0), run.STACK_AT)
+	await _touch(0, run.STACK_AT, false)
+	_check(run._hand == null, "drag away and back never becomes a pickup tap")
+	await _touch_tap(Vector2(900, 600))
+	_check(run._hand == null, "empty playfield tap cannot pick up remotely")
+	await _touch_tap(run.STACK_AT)
+	_check(run._hand != null and run._coach.step == RunCoach.Step.CATCH, "tapping the empty tray takes one real box and advances tutorial")
 	if run._hand == null:
 		return
 	_check(run._coach._device == "touch", "tutorial describes the actual touch device")
@@ -128,7 +149,7 @@ func _meal_route(run: CanteenRun) -> void:
 	var dock: Vector2 = run._coach.position
 	var center: Vector2 = ui.joystick.get_global_rect().get_center()
 	_check(not ui.joystick.get_global_rect().intersects(run._coach.get_global_rect()) and not ui.think_button.get_global_rect().intersects(run._coach.get_global_rect()), "fixed lesson leaves both thumbs clear")
-	_check(ui.deliver_button.size.x * ui.deliver_button.size.y > ui.think_button.size.x * ui.think_button.size.y, "primary action is larger than held secondary action")
+	_check(ui.get_node_or_null("TouchDeliver") == null, "direct object taps replace the Interact button")
 	await _touch(0, center, true)
 	await _drag(0, center, center + Vector2(3, 0))
 	await _wait(0.12)
@@ -147,18 +168,21 @@ func _meal_route(run: CanteenRun) -> void:
 	await wait_frames()
 	await _emulated_mouse(Vector2(1385, 865))
 	_check(run._hand != null and run._hand.pos.distance_to(stopped) < 1, "synthetic mouse cannot move or deliver a touch-held box")
-	await _touch_tap(ui.deliver_button.get_global_rect().get_center())
-	_check(run._hand != null and run._hand.pos.distance_to(stopped) < 1, "unavailable primary action cannot remotely serve or steal steering")
+	await _touch(0, Vector2(1700, 870), true)
+	_check(run._hand != null and run._hand.pos.distance_to(stopped) < 1, "table press waits for a deliberate tap release before serving")
+	await _touch(0, Vector2(1700, 870), false, true)
+	_check(run._hand != null, "canceled table tap does not serve")
 	run._add_item(run._hand.pos + Vector2(0, -8), Vector2(0, 140), CanteenRun.I.BALL)
 	await _wait(0.18)
 	_check(run.caught > 0 and run._coach.step == RunCoach.Step.SERVE, "real food collision advances touch lesson")
 	await _steer_to(run, Vector2(1385, 820))
 	_check(run._hand != null and run._coach.position == dock, "lesson remains at bottom while tray returns to table")
 	await shot("run_touch_serve")
-	await _touch_tap(ui.deliver_button.get_global_rect().get_center())
-	_check(run._hand == null and not run._learning(), "same primary button serves and completes the tutorial")
+	await _touch_tap(Vector2(1700, 870))
+	_check(run._hand == null and not run._learning(), "tapping the table serves once and completes the tutorial")
 	_check(run._coach.position == dock, "completion message uses the same bottom dock")
-	await _touch_tap(ui.deliver_button.get_global_rect().get_center())
+	await _surface_taps(run)
+	await _touch_tap(run.STACK_AT)
 	await _steer_to(run, Vector2(800, 700))
 	await _touch(0, center, true)
 	await _touch(1, ui.think_button.get_global_rect().get_center(), true)
@@ -252,12 +276,17 @@ func _hand_route(run: CanteenRun) -> void:
 	run._add_item(run._hand.pos + Vector2(0, -8), Vector2(0, 140), CanteenRun.I.BALL) # visible-food fixture
 	await _wait(0.18)
 	await shot("player_hand_food")
+	var original_columns: int = run.box_n
+	for columns in [3, 4]:
+		run.box_n = columns # Explicit art-size fixture, not a purchased upgrade.
+		await shot("player_hand_tray_" + str(columns))
+	run.box_n = original_columns
 	await _drag(0, at, Vector2(20, 780))
 	var art: Rect2 = run._basin_art_rect(run._hand.pos, 1.0)
 	_check(art.position.x >= 15 and art.end.x <= 1905, "touch near left edge keeps the full tray visible")
-	await _drag(0, Vector2(20, 780), ui.deliver_button.get_global_rect().get_center())
-	await _touch(0, ui.deliver_button.get_global_rect().get_center(), false)
-	_check(run._hand != null and run._touch_finger < 0, "dragging across and releasing over Interact cannot serve")
+	await _drag(0, Vector2(20, 780), Vector2(1700, 870))
+	await _touch(0, Vector2(1700, 870), false)
+	_check(run._hand != null and run._touch_finger < 0, "dragging across and releasing over the table cannot serve")
 	var stopped: Vector2 = run._hand.pos
 	await _wait(0.15)
 	_check(run._hand.pos.distance_to(stopped) < 1, "lifting the hand leaves the tray still held at its last position")
@@ -267,8 +296,13 @@ func _hand_route(run: CanteenRun) -> void:
 	await _touch(0, Vector2(1150, 900), false, true)
 	await _drag(0, Vector2(1150, 900), Vector2(1300, 900))
 	_check(run._touch_finger < 0 and run._hand.pos.distance_to(Vector2(850, 600)) < 1, "canceled hand contact cannot resume on a stale drag")
+	Settings.touch_arm_distance = 80
+	await _touch(0, Vector2(1000, 700), true)
+	await shot("player_hand_reach_80")
+	await _touch(0, Vector2(1000, 700), false)
 	Settings.touch_arm_distance = 360
 	await _touch(0, Vector2(1100, 850), true)
+	await shot("player_hand_reach_360")
 	await _drag(0, Vector2(1100, 850), Vector2(1780, 1064))
 	_check(run.TABLE.grow(60).has_point(run._hand.pos), "longest arm retracts near the bottom edge so the table remains reachable")
 	await _touch(0, Vector2(1780, 1064), false)
@@ -465,6 +499,23 @@ func _finish(player_save: PackedByteArray, player_settings: PackedByteArray) -> 
 
 
 func _mobile_preferences(tree: TreeScreen) -> void:
+	var cfg := Settings._create_config()
+	var old_layout := Settings.TOUCH_DEFAULT.duplicate(true)
+	old_layout.think = {"x": 1549.0 / 1920, "y": 1000.0 / 1080, "scale": 1.0}
+	cfg.set_value("controls", "touch_layout", old_layout)
+	cfg.set_value("controls", "touch_layout_version", 1)
+	Settings._read_config(cfg)
+	_check(Settings.touch_layout.think == Settings.TOUCH_DEFAULT.think, "old untouched thought layout migrates above joystick")
+	old_layout.think.x = 0.7
+	cfg.set_value("controls", "touch_layout", old_layout)
+	Settings._read_config(cfg)
+	_check(is_equal_approx(Settings.touch_layout.think.x, 0.7), "custom thought layout survives migration")
+	old_layout.think.x = 1549.0 / 1920
+	cfg.set_value("controls", "touch_layout", old_layout)
+	cfg.set_value("controls", "touch_layout_version", 2)
+	Settings._read_config(cfg)
+	_check(is_equal_approx(Settings.touch_layout.think.x, 1549.0 / 1920), "new explicit right-side layout is not repeatedly migrated")
+	Settings.touch_layout = Settings.TOUCH_DEFAULT.duplicate(true)
 	# Exactly five tokens and only the root are an explicit affordability fixture.
 	var old_levels := Game.levels.duplicate(true)
 	var old_tokens := Game.tokens
@@ -520,18 +571,18 @@ func _mobile_preferences(tree: TreeScreen) -> void:
 	var entry = panel._controls.filter(func(c): return c.get_meta("focus_key", "") == "touch_layout")[0]
 	await _mouse_click(entry.get_global_rect().get_center())
 	var editor = panel._remap
-	var targets := {"joystick": Vector2(190, 920), "interact": Vector2(1760, 920), "think": Vector2(1510, 920)}
+	var targets := {"joystick": Vector2(190, 920), "think": Vector2(1510, 1000)}
 	for id in targets:
 		var at: Vector2 = Settings.touch_rect(id, editor.draft).get_center()
 		await _touch(0, at, true)
 		await _drag(0, at, targets[id])
 		await _touch(0, targets[id], false)
 		_check(Settings.touch_rect(id, editor.draft).get_center().distance_to(targets[id]) < 1, "drag repositions layout preview: " + id)
-	for i in 3:
+	for i in 2:
 		await _mouse_click(editor._buttons[i].get_global_rect().get_center())
 		var slider: Rect2 = editor._size_slider.get_global_rect()
-		await _mouse_click(slider.position + Vector2(slider.size.x * [0.55, 0.65, 0.25][i], slider.size.y * 0.5))
-	_check(editor.draft.interact.scale > 1.0 and editor.draft.joystick.scale > 1.0 and editor.draft.think.scale < 1.0 and Settings.touch_layout.interact.scale == 1.0, "all three size previews change independently without saving")
+		await _mouse_click(slider.position + Vector2(slider.size.x * [0.55, 0.25][i], slider.size.y * 0.5))
+	_check(editor.draft.joystick.scale > 1.0 and editor.draft.think.scale < 1.0 and Settings.touch_layout.joystick.scale == 1.0, "both size previews change independently without saving")
 	var arm_slider: Rect2 = editor._arm_slider.get_global_rect()
 	await _mouse_click(arm_slider.position + Vector2(arm_slider.size.x * 0.78, arm_slider.size.y * 0.5))
 	_check(editor._arm_distance > 200 and Settings.touch_arm_distance == 200, "arm reach slider previews without saving")
@@ -543,13 +594,13 @@ func _mobile_preferences(tree: TreeScreen) -> void:
 	Settings.touch_layout = Settings.TOUCH_DEFAULT.duplicate(true)
 	Settings.touch_arm_distance = 200.0
 	Settings.load_settings()
-	_check(Settings.touch_layout == saved and saved.interact.scale > 1.0, "saved layout round-trips through the isolated settings file")
+	_check(Settings.touch_layout == saved and saved.joystick.scale > 1.0, "saved layout round-trips through the isolated settings file")
 	_check(Settings.touch_arm_distance == saved_reach and saved_reach > 200, "arm reach round-trips through isolated settings")
 	await _mouse_click(entry.get_global_rect().get_center())
 	editor = panel._remap
-	await _mouse_click(editor._buttons[3].get_global_rect().get_center())
+	await _mouse_click(editor._buttons[2].get_global_rect().get_center())
 	_check(editor.draft == Settings.TOUCH_DEFAULT, "restore defaults resets the draft layout")
-	await _mouse_click(editor._buttons[4].get_global_rect().get_center())
+	await _mouse_click(editor._buttons[3].get_global_rect().get_center())
 	_check(Settings.touch_layout == saved, "cancel leaves saved layout unchanged")
 	_check(Settings.touch_arm_distance == saved_reach, "cancel also preserves saved arm reach")
 	_check(Settings.sanitize_arm_distance(INF) == 200 and Settings.sanitize_arm_distance("bad") == 200 and Settings.sanitize_arm_distance(-20) == 80 and Settings.sanitize_arm_distance(500) == 360, "invalid reach settings fall back or stay in range")
@@ -557,3 +608,27 @@ func _mobile_preferences(tree: TreeScreen) -> void:
 	tree._hover = ""
 	var bad := Settings.sanitize_touch_layout({"joystick": {"x": -10, "y": INF, "scale": 99}, "interact": "bad"})
 	_check(Rect2(0, 0, 1920, 1080).encloses(Settings.touch_rect("joystick", bad)) and bad.interact == Settings.TOUCH_DEFAULT.interact, "malformed layouts cannot put controls off screen")
+
+
+func _surface_taps(run: CanteenRun) -> void:
+	var table := Vector2(1700, 870)
+	await _touch_tap(run.STACK_AT)
+	var empty_before := run._empty
+	await _touch(0, table, true)
+	await _wait(0.5)
+	await _touch(0, table, false)
+	_check(run._hand != null, "long press on table does not place a tray")
+	await _touch(0, Vector2(1000, 800), true)
+	await _touch_tap(table, 1)
+	_check(run._hand != null and run._touch_finger == 0, "second-finger table tap cannot interrupt carrying")
+	await _touch(0, Vector2(1000, 800), false)
+	await _touch_tap(table)
+	_check(run._hand == null and run._empty == empty_before + 1, "fresh table tap returns an empty tray exactly once")
+	await _emulated_mouse(table)
+	_check(run._hand == null, "compatible mouse cannot pick a new tray after touch placement")
+	await _touch_tap(run.STACK_AT)
+	run.warm = true # Explicit unlocked-warmer fixture; storage uses production code.
+	run._hand.items = [run.make(run.I.BALL)] # One dish fixture for the warmer route.
+	await _touch_tap(run.WARM_AT)
+	_check(run._hand == null and run._warm != null and not run._warm.items.is_empty(), "tapping unlocked warmer stores the held meal")
+	run.warm = false
