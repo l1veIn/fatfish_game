@@ -246,7 +246,7 @@ func _initialize() -> void:
     decoded = qa / "decoded"
     decoded.mkdir()
     run([str(ENGINE), "--headless", "--path", str(stage), "--script", str(script),
-         "--", str(qa / "texture-paths.json"), str(decoded)], output / "texture-qa.log")
+         "--", str(qa / "texture-paths.json"), str(decoded), "--test-profile=toy_build"], output / "texture-qa.log")
     settings_by_path = {record["path"]: record["settings"] for record in records}
     sized_targets = [path for path in targets if settings_by_path[path].get("existing_size_limit")]
     reference_paths = {}
@@ -270,7 +270,7 @@ func _initialize() -> void:
         run([str(ENGINE), "--headless", "--path", str(reference_stage), "--editor", "--import", "--quit"],
             output / "texture-reference-import.log")
         run([str(ENGINE), "--headless", "--path", str(reference_stage), "--script", str(script),
-             "--", str(qa / "size-limited-paths.json"), str(reference_decoded)],
+             "--", str(qa / "size-limited-paths.json"), str(reference_decoded), "--test-profile=toy_build"],
             output / "texture-reference-decode.log")
         reference_paths = {relative: reference_decoded / f"{index}.png"
                            for index, relative in enumerate(sized_targets)}
