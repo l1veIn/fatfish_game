@@ -4,14 +4,14 @@
 
 ## 候选与复现
 
-- 实现提交：`28b4ed1f4e63f69d1cc0e2c1bcbe7b425480ae7b`，分支 `codex/toy-release`，已推送远端。
+- 当前实现提交：`3895856b2e840149641af1d0db1518a8e2734cec`，分支 `codex/toy-release`，已推送远端；在 RC1 基础上修复 Web 静音并更换封面。
 - 前置作者链接修改：`f99bf7e`，已推送 `main`。
-- ZIP：`build/toy-final-rc1/FatFish-0.4.2-toy-compressed.zip`。
-- ZIP 字节数：47,995,706（48.00 MB，十进制）；当前 Toy 账号上限 50 MB。
-- SHA-256：`542f77efff9e89d1e99b58379d355550dceecebad8f92936c12ea723b4cddafc`。
-- 完整构建、输入和输出摘要：`build/toy-final-rc1/build-manifest.json`。
+- ZIP：`build/toy-final-rc2/FatFish-0.4.2-toy-compressed.zip`。
+- ZIP 字节数：47,995,817（48.00 MB，十进制）；当前 Toy 账号上限 50 MB。
+- SHA-256：`3ee5ca541367a82a00b48fba0c836dce011e8abd041dd0f6e31c7ea50b383fa6`。
+- 完整构建、输入和输出摘要：`build/toy-final-rc2/build-manifest.json`。
 - 复现：`py -3 pipeline/build_toy.py --output build/toy-release-rebuild --max-zip-mb 50`。
-- Web 本地预览：从 `build` 目录启动 HTTP 服务，访问 `/toy-final-rc1/web/index.html`。请勿直接用 `file://` 打开。
+- Web 本地预览：从 `build` 目录启动 HTTP 服务，访问 `/toy-final-rc2/web/index.html`。请勿直接用 `file://` 打开。
 
 Godot 4.7.2 Compatibility、WebGL 2、单线程，不要求跨源隔离。资源路径相对入口，主资源包改用 Toy 允许的 `.data` 扩展名；代码许可、素材署名和字体许可随包保留。编辑器插件、测试和调试工具不进入发行包。
 
@@ -27,7 +27,21 @@ Godot 4.7.2 Compatibility、WebGL 2、单线程，不要求跨源隔离。资源
 
 压缩减少下载体积，不减少解码后的纹理内存。没有据此宣称手机帧率、内存或低端设备表现合格。
 
-## 验证结果
+## RC2 音频修复与封面
+
+RC1 触发了 Godot Web Sample 音频总线动态追加缺陷：[godotengine/godot#119026](https://github.com/godotengine/godot/issues/119026)。4.7.2 导出模板的 `Bus.addAt(-1)` 会错误移动总线，导致 Master 的输出连接丢失。Settings 和 Audio 改为增加 `AudioServer.bus_count` 后命名总线，保留原有名称、路由与音量。两次构建的游戏源文件摘要仅这两个脚本不同；音频素材没有被删除或重新压缩。
+
+在同一 Chrome、同一存档和音量下做了浏览器输出对照：两者均通过真实游戏点击让 AudioContext 进入 running；RC1 的输出采样峰值始终为 0，RC2 持续输出非零信号，记录的最大峰值为 0.224151、38 次非零采样。测量的是进入浏览器音频输出节点的 PCM，不代表对物理扬声器的听觉验收。首次进入后仍需点击游戏画面或游戏按钮，才能满足浏览器音频手势要求。
+
+测量工具 `pipeline/prepare_web_audio_probe.py` 为导出物创建独立副本，提前挂载 `web_audio_probe.js`，只在已有输出节点旁挂分析器，不主动播放、恢复或解除静音；发行 ZIP 不包含该工具。源文件和探针摘要保存在 `build/qa/web-audio-before-source.json`、`web-audio-after-source.json`。原始结果及截图为 `build/qa/web-audio-before-result.json`、`web-audio-before.jpg` 和 `build/toy-final-rc2/qa/web-audio-after-result.json`、`web-audio-after.jpg`。
+
+RC2 另运行隔离副本中的 `audio_mix_test.tscn`：23 项通过、0 失败；headless 环境下的听觉混音项明确跳过，Web 实际输出由上述浏览器对照覆盖。日志：`build/toy-final-rc2/qa/audio-mix.log`。构建体积、字体覆盖和纹理检查重新通过；下方其他玩法回归属于 RC1，未声称全部重跑。
+
+封面角色已按用户要求换为双手端空盆、面无表情的版本，保留标题与饭堂构图，已上传到 Toy 草稿。源图为 `art_src/store/toy_cover_zh.png`。
+
+RC2 已通过 Toy 上传校验，线上预览启动及设置入口可用，并保留用户后续试玩得到的第 3 顿、20 token。该预览没有附加测量探针，音频输出数值来自相同 RC2 导出文件的本地浏览器副本；没有宣称录制或听取线上扬声器输出。线上截图、日志与绑定包摘要的证据汇总在 `build/toy-final-rc2/qa/`。正式发布按钮未点击。
+
+## RC1 验证结果（仍适用的回归基线）
 
 | 项目 | 结果与边界 |
 | --- | --- |
@@ -49,12 +63,12 @@ Godot 4.7.2 Compatibility、WebGL 2、单线程，不要求跨源隔离。资源
 
 ## Toy 预览及发布资料
 
-- 当前发布表单的预览：https://www.bilibili.com/toy/preview/preview_5fQDiQbe/index.html
-- 完整流程验收先在 `preview_2GHUBKQX` 完成；同一 ZIP 重新上传后刷新了旧 DNS 错误的内嵌预览，生成当前链接。两次候选 ZIP 的 SHA-256 相同，当前链接另行确认启动并保留第 2 顿、8 token。最终发布表单截图为 `toy-ready-unpublished.jpg`，独立预览截图为 `toy-final-preview.jpg`。
+- 当前 RC2 发布表单的预览：https://www.bilibili.com/toy/preview/preview_uquvmFbj/index.html
+- RC1 完整流程验收先在 `preview_2GHUBKQX` 完成；同一 ZIP 重新上传后生成 `preview_5fQDiQbe`，刷新了旧 DNS 错误的内嵌预览。RC1 两次 ZIP 的 SHA-256 相同，后者另行确认启动并保留第 2 顿、8 token。RC1 发布表单截图为其 QA 目录中的 `toy-ready-unpublished.jpg`，独立预览截图为 `toy-final-preview.jpg`。
 - 名称：吃白饭的大肥鱼。
 - 拟用页面地址：`fatfish-free-lunch`；尚未发布，不承诺已占用此地址。
 - 分类：游戏。
-- 封面：`art_src/store/toy_cover_zh.png`，4:3，基于原有宣传图由 imagegen 扩展构图；与原图不是逐像素相同。
+- 封面：`art_src/store/toy_cover_zh.png`，4:3，由 imagegen 编辑为端盆、面无表情的角色；与原图不是逐像素相同。
 - 图标：`game/assets/ui/icon.png`。
 - 当前表单为“链接访问”、深色主题，未参加活动，未启用访客水印。
 
