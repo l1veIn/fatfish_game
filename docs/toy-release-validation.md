@@ -4,14 +4,14 @@
 
 ## 候选与复现
 
-- 当前实现提交：`c12fcff4cfdc6a8fb31714398714eef0a495d0e5`，分支 `codex/toy-release`，已推送远端；在 RC2 基础上接入 Godot 内置摇杆、统一主交互键并固定底部引导。
+- 当前实现提交：`f2114edf9a6b77460c6bffe94af6199ef9bd2af8`，分支 `codex/toy-release`，已推送远端；在 RC3 基础上加入触控布局编辑、半透明交互键、5 token 自动化、长按回滚与 App 容器修复。
 - 前置作者链接修改：`f99bf7e`，已推送 `main`。
-- ZIP：`build/toy-final-rc3/FatFish-0.4.2-toy-compressed.zip`。
-- ZIP 字节数：47,999,543（48.00 MB，十进制）；当前 Toy 账号上限 50 MB。
-- SHA-256：`af1709af4d78da1b448b178bd7120ffca6a6ba99bad58f09bb435a4524d75b9d`。
-- 完整构建、输入和输出摘要：`build/toy-final-rc3/build-manifest.json`。
+- ZIP：`build/toy-final-rc4/FatFish-0.4.2-toy-compressed.zip`。
+- ZIP 字节数：48,012,892（48.01 MB，十进制）；当前 Toy 账号上限 50 MB。
+- SHA-256：`fdcb34cb600af36cd8868c8682ad768a5001a6872f206819a6587b997087ea64`。
+- 完整构建、输入和输出摘要：`build/toy-final-rc4/build-manifest.json`。
 - 复现：`py -3 pipeline/build_toy.py --output build/toy-release-rebuild --max-zip-mb 50`。
-- Web 本地预览：从 `build` 目录启动 HTTP 服务，访问 `/toy-final-rc3/web/index.html`。请勿直接用 `file://` 打开。
+- Web 本地预览：从 `build` 目录启动 HTTP 服务，访问 `/toy-final-rc4/web/index.html`。请勿直接用 `file://` 打开。
 
 Godot 4.7.2 Compatibility、WebGL 2、单线程，不要求跨源隔离。资源路径相对入口，主资源包改用 Toy 允许的 `.data` 扩展名；代码许可、素材署名和字体许可随包保留。编辑器插件、测试和调试工具不进入发行包。
 
@@ -19,13 +19,33 @@ Godot 4.7.2 Compatibility、WebGL 2、单线程，不要求跨源隔离。资源
 
 ## 体积与画质
 
-无损基线 ZIP 114,523,671 字节，当前候选减少约 58.09%。两者包含不同阶段的桥接和字体修改，此数字是版本总体对比，不是完全隔离的压缩 A/B 实验。
+无损基线 ZIP 114,523,671 字节，当前候选减少约 58.08%。两者包含不同阶段的桥接和字体修改，此数字是版本总体对比，不是完全隔离的压缩 A/B 实验。
 
 压缩仅修改构建副本的纹理导入配置，游戏原始 PNG 未被重绘或覆盖。123 张压缩纹理通过尺寸和透明通道逐像素检查，透明通道完全一致；最低可见 RGB PSNR 为 30.287 dB。小型食物、功能 UI、字体图集及两个敏感精灵保留无损。中英招牌、人物、徽章及标题的对照图已查看，未见影响识别的缺陷。
 
 证据：`build/toy-final-rc1/qa/texture-quality.json`、`texture-comparison.jpg`。
 
 压缩减少下载体积，不减少解码后的纹理内存。没有据此宣称手机帧率、内存或低端设备表现合格。
+
+## RC4 触控设置、回滚与 App 容器
+
+「设置 → 游戏 → 触控布局：位置与尺寸」可分别拖动原生摇杆、交互键与思考键，并调整 65%～160% 大小。布局保存到独立设置文件，提供取消及恢复默认；取消不会保存草稿。实际游戏复用这些位置、尺寸；接菜区域继续忽略触屏拖盒和触摸生成的鼠标事件。右侧按钮背景常态透明度为 32%，按下为 55%，文字保持清晰。
+
+`skills` 节点仍在第一层，自动推送与自动回收一起改为 5 token。测试用仅有根节点及 5 token 的进度，经真实 GUI 购买并检查两项效果。回滚先打开说明框，只有连续按满 3 秒才执行；短按、双击、松手、移出按钮、失焦均不能触发或累计时长。
+
+B 站 App 的全屏请求改为 SDK 就绪后自动发起，SDK 延迟到首次等待结束以后仍会重试初始化；并发初始化只注册一次监听。请求返回本身不算成功，以容器状态确认；未确认时提供「全屏」重试入口。订阅先于请求，旧的初始状态读取不能覆盖较新的横屏通知。画布按实际 iframe 的 100vw/100dvh 尺寸与安全区排版，不再用 SDK 可能滞后的竖屏宽高限制横屏画布。设置里的 Web 全屏开关接入 Toy 模式并显示实际确认状态。
+
+- 中英各 73 项通过、0 失败，960×540 GPU 运行；涵盖全部三个控件的位置与大小编辑、保存重载、取消、非法配置边界、游戏内应用、触控及桌面输入切换、3 秒回滚与 5 token 购买。存档与用户设置原文件的前后摘要未变。
+- 桌面输入 260 项、存档回归 41 项通过。后者的损坏备份和未来版本告警来自显式测试夹具。
+- JS 平台桥接 18 项通过，包含 SDK 晚到、初始化去重及旧容器状态竞态。
+- Chrome 实际 iframe 几何测试通过：模拟 SDK 在进入后到达，容器从 390×844 改为 844×390，旧 SDK 仍报告竖屏宽高，画布正确按左右 44、底部 21 安全区展开到约 756×369。该测试使用模拟 SDK 和假引擎，仅验证真实 CSS 尺寸及桥接顺序，不代表真实 B 站 App 或 Godot 手机渲染。
+- 触控报告所列游戏源码、翻译与字体摘要和 RC4 构建输入一致；测试脚本单独比对，项目配置由隔离构建处理。构建再次通过 50 MB、文件后缀、888 个所需汉字覆盖及 123 张纹理尺寸/透明通道检查。
+
+证据在 `build/toy-final-rc4/qa/`：中英 `touch-*/report.json` 与截图、桌面/存档/JS 日志、`container-fixture/browser-result.json`、`container-fixture/browser.jpg` 和源码摘要。浏览器容器测量使用小于 1 CSS px 的误差范围，兼容缩放产生的亚像素尺寸。
+
+RC4 已通过 Toy 上传校验，线上完成标题、设置、游戏标签、触控布局编辑器及取消返回检查；现有进度仍为第 5 顿、大肥鱼 V3、20 token，未保存任何设置更改。控制台仅 B 站 reporter 的 spmId 告警，未捕获游戏错误。`qa/release-evidence.json` 绑定 ZIP、源码、日志与截图摘要，`toy-ready-unpublished.jpg` 记录当前草稿及未点击的发布按钮。
+
+**B 站 App 真机的黑框变化仍待用户用 RC4 预览确认。** 修复的是丢失的沉浸请求与过期视口限制；游戏保留 16:9 比例，宽屏设备可能仍有比例留边。此轮没有重测音频输出，RC2 修复保留；实际云同步仍未验收。正式发布未点击。
 
 ## RC3 内置摇杆与底部引导
 
@@ -81,7 +101,9 @@ RC2 已通过 Toy 上传校验，线上预览启动及设置入口可用，并�
 
 ## Toy 预览及发布资料
 
-- 当前 RC3 发布表单的预览：https://www.bilibili.com/toy/preview/preview_o7QvaLNs/index.html
+- 当前 RC4 发布表单预览：https://www.bilibili.com/toy/preview/preview_pqnld0Bu/index.html
+
+- RC3 历史预览：https://www.bilibili.com/toy/preview/preview_o7QvaLNs/index.html
 - RC2 历史预览：https://www.bilibili.com/toy/preview/preview_uquvmFbj/index.html
 - RC1 完整流程验收先在 `preview_2GHUBKQX` 完成；同一 ZIP 重新上传后生成 `preview_5fQDiQbe`，刷新了旧 DNS 错误的内嵌预览。RC1 两次 ZIP 的 SHA-256 相同，后者另行确认启动并保留第 2 顿、8 token。RC1 发布表单截图为其 QA 目录中的 `toy-ready-unpublished.jpg`，独立预览截图为 `toy-final-preview.jpg`。
 - 名称：吃白饭的大肥鱼。
