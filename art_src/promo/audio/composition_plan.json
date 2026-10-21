@@ -1,0 +1,113 @@
+{
+ "positive_global_styles": [
+  "cute anime game trailer music",
+  "cheerful lofi-pop with chiptune sparkle",
+  "marimba, ukulele, glockenspiel, pizzicato strings, whistle",
+  "128 bpm",
+  "major key",
+  "instrumental",
+  "polished mix"
+ ],
+ "negative_global_styles": [
+  "vocals",
+  "singing",
+  "spoken words",
+  "dark",
+  "aggressive",
+  "dubstep"
+ ],
+ "sections": [
+  {
+   "section_name": "deadpan intro",
+   "positive_local_styles": [
+    "very sparse and quiet",
+    "solo music box and soft pizzicato strings",
+    "hesitant, deadpan comedic timing",
+    "little pauses",
+    "ends with a short silence before the drop"
+   ],
+   "negative_local_styles": [
+    "drums",
+    "bass"
+   ],
+   "duration_ms": 7000,
+   "lines": []
+  },
+  {
+   "section_name": "title hit",
+   "positive_local_styles": [
+    "sudden big cheerful drop",
+    "brass stab and crash cymbal on the first beat",
+    "full band kicks in",
+    "bright main hook on glockenspiel and whistle"
+   ],
+   "negative_local_styles": [],
+   "duration_ms": 4000,
+   "lines": []
+  },
+  {
+   "section_name": "lunch rush",
+   "positive_local_styles": [
+    "bouncy groove",
+    "marimba and plucky ukulele",
+    "snappy snare and handclaps",
+    "playful whistled lead melody",
+    "busy canteen energy"
+   ],
+   "negative_local_styles": [],
+   "duration_ms": 16000,
+   "lines": []
+  },
+  {
+   "section_name": "level up",
+   "positive_local_styles": [
+    "building up step by step",
+    "rising glockenspiel arpeggios",
+    "chiptune synth plucks join",
+    "sense of growing stronger",
+    "drum fill at the end"
+   ],
+   "negative_local_styles": [],
+   "duration_ms": 10000,
+   "lines": []
+  },
+  {
+   "section_name": "chaos peak",
+   "positive_local_styles": [
+    "fullest and most energetic part",
+    "festive and chaotic fun",
+    "fast handclaps and tambourine",
+    "the main hook played big by the whole band"
+   ],
+   "negative_local_styles": [],
+   "duration_ms": 10000,
+   "lines": []
+  },
+  {
+   "section_name": "full belly",
+   "positive_local_styles": [
+    "sudden comedic breakdown",
+    "slow lazy tuba and soft Rhodes",
+    "sleepy and satisfied",
+    "half time"
+   ],
+   "negative_local_styles": [
+    "fast drums"
+   ],
+   "duration_ms": 4000,
+   "lines": []
+  },
+  {
+   "section_name": "finale",
+   "positive_local_styles": [
+    "triumphant anthem version of the main hook",
+    "warm and joyful",
+    "big final chord on the last beat",
+    "short natural ring-out ending"
+   ],
+   "negative_local_styles": [],
+   "duration_ms": 9000,
+   "lines": []
+  }
+ ]
+}
