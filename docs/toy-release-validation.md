@@ -4,14 +4,14 @@
 
 ## 候选与复现
 
-- 当前实现提交：`3895856b2e840149641af1d0db1518a8e2734cec`，分支 `codex/toy-release`，已推送远端；在 RC1 基础上修复 Web 静音并更换封面。
+- 当前实现提交：`c12fcff4cfdc6a8fb31714398714eef0a495d0e5`，分支 `codex/toy-release`，已推送远端；在 RC2 基础上接入 Godot 内置摇杆、统一主交互键并固定底部引导。
 - 前置作者链接修改：`f99bf7e`，已推送 `main`。
-- ZIP：`build/toy-final-rc2/FatFish-0.4.2-toy-compressed.zip`。
-- ZIP 字节数：47,995,817（48.00 MB，十进制）；当前 Toy 账号上限 50 MB。
-- SHA-256：`3ee5ca541367a82a00b48fba0c836dce011e8abd041dd0f6e31c7ea50b383fa6`。
-- 完整构建、输入和输出摘要：`build/toy-final-rc2/build-manifest.json`。
+- ZIP：`build/toy-final-rc3/FatFish-0.4.2-toy-compressed.zip`。
+- ZIP 字节数：47,999,543（48.00 MB，十进制）；当前 Toy 账号上限 50 MB。
+- SHA-256：`af1709af4d78da1b448b178bd7120ffca6a6ba99bad58f09bb435a4524d75b9d`。
+- 完整构建、输入和输出摘要：`build/toy-final-rc3/build-manifest.json`。
 - 复现：`py -3 pipeline/build_toy.py --output build/toy-release-rebuild --max-zip-mb 50`。
-- Web 本地预览：从 `build` 目录启动 HTTP 服务，访问 `/toy-final-rc2/web/index.html`。请勿直接用 `file://` 打开。
+- Web 本地预览：从 `build` 目录启动 HTTP 服务，访问 `/toy-final-rc3/web/index.html`。请勿直接用 `file://` 打开。
 
 Godot 4.7.2 Compatibility、WebGL 2、单线程，不要求跨源隔离。资源路径相对入口，主资源包改用 Toy 允许的 `.data` 扩展名；代码许可、素材署名和字体许可随包保留。编辑器插件、测试和调试工具不进入发行包。
 
@@ -26,6 +26,24 @@ Godot 4.7.2 Compatibility、WebGL 2、单线程，不要求跨源隔离。资源
 证据：`build/toy-final-rc1/qa/texture-quality.json`、`texture-comparison.jpg`。
 
 压缩减少下载体积，不减少解码后的纹理内存。没有据此宣称手机帧率、内存或低端设备表现合格。
+
+## RC3 内置摇杆与底部引导
+
+项目的 Godot 4.7.2 已提供原生 [VirtualJoystick](https://docs.godotengine.org/en/stable/classes/class_virtualjoystick.html)，该控件在 [Godot 4.7](https://godotengine.org/releases/4.7/) 引入。本次直接实例化引擎控件，以 `move_left/right/up/down` 接入现有 InputMap，和实体手柄走同一个 `Input.get_vector` 及饭盒移动逻辑；没有自写摇杆绘制、触摸向量或摇杆插件。用户提供的 Toy SDK 能力文档没有摇杆接口，导出 Android APK 本身也不会自动生成系统摇杆界面；控件仍需放置在游戏的触控界面里。本轮未导出或验收 APK。
+
+触控布局为左摇杆、右侧大「交互」键和较小的「按住思考」键；大键复用原先的拿盒、送饭、放回及保温箱路径，不能远程送饭。接菜区域不再响应手指拖盒。引导固定在底部，中间留出说明区域，两侧留给操作；饭盒活动下边界相应上移，引导及完成提示均不再跟随饭盒跳动。帮助和中英提示已同步更新，字体已重新裁集。
+
+4.7.2 的原生摇杆没有公开 reset 方法，且失焦不会自动清除内部触点。本项目在暂停、失焦或离开场景时释放动作，必要时在通知遍历结束后重建该引擎控件，防止旧手指在恢复游戏后重新带动饭盒。
+
+- 中英触控各 55 项通过、0 失败，960×540 GPU 运行：包括真实 ScreenTouch/ScreenDrag 经 Viewport/GUI 派发、两指移动与思考、触点取消、控件外松手、暂停、失焦恢复、取盒接菜送饭、桌面输入切换及用户存档不变。
+- 桌面输入回归 260 项通过；键盘及模拟手柄事件，不等同于实物手柄测试。
+- 桌面引导及原有技能树呈现测试 1,348 项通过；检查固定底部引导与饭盒不重叠。采用显式状态夹具，非完整人工通关。
+- 两轮触控报告内的游戏脚本、翻译和字体摘要与 RC3 构建副本一致；项目配置由隔离构建去除编辑器插件、设置 Web 渲染。测试场景不进入 ZIP。
+- RC3 构建重新通过 50 MB 上限、文件后缀、888 个所需汉字覆盖及 123 张纹理尺寸/透明通道检查。
+
+报告、日志与已查看的中英引导截图保存在 `build/toy-final-rc3/qa/`，其中 `touch-zh1/report.json` 与 `touch-en1/report.json` 记录运行前后源码摘要。浏览器线上检查和上传证据也存放于该目录。触控测试是引擎事件注入，尚不能证明物理手机、浏览器触摸转换、人体工学或手机性能通过。
+
+RC3 的 Toy 上传已通过，独立线上预览完成引擎启动、标题与设置开关检查。标题保留用户现有的第 5 顿饭、大肥鱼 V3、20 token；未重置存档或修改设置。控制台仅捕获 B 站 reporter 的 spmId 告警，未捕获游戏错误。`qa/release-evidence.json` 绑定上传包与运行截图摘要；正式发布未点击。本轮没有重新测量音频输出，RC2 修复保留。
 
 ## RC2 音频修复与封面
 
@@ -63,14 +81,15 @@ RC2 已通过 Toy 上传校验，线上预览启动及设置入口可用，并�
 
 ## Toy 预览及发布资料
 
-- 当前 RC2 发布表单的预览：https://www.bilibili.com/toy/preview/preview_uquvmFbj/index.html
+- 当前 RC3 发布表单的预览：https://www.bilibili.com/toy/preview/preview_o7QvaLNs/index.html
+- RC2 历史预览：https://www.bilibili.com/toy/preview/preview_uquvmFbj/index.html
 - RC1 完整流程验收先在 `preview_2GHUBKQX` 完成；同一 ZIP 重新上传后生成 `preview_5fQDiQbe`，刷新了旧 DNS 错误的内嵌预览。RC1 两次 ZIP 的 SHA-256 相同，后者另行确认启动并保留第 2 顿、8 token。RC1 发布表单截图为其 QA 目录中的 `toy-ready-unpublished.jpg`，独立预览截图为 `toy-final-preview.jpg`。
 - 名称：吃白饭的大肥鱼。
 - 拟用页面地址：`fatfish-free-lunch`；尚未发布，不承诺已占用此地址。
 - 分类：游戏。
 - 封面：`art_src/store/toy_cover_zh.png`，4:3，由 imagegen 编辑为端盆、面无表情的角色；与原图不是逐像素相同。
 - 图标：`game/assets/ui/icon.png`。
-- 当前表单为“链接访问”、深色主题，未参加活动，未启用访客水印。
+- 本次接续时表单已选中“所有人可见”、深色主题，未参加活动，未启用访客水印；更新包时没有修改这些选项。正式发布仍须等待用户决定。
 
 Toy 上传校验已通过并生成上述预览。此前 `www.bilibilitoy.com` 无法解析的问题已修复：OpenClash 的加密 DNS 上游使用 `#proxy`，但没有对应代理组或网卡，内核返回 `no such device`。备份后将 DNS 引用改为现有代理组并热加载；路由器、Windows DNS 与 Chrome 实际加载均恢复。没有重启路由器，代理节点选择保持不变。修复记录在本地 `build/toy-final-rc1/qa/network-repair.json`，凭据及路由器配置不进入仓库。
 
