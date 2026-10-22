@@ -1,9 +1,12 @@
 extends Node2D
 ## Promo v2 (2026-10-21) 《超可爱的大肥鱼增量小游戏，要实现AGI得先吃饱！》
+## `-- --cut=short` (2026-10-22): the 35 s re-cut after the first upload lost 43% of viewers in 3 s.
+## It opens on the busiest gameplay with the title on screen and the music already at full band
+## (export3.py starts the BGM at its 15 s drop), then the same story at one or two bars per beat.
 ## New illustrations (art_src/promo) carry the story; real PC gameplay runs unchanged in a viewport.
 ## Shot starts follow the sections of the promo BGM (gen_promo_audio.py); the music and 梁阿姨's
 ## lines are mixed in afterwards by export2.py, so in here the Music bus is silent.
-const LENGTH := 59.0
+var LENGTH := 59.0
 const CREAM := Color("fff1cf")
 const GOLD := Color("ffce73")
 const INK := Color("3b2416")
@@ -58,6 +61,18 @@ var captions := [
 	["p5_full", BAR, 3.7, "……明天还来。", "gold", Vector2(960, 310), 64],
 ]
 
+## timing knobs (the short cut overrides them)
+var chalk_at := [BAR, 2 * BAR, 3 * BAR]
+var chalk_in := 0.5
+var chalk_end := 7.4
+var hungry_at := 3 * BAR + 0.5
+var ladder_at := [0.1, 0.1 + BEAT, 0.1 + 2 * BEAT, 0.1 + 3 * BEAT, 0.1 + 4 * BEAT]
+var ladder_agi := 6 * BEAT
+var tree_buys := [[BEAT, "skills"], [3 * BEAT, "hire"], [5 * BEAT, "think"], [7 * BEAT, "vram"], [9 * BEAT, "eat"]]
+var end_cta := 2.8
+var fade_in := 0.8
+var short_cut := false
+
 var t := 0.0
 var shot := -1
 var local_t := 0.0
@@ -77,6 +92,7 @@ var log_lines: Array = []
 func _ready() -> void:
 	for a in OS.get_cmdline_user_args():
 		if a.begins_with("--out="): out = a.trim_prefix("--out=")
+		if a == "--cut=short": _short_cut()
 	Settings.pause_unfocused = false
 	Settings.mute_unfocused = false
 	Settings.hit_pause = false
@@ -117,6 +133,46 @@ func _ready() -> void:
 	add_child(overlay)
 
 ## ---------------------------------------------------------------- game fixtures (as trailer.gd)
+func _short_cut() -> void:
+	short_cut = true
+	LENGTH = 35.5
+	shots = [
+		[0.0, "game", "hook"],
+		[BAR, "ill", "p1_hungry"],
+		[3 * BAR, "ill", "p2_auntie"],
+		[4 * BAR, "game", "early"],
+		[6 * BAR, "ill", "p3_catch"],
+		[7 * BAR, "tree", "tree"],
+		[9 * BAR, "ladder", "ladder"],
+		[10 * BAR, "ill", "p4_crew"],
+		[12 * BAR, "game", "late"],
+		[15 * BAR, "ill", "p5_full"],
+		[16 * BAR, "end", "p6_agi"],
+	]
+	captions = [
+		["hook", 0.0, 1.8, "如果大肥鱼是一款增量游戏", "big", Vector2(960, 150), 100],
+		["hook", 2 * BEAT, 1.8, "只吃白饭，就能实现 AGI？", "stamp", Vector2(960, 330), 64],
+		["p1_hungry", 2.3, 3.7, "咕噜噜——", "big", Vector2(1290, 880), 100],
+		["p2_auntie", 0.05, 1.85, "梁阿姨：开饭咯——！", "paper", Vector2(960, 950), 64],
+		["early", 0.1, 3.7, "接住饭 → 喂给她 → 赚 token", "paper", Vector2(560, 975), 56],
+		["p3_catch", 0.05, 1.85, "一口都不许掉！", "stamp", Vector2(560, 880), 96],
+		["tree", 0.1, 3.7, "token 拿去点技能树", "paper", Vector2(470, 975), 56],
+		["ladder", 0.05, 1.85, "版本号一路往上涨……", "big", Vector2(960, 150), 80],
+		["p4_crew", 0.1, 3.7, "吃不过来？雇六个外包小助手！", "big", Vector2(960, 150), 80],
+		["late", 0.1, 2.7, "食堂越忙，越快乐！", "paper", Vector2(470, 975), 56],
+		["late", 2.9, 5.55, "暴食流 · 美食家流 · 吃菜邪修", "paper", Vector2(560, 975), 52],
+		["p5_full", 0.05, 1.85, "吃饱了。", "big", Vector2(960, 170), 130],
+	]
+	chalk_at = [0.1, 0.55, 1.2]
+	chalk_in = 0.0
+	chalk_end = 3.7
+	hungry_at = 2.4
+	ladder_at = [0.05, 0.05 + BEAT * 0.5, 0.05 + BEAT, 0.05 + BEAT * 1.5, 0.05 + 2 * BEAT]
+	ladder_agi = 3 * BEAT
+	tree_buys = [[BEAT, "skills"], [3 * BEAT, "hire"], [5 * BEAT, "think"], [7 * BEAT, "eat"]]
+	end_cta = 1.6
+	fade_in = 0.0
+
 func base_state(version: int, levels: Dictionary) -> void:
 	Game.reset_save()
 	Game.version = version
@@ -165,7 +221,7 @@ func _enter(index: int) -> void:
 		run.autotest = true
 		screen = run
 		vp.add_child(screen)
-		for i in 480: run._process(1.0 / 60.0)
+		for i in (1500 if arg() == "hook" else 480): run._process(1.0 / 60.0)
 	elif kind() == "tree":
 		base_state(1, {"start": 1, "conc": 1, "vram": 1, "api": 2, "eat": 1, "ticket_r1": 1})
 		Game.tokens = 240000.0
@@ -193,7 +249,7 @@ func _process(delta: float) -> void:
 	if wanted != shot: _enter(wanted)
 	match kind():
 		"ill":
-			if arg() == "p1_hungry" and cue(3 * BAR + 0.5, "hungry"): Audio.vo("fish_wait", 2)
+			if arg() == "p1_hungry" and cue(hungry_at, "hungry"): Audio.vo("fish_wait", 2)
 			if arg() == "p3_catch" and cue(0.1, "stamp"): Audio.sfx("crit", -4.0)
 			if arg() == "p4_crew":
 				for i in 7:
@@ -206,7 +262,7 @@ func _process(delta: float) -> void:
 			pass
 		"tree":
 			var tree := screen as TreeScreen
-			for b in [[BEAT, "skills"], [3 * BEAT, "hire"], [5 * BEAT, "think"], [7 * BEAT, "vram"], [9 * BEAT, "eat"]]:
+			for b in tree_buys:
 				if cue(b[0], b[1]):
 					tree._hover = b[1]
 					tree.try_buy(b[1])
@@ -214,8 +270,8 @@ func _process(delta: float) -> void:
 			tree.queue_redraw()
 		"ladder":
 			for i in 5:
-				if cue(LADDER_AT[i], "v%d" % i): Audio.sfx("ticket", -2.0)
-			if cue(LADDER_AGI, "agi"): Audio.sfx("version_up", 0.0)
+				if cue(ladder_at[i], "v%d" % i): Audio.sfx("ticket", -2.0)
+			if cue(ladder_agi, "agi"): Audio.sfx("version_up", 0.0)
 		"end":
 			if cue(0.4, "smile"): Audio.vo("fish_happy", 2)
 			if cue(2 * BEAT, "stamp"): Audio.sfx("ticket", 0.0)
@@ -223,7 +279,7 @@ func _process(delta: float) -> void:
 	overlay.queue_redraw()
 	if t >= LENGTH:
 		if out != "":
-			var f := FileAccess.open(out.path_join("promo2-report.json"), FileAccess.WRITE)
+			var f := FileAccess.open(out.path_join("promo3-report.json" if short_cut else "promo2-report.json"), FileAccess.WRITE)
 			f.store_string(JSON.stringify({"duration": LENGTH, "fps": 30, "shots": log_lines, "save_path": Game.save_path}, "\t"))
 		get_tree().quit()
 
@@ -354,14 +410,12 @@ func _draw_title(lt: float) -> void:
 	draw_rect(Rect2(0, 0, 1920, 1080), Color(1, 1, 1, clampf(1.0 - lt / 0.25, 0, 1)))
 
 const LADDER := ["V3", "R1", "V3.1", "V3.2", "V4"]
-const LADDER_AT := [0.1, 0.1 + BEAT, 0.1 + 2 * BEAT, 0.1 + 3 * BEAT, 0.1 + 4 * BEAT]
-const LADDER_AGI := 6 * BEAT
 
 func _draw_ladder(lt: float) -> void:
 	draw_texture_rect(tex["cork_bg"], Rect2(0, 0, 1920, 1080), false)
 	var tk: Texture2D = tex["ticket"]
 	for i in 5:
-		var at: float = LADDER_AT[i]
+		var at: float = ladder_at[i]
 		if lt < at: continue
 		var a := lt - at
 		var p := Vector2(250 + i * 275, 860 - i * 118)
@@ -378,8 +432,8 @@ func _draw_ladder(lt: float) -> void:
 		draw_set_transform(Vector2.ZERO)
 		draw_texture_rect(tex["pin"], Rect2(p + Vector2(-20, -100), Vector2(30, 60)), false)
 	# the last ticket: gold, shaking, still unknown
-	if lt > LADDER_AGI:
-		var a := lt - LADDER_AGI
+	if lt > ladder_agi:
+		var a := lt - ladder_agi
 		var tg: Texture2D = tex["ticket_gold"]
 		var p := Vector2(1665, 235) + Vector2(sin(a * 40.0), cos(a * 33.0)) * 5.0 * clampf(1.2 - a, 0, 1)
 		var sc := lerpf(2.4, 1.0, back_out(a / 0.3)) * 1.7
@@ -394,6 +448,10 @@ func _draw_ladder(lt: float) -> void:
 func _draw_overlay() -> void:
 	var lt := local_t
 	var until: float = shot_end() - float(shots[shot][0]) - 0.05
+	if arg() == "hook":
+		# a dark band so the title reads over the busy HUD in the very first frame
+		for i in 12:
+			overlay.draw_rect(Rect2(0, i * 40, 1920, 40), Color(0.04, 0.07, 0.1, 0.72 * (1.0 - maxf(0.0, i - 7) / 5.0)))
 	for c in captions:
 		if c[0] != arg(): continue
 		var to: float = minf(c[2], until)
@@ -403,7 +461,7 @@ func _draw_overlay() -> void:
 	if arg() == "p1_hungry": _draw_chalk(lt)
 	if kind() == "end": _draw_end(lt)
 	# opening fade from black, closing fade to black
-	if t < 0.8: overlay.draw_rect(Rect2(0, 0, 1920, 1080), Color(0, 0, 0, 1.0 - t / 0.8))
+	if t < fade_in: overlay.draw_rect(Rect2(0, 0, 1920, 1080), Color(0, 0, 0, 1.0 - t / fade_in))
 	if t > LENGTH - 1.2: overlay.draw_rect(Rect2(0, 0, 1920, 1080), Color(0, 0, 0, (t - (LENGTH - 1.2)) / 1.2))
 	# a quick white flash on every cut (on the beat)
 	if t > 1.0 and lt < 0.12 and kind() not in ["title", "growl"]:
@@ -412,7 +470,7 @@ func _draw_overlay() -> void:
 func _draw_end(lt: float) -> void:
 	var o := overlay
 	# darken the lower band a little so the call to action reads
-	var band := ease_out((lt - 2.8) / 0.5)
+	var band := ease_out((lt - end_cta) / 0.5)
 	if band > 0:
 		o.draw_rect(Rect2(0, 860, 1920, 220), Color(0.05, 0.1, 0.14, 0.82 * band))
 	var logo: Texture2D = tex["logo"]
@@ -425,28 +483,32 @@ func _draw_end(lt: float) -> void:
 		o.draw_set_transform(Vector2.ZERO)
 	if lt > 2 * BEAT:
 		_draw_caption("要实现 AGI，得先吃饱！", "stamp", Vector2(470, 520), 64, lt - 2 * BEAT, 1.0)
-	if lt > 2.8:
-		var al := ease_out((lt - 2.8) / 0.4)
+	if lt > end_cta:
+		var al := ease_out((lt - end_cta) / 0.4)
 		o.draw_style_box(panel(Color(1, 0.96, 0.87, al), 14), Rect2(80, 885, 170, 170))
 		o.draw_texture_rect(tex["qr"], Rect2(88, 893, 154, 154), false, Color(1, 1, 1, al))
-		o.draw_string(big_font, Vector2(290, 950), "B站 Toy 免费开玩 · 手机电脑都能玩", HORIZONTAL_ALIGNMENT_LEFT, -1, 50, Color(GOLD, al))
-		o.draw_string(body_font, Vector2(292, 1005), "免费 · 开源 · 非商用同人作品   作者：夸夸家族族长", HORIZONTAL_ALIGNMENT_LEFT, -1, 30, Color(CREAM, al))
+		if short_cut:
+			o.draw_string(big_font, Vector2(290, 950), "免费玩：B站 Toy · 链接在简介", HORIZONTAL_ALIGNMENT_LEFT, -1, 52, Color(GOLD, al))
+			o.draw_string(body_font, Vector2(292, 1005), "已经有玩家喂到 AGI 了，你呢？评论区晒结算图！", HORIZONTAL_ALIGNMENT_LEFT, -1, 30, Color(CREAM, al))
+		else:
+			o.draw_string(big_font, Vector2(290, 950), "B站 Toy 免费开玩 · 手机电脑都能玩", HORIZONTAL_ALIGNMENT_LEFT, -1, 50, Color(GOLD, al))
+			o.draw_string(body_font, Vector2(292, 1005), "免费 · 开源 · 非商用同人作品   作者：夸夸家族族长", HORIZONTAL_ALIGNMENT_LEFT, -1, 30, Color(CREAM, al))
 		o.draw_string(body_font, Vector2(292, 1046), "角色原型「溟月」：上善无形 · 女仆版设计：ZipZipPipe · 素材 CC BY-NC-SA 4.0 · 与 DeepSeek 官方无关", HORIZONTAL_ALIGNMENT_LEFT, -1, 21, Color(0.75, 0.83, 0.85, al))
 
 ## The HUD chalkboard (ui_chalkboard.png) with chalk lines written on it one bar at a time.
 func _draw_chalk(lt: float) -> void:
 	var o := overlay
-	var a := ease_out((lt - 0.5) / 0.5)
-	if a <= 0 or lt > 7.4: return
-	var out_a := clampf((7.4 - lt) / 0.15, 0, 1)
+	var a := 1.0 if chalk_in <= 0.0 else ease_out((lt - chalk_in) / 0.5)
+	if a <= 0 or lt > chalk_end: return
+	var out_a := clampf((chalk_end - lt) / 0.15, 0, 1)
 	var pos := Vector2(70, 120) + Vector2(0, (1.0 - a) * -40)
 	var sz := Vector2(790, 478)
 	o.draw_set_transform(pos + sz * 0.5, -0.02, Vector2.ONE)
 	o.draw_texture_rect(tex["ui_chalkboard"], Rect2(-sz * 0.5, sz), false, Color(1, 1, 1, a * out_a))
 	var chalk := Color(0.96, 0.96, 0.9)
-	var lines := [[BAR, "今日计划", 66, Vector2(-300, -125), chalk],
-		[2 * BAR, "① 实现 AGI　进度：1%", 56, Vector2(-300, -15), chalk],
-		[3 * BAR, "② 先吃饭。", 80, Vector2(-300, 100), Color(1.0, 0.9, 0.55)]]
+	var lines := [[chalk_at[0], "今日计划", 66, Vector2(-300, -125), chalk],
+		[chalk_at[1], "① 实现 AGI　进度：1%", 56, Vector2(-300, -15), chalk],
+		[chalk_at[2], "② 先吃饭。", 80, Vector2(-300, 100), Color(1.0, 0.9, 0.55)]]
 	for l in lines:
 		var w: float = clampf((lt - l[0]) / 0.35, 0, 1)
 		if w <= 0: continue
@@ -456,6 +518,6 @@ func _draw_chalk(lt: float) -> void:
 		o.draw_set_transform(pos + sz * 0.5, -0.02, Vector2.ONE)
 		o.draw_string(f, l[3] + Vector2(0, l[2] * 0.36), l[1], HORIZONTAL_ALIGNMENT_LEFT, full * w + 2, l[2], Color(l[4], out_a * 0.92))
 	# a chalk underline and a tick under the plan
-	if lt > BAR + 0.4:
-		o.draw_line(Vector2(-300, -62), Vector2(-300 + 330 * clampf((lt - BAR - 0.4) / 0.3, 0, 1), -59), Color(chalk, 0.7 * out_a), 3, true)
+	if lt > chalk_at[0] + 0.4:
+		o.draw_line(Vector2(-300, -62), Vector2(-300 + 330 * clampf((lt - chalk_at[0] - 0.4) / 0.3, 0, 1), -59), Color(chalk, 0.7 * out_a), 3, true)
 	o.draw_set_transform(Vector2.ZERO)
