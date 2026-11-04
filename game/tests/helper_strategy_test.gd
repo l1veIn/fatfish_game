@@ -6,6 +6,23 @@ var failures := 0
 var runs: Array = []
 var sprites: Array = []
 
+class ScriptErrorLog extends Logger:
+	var entries: Array = []
+	var mutex := Mutex.new()
+
+	func _log_error(function: String, file: String, line: int, code: String, rationale: String, _editor_notify: bool, error_type: int, _script_backtraces: Array[ScriptBacktrace]) -> void:
+		if error_type != Logger.ERROR_TYPE_SCRIPT:
+			return
+		mutex.lock()
+		entries.append({"function": function, "file": file, "line": line, "code": code, "rationale": rationale})
+		mutex.unlock()
+
+	func snapshot() -> Array:
+		mutex.lock()
+		var result := entries.duplicate(true)
+		mutex.unlock()
+		return result
+
 func check(ok: bool, label: String) -> void:
 	checks.append({"ok":ok,"label":label})
 	if not ok:
@@ -208,6 +225,35 @@ func test_value_and_catches() -> void:
 	run._crew = [helper(run,"wen","sweep",[],-1,500)]
 	run.helper_speed = 2
 	check(is_equal_approx(run._plan_crew(900).wen,650),"sweep decision prefers actual gold-hot value at equal travel distance")
+
+func test_return_to_catching_without_mouse() -> void:
+	configure({"hire":1})
+	var run := fresh_run()
+	var c := helper(run,"wen","sweep",[food("ball")],-1,CanteenRun.FULL_AT.x - 60.0)
+	add_dummy_sprite(c)
+	c.state = "return"
+	run._crew = [c]
+	run._hand = box(run)
+	run._hand.pos = Vector2(1200,700)
+	var parked: Vector2 = run._hand.pos
+	run._arms = [{"x":300.0,"t":0.5,"dish":food("ball")}]
+	run._update_crew(1.0 / 60.0)
+	check(c.state == "fetch" and c.box == null and run._flying.size() == 1,"single sweep helper hands off the first box through the production return transition")
+	for i in 45:
+		run._update_crew(1.0 / 60.0)
+	check(c.state == "catch" and c.box != null,"single level-one helper reserves another box after delivery")
+	check(float(run._plan_crew(900).wen) < 1000.0,"distant useful window beats waiting forever beside the delivery table")
+	for i in 180:
+		run._update_crew(1.0 / 60.0)
+	check(float(c.x) < 1000.0 and run._hand.pos == parked,"helper returns to the catch area without any mouse movement")
+	run._arms.clear()
+	c.x = CanteenRun.FULL_AT.x - 60.0
+	var fallback: float = run._plan_crew(900).wen
+	check(fallback >= 60.0 and fallback <= 1400.0 and not run._helper_player_column(fallback),"without useful windows a returning helper waits inside the catch area outside the player column")
+	run._arms = [{"x":300.0,"t":0.5,"dish":food("ball")}]
+	run._hand.pos = Vector2(300,700)
+	var safe_goal: float = run._plan_crew(900).wen
+	check(not run._helper_player_column(safe_goal),"return recovery still yields the player's reserved column")
 
 func test_recipes_and_decisions() -> void:
 	configure({"hire":2,"fc":1,"stall_main":1,"stall_wok":1,"stall_dim":2,"stall_fry":1,"grok":1})
@@ -421,11 +467,16 @@ func test_queue_relay_and_budget() -> void:
 	check(run._crew[5].box != null and run._crew[0].box == null and run._helper_box_count() == 6,"longest wait wins limited reservation; no fixed-order starvation or over-budget allocation")
 
 ## Real closing-time scoring, not a replacement/stub for _end or its multiplier rules.
-## A real FishRig satisfies the presentation endpoint; no _ready/GPU scene is needed.
+## Load the real art geometry used by bite-origin cues without starting a live shift.
 func settlement_run() -> CanteenRun:
 	var run := fresh_run()
+	run._load_art()
 	run._fish = FishRig.new()
 	run.add_child(run._fish)
+	run._meal_visual = CanteenRun.FISH_MEAL_VISUAL.new()
+	run._meal_visual.run = run
+	run._meal_visual.fish = run._fish
+	run.add_child(run._meal_visual)
 	return run
 
 func test_relay_and_leftover_settlement() -> void:
@@ -513,26 +564,21 @@ func _ready() -> void:
 		push_error("Refusing helper strategy test outside isolated profile")
 		get_tree().quit(2)
 		return
+	var script_error_log := ScriptErrorLog.new()
+	OS.add_logger(script_error_log)
 	var settings_before := FileAccess.get_file_as_bytes(Settings.PATH)
 	CanteenRun.load_menu()
 	seed(20261019)
 	test_data_and_configuration()
 	test_persistence_and_switches()
 	test_value_and_catches()
+	test_return_to_catching_without_mouse()
 	test_recipes_and_decisions()
 	test_nutrition()
 	test_ge_inspection()
 	test_queue_relay_and_budget()
 	await test_relay_and_leftover_settlement()
 	check(FileAccess.get_file_as_bytes(Settings.PATH) == settings_before,"player settings remain byte-identical")
-	var report := {"checks":checks,"check_count":checks.size(),"failures":failures,"scope":"Headless real-policy fixtures; not human play, visual quality or build balance evidence","hashes":{}}
-	for path in ["res://scripts/autoload/game.gd","res://scripts/run/canteen_run.gd","res://scripts/run/meal_rules.gd","res://data/skill_tree.json","res://tests/helper_strategy_test.gd"]:
-		report.hashes[path] = FileAccess.get_sha256(path)
-	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path("res://../build/qa/helper-strategy"))
-	# Keep the original 113-check report bound to its original source hashes.
-	var file := FileAccess.open("res://../build/qa/helper-strategy/strategy-settlement-report.json",FileAccess.WRITE)
-	file.store_string(JSON.stringify(report,"\t"))
-	file.close()
 	Game.reset_save()
 	for run in runs:
 		run.free()
@@ -543,5 +589,17 @@ func _ready() -> void:
 			player.stop()
 			player.stream = null
 	await get_tree().create_timer(0.12,true,false,true).timeout
+	var script_errors := script_error_log.snapshot()
+	OS.remove_logger(script_error_log)
+	# Script errors abort a GDScript call even when its later value assertions pass.
+	failures += script_errors.size()
+	var report := {"checks":checks,"check_count":checks.size(),"failures":failures,"script_errors":script_errors,"script_errors_are_failures":true,"scope":"Headless real-policy fixtures; not human play, visual quality or build balance evidence","hashes":{}}
+	for path in ["res://scripts/autoload/game.gd","res://scripts/run/canteen_run.gd","res://scripts/run/meal_rules.gd","res://data/skill_tree.json","res://tests/helper_strategy_test.gd"]:
+		report.hashes[path] = FileAccess.get_sha256(path)
+	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path("res://../build/qa/helper-strategy"))
+	# Keep the original 113-check report bound to its original source hashes.
+	var file := FileAccess.open("res://../build/qa/helper-strategy/strategy-settlement-report.json",FileAccess.WRITE)
+	file.store_string(JSON.stringify(report,"\t"))
+	file.close()
 	print("HELPER_STRATEGY_TEST: %d checks, %d failures" % [checks.size(),failures])
 	get_tree().quit(failures)

@@ -40,19 +40,21 @@ class FingerButton extends Button:
 			accept_event()
 
 	func _input(event: InputEvent) -> void:
+		if event is InputEventMouse or event is InputEventScreenTouch or event is InputEventScreenDrag:
+			event = make_input_local(event)
 		# Native Button already supports desktop mouse/keyboard. Touch-generated mouse
 		# must not duplicate this button's own multitouch activation.
-		if event is InputEventMouse and event.device == InputEvent.DEVICE_ID_EMULATION and is_visible_in_tree() and get_global_rect().has_point(event.position):
+		if event is InputEventMouse and event.device == InputEvent.DEVICE_ID_EMULATION and is_visible_in_tree() and Rect2(Vector2.ZERO, size).has_point(event.position):
 			get_viewport().set_input_as_handled()
 			return
 		if _finger < 0:
 			return
 		if event is InputEventScreenDrag and event.index == _finger:
-			if not get_global_rect().has_point(event.position):
+			if not Rect2(Vector2.ZERO, size).has_point(event.position):
 				cancel_touch()
 			get_viewport().set_input_as_handled()
 		elif event is InputEventScreenTouch and event.index == _finger and (not event.pressed or event.canceled):
-			var activate: bool = not event.canceled and not disabled and is_visible_in_tree() and get_global_rect().has_point(event.position)
+			var activate: bool = not event.canceled and not disabled and is_visible_in_tree() and Rect2(Vector2.ZERO, size).has_point(event.position)
 			cancel_touch()
 			get_viewport().set_input_as_handled()
 			if activate:
@@ -108,6 +110,8 @@ func _ready() -> void:
 	hint.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(hint)
 	Settings.changed.connect(_apply_layout)
+	if is_instance_valid(ScreenLayout.active):
+		ScreenLayout.active.changed.connect(_apply_layout)
 	_apply_layout()
 	_refresh()
 
@@ -200,6 +204,8 @@ func _place_control(control: Control, id: String) -> void:
 
 func _apply_layout() -> void:
 	cancel_touch()
+	if is_instance_valid(pause_button):
+		pause_button.position = ScreenLayout.touch_rect(Rect2(420, 24, 170, 96)).position
 	for pair in [[joystick, "joystick"], [think_button, "think"]]:
 		if is_instance_valid(pair[0]):
 			_place_control(pair[0], pair[1])

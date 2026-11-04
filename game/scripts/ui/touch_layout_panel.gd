@@ -29,11 +29,9 @@ func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_STOP
 	draft = Settings.touch_layout.duplicate(true)
 	_arm_distance = Settings.touch_arm_distance
-	var dim := ColorRect.new()
-	dim.color = Color(0.06, 0.04, 0.02, 0.64)
-	dim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	dim.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	add_child(dim)
+	ScreenLayout.shade(self, Color(0.06, 0.04, 0.02, 0.64))
+	if is_instance_valid(ScreenLayout.active):
+		ScreenLayout.active.changed.connect(_refresh)
 	_hand_preview = Node2D.new()
 	_hand_preview.draw.connect(_draw_hand_preview)
 	add_child(_hand_preview)
@@ -187,6 +185,7 @@ func _gui_input(event: InputEvent) -> void:
 
 func _input(event: InputEvent) -> void:
 	if _drag_id == "": return
+	event = make_input_local(event)
 	var move := false
 	var at := Vector2.ZERO
 	if event is InputEventScreenDrag and event.index == _finger:

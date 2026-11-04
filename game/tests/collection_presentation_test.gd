@@ -50,6 +50,7 @@ func _ready() -> void:
 	Game.runs = 25
 	Game.achievements = {"first_meal": 1, "recipe_first": 1, "release_r1": 1, "balanced": 1, "gold_box": 1}
 	Game.levels = {"start": 1, "stall_wok": 2, "stall_dim": 2, "stall_fry": 2, "stall_sweet": 2}
+	Game.recipes_revealed = false
 	Game._recompute()
 	CanteenRun.load_menu()
 	for locale in ["zh_CN", "en"]:
@@ -61,6 +62,7 @@ func _ready() -> void:
 				Game.recipes[CanteenRun.RECIPES[i].id] = i + 1
 		await _exercise_title(locale)
 		await _exercise_pause(locale)
+		await _exercise_recipe_reveal(locale)
 	await _exercise_toast_timing()
 	_check(FileAccess.get_file_as_bytes(Settings.PATH) == settings_before, "player settings unchanged")
 	_check(FileAccess.get_file_as_bytes("user://save.json") == player_before, "player progress unchanged")
@@ -183,6 +185,106 @@ func _exercise_pause(locale: String) -> void:
 	get_tree().paused = false
 	Audio.duck(false)
 	await _frames(3)
+
+
+func _exercise_recipe_reveal(locale: String) -> void:
+	var old_levels := Game.levels.duplicate(true)
+	var old_recipes := Game.recipes.duplicate(true)
+	var old_revealed := Game.recipes_revealed
+	Game.recipes = {}
+	Game.recipes_revealed = false
+	Game.levels.erase("agirec")
+	# Open every ingredient so unchanged helper options cannot pass merely because
+	# an undiscovered hidden recipe lacks its ingredients or a large enough box.
+	for node in Game.nodes:
+		if str(node.id).begins_with("stall_"):
+			Game.levels[node.id] = int(node.max)
+	Game.levels["vram"] = 2
+	Game.levels["compress"] = 1
+	Game._recompute()
+	var hidden_options := Game.helper_recipe_options()
+	_check(CanteenRun.RECIPES.size() == 20, "twenty collectible recipes are covered: " + locale)
+	for state in ["hidden", "revealed", "made"]:
+		if state == "revealed":
+			Game.levels["agirec"] = 1
+			Game._recompute()
+			_check(Game.all_recipes_revealed(), "AGI level one reveals formulas: " + locale)
+			_check(Game.recipes.is_empty(), "revealing formulas does not discover recipes: " + locale)
+			_check(Game.helper_recipe_options() == hidden_options, "formula reveal does not unlock hidden helper orders: " + locale)
+		elif state == "made":
+			# A recorded production remains distinct from merely reading its formula.
+			Game.recipes = {"deep": 3, "full": 7}
+		var recipes_before := Game.recipes.duplicate(true)
+		var achievements_before := Game.achievements.duplicate(true)
+		var helpers_before := Game.helper_recipe_options()
+		var book := RecipeBook.new()
+		_host.add_child(book)
+		await _frames(3)
+		_check(_label_texts(book).has(tr("已发现 %d / %d 道套餐") % [Game.recipes.size(), CanteenRun.RECIPES.size()]), "contents counts actual discoveries: " + locale + " " + state)
+		await _mouse(book._index_buttons[0].get_global_rect().get_center())
+		var seen: Array[String] = []
+		for spread in book._page_count:
+			_check(book._spread == spread, "revealed chapter turns exactly one spread: " + locale + " " + state)
+			var entries: Array = []
+			for side in 2:
+				var leaf := spread * 2 + side
+				if leaf < book._leaves.size():
+					entries.append_array(book._leaves[leaf])
+			_check(entries.size() == book._entry_controls.size(), "every recipe on the spread has a visible entry")
+			for i in mini(entries.size(), book._entry_controls.size()):
+				var recipe: Dictionary = entries[i]
+				var entry: Control = book._entry_controls[i]
+				var texts := _label_texts(entry)
+				var context: String = locale + " " + state + " " + str(recipe.id)
+				_check(not seen.has(str(recipe.id)), "recipe appears once: " + context)
+				seen.append(str(recipe.id))
+				if state == "hidden":
+					_check(texts.has(tr("未发现的套餐")), "unrevealed recipe keeps its concealed title: " + context)
+					_check(texts.has(tr(recipe.hint) if recipe.hint != "" else tr("还没吃到过")), "unrevealed recipe keeps its hint: " + context)
+				else:
+					_check(texts.has(tr(recipe.name)), "revealed recipe shows its actual title: " + context)
+					var ingredients: Array[String] = []
+					for need in recipe.needs:
+						ingredients.append(tr(CanteenRun.NAMES[need]))
+					_check(texts.has(" + ".join(ingredients)), "revealed recipe shows all direct ingredients: " + context)
+					var status := tr("已制作 %d 次") % int(Game.recipes[recipe.id]) if Game.recipes.has(recipe.id) else tr("尚未制作")
+					_check(texts.has(status), "reading and actual production have distinct statuses: " + context)
+					if recipe.id == "full":
+						_check(texts.has(tr("子套餐配方")), "full recipe displays its nested-formula heading: " + context)
+						var body := "\n".join(texts)
+						for parts in [["egg_veg", "egg", "veg"], ["homestyle", "bowl", "egg_veg"], ["happy", "burger", "fries", "cola"], ["breakfast", "soymilk", "youtiao"], ["tea", "pudding", "milktea"]]:
+							var names: Array[String] = []
+							for id in parts.slice(1):
+								names.append(tr(CanteenRun.NAMES[CanteenRun.KIND[id]]))
+							var formula := "%s = %s" % [tr(CanteenRun.NAMES[CanteenRun.KIND[parts[0]]]), " + ".join(names)]
+							_check(body.contains(formula), "full recipe expands subrecipe through raw ingredients: " + context + " " + str(parts[0]))
+				for child in entry.get_children():
+					if child is TextureRect:
+						_check(child.modulate.is_equal_approx(Color.WHITE) == Game.recipes.has(recipe.id), "only produced dishes have bright artwork: " + context)
+			_assert_layout(book, locale + " " + state + " sets " + str(spread))
+			if state == "revealed":
+				await _shot(locale + "_revealed_sets_" + str(spread))
+			if spread < book._page_count - 1:
+				await _key(KEY_PAGEDOWN)
+		_check(seen.size() == CanteenRun.RECIPES.size(), "every recipe is browsable in this state: " + locale + " " + state)
+		await _key(KEY_ESCAPE)
+		_check(not is_instance_valid(book), "revealed cookbook closes normally: " + locale + " " + state)
+		_check(Game.recipes == recipes_before, "browsing leaves recipe discovery and production counts unchanged: " + locale + " " + state)
+		_check(Game.achievements == achievements_before, "browsing leaves achievements unchanged: " + locale + " " + state)
+		_check(Game.helper_recipe_options() == helpers_before, "browsing leaves helper recipe choices unchanged: " + locale + " " + state)
+	Game.levels = old_levels
+	Game.recipes = old_recipes
+	Game.recipes_revealed = old_revealed
+	Game._recompute()
+
+
+func _label_texts(node: Node) -> Array[String]:
+	var texts: Array[String] = []
+	if node is Label and node.is_visible_in_tree():
+		texts.append(node.text)
+	for child in node.get_children():
+		texts.append_array(_label_texts(child))
+	return texts
 
 
 func _exercise_toast_timing() -> void:

@@ -103,8 +103,8 @@ func _process(delta: float) -> void:
 
 
 func _draw() -> void:
-	draw_texture_rect(WALL, Rect2(0, 0, 1920, 1080), false, Color(0.68, 0.56, 0.43))
-	draw_rect(Rect2(0, 0, 1920, 1080), Color(0.12, 0.06, 0.02, 0.3))
+	ScreenLayout.background(self, WALL, Color(0.68, 0.56, 0.43))
+	draw_rect(ScreenLayout.full_rect(self), Color(0.12, 0.06, 0.02, 0.3))
 	draw_texture_rect(UiKit.glow(), Rect2(1050, 80, 900, 900), false, Color(1.0, 0.76, 0.36, 0.42))
 	UiKit.nine(self, PAPER, Rect2(96, 142, 1080, 720), 80.0)
 	draw_line(Vector2(150, 300), Vector2(1120, 300), Color(0.47, 0.29, 0.12, 0.3), 2.0)

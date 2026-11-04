@@ -96,7 +96,7 @@ func _ready() -> void:
 
 
 func _draw() -> void:
-	draw_rect(Rect2(0, 0, 1920, 1080), Color(0.06, 0.035, 0.015, 0.83))
+	draw_rect(ScreenLayout.full_rect(self), Color(0.06, 0.035, 0.015, 0.83))
 	# The window is ordinary warm paper with a thin wooden edge, not an enlarged meal ticket.
 	draw_style_box(UiKit.box(UiKit.CREAM, UiKit.WOOD, 2, 18, 3), Rect2(64, 48, 1792, 984))
 	draw_texture_rect_region(PAPER, Rect2(76, 60, 1768, 960), Rect2(70, 70, 180, 110), Color(1, 1, 1, 0.18))

@@ -23,6 +23,8 @@ var _board: Control
 
 func _ready() -> void:
 	layer = 20
+	add_to_group("screen_canvas_layers")
+	offset = get_viewport().canvas_transform.origin
 	_board = Control.new()
 	add_child(_board)
 	_board.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -89,7 +91,8 @@ func _process(delta: float) -> void:
 func _draw_page() -> void:
 	if _index < 0 or _index >= _pages.size():
 		return
-	_board.draw_rect(Rect2(Vector2.ZERO, SCREEN), Color.BLACK)
+	_board.draw_rect(ScreenLayout.full_rect(_board), Color.BLACK)
+	ScreenLayout.background(_board, _pages[_index]["texture"], Color(0.4, 0.4, 0.4, _fade))
 	if _prev_tex and _fade < 1.0:
 		_board.draw_texture_rect(_prev_tex, Rect2(Vector2.ZERO, SCREEN), false, Color(1, 1, 1, 1.0 - _fade))
 	var zoom := 1.0 + minf(_page_time, 14.0) * 0.006

@@ -260,10 +260,11 @@ func _exit_tree() -> void:
 
 
 func _draw() -> void:
-	draw_texture(preload("res://assets/canteen/bg_wall.png"), Vector2.ZERO, Color(1.25, 1.18, 1.1))
+	ScreenLayout.background(self, preload("res://assets/canteen/bg_wall.png"), Color(1.25, 1.18, 1.1))
 	# warm light from the right, darker on the left where the menu is
 	var grad := PackedColorArray([Color(0.05, 0.02, 0.0, 0.55), Color(0.05, 0.02, 0.0, 0.0)])
-	draw_polygon(PackedVector2Array([Vector2(0, 0), Vector2(1100, 0), Vector2(1100, 1080), Vector2(0, 1080)]),
+	var bounds := ScreenLayout.full_rect(self)
+	draw_polygon(PackedVector2Array([Vector2(bounds.position.x, bounds.position.y), Vector2(1100, bounds.position.y), Vector2(1100, bounds.end.y), Vector2(bounds.position.x, bounds.end.y)]),
 		PackedColorArray([grad[0], grad[1], grad[1], grad[0]]))
 	for f in _food:
 		var tex: Texture2D = f.tex

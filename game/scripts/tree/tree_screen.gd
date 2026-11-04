@@ -15,6 +15,8 @@ signal to_title
 const NODE_R := 44.0
 const TICKET := Vector2(172, 108)     # avoids the four closest authored pairs without moving nodes
 const ZOOM := Vector2(0.45, 1.3)
+# Scoring mechanics use `key`; these additional tickets open an actual player tool.
+const FEATURE_NODES := ["menu", "moe", "think", "hire", "skills", "agirec"]
 const MealPlannerPanel := preload("res://scripts/ui/meal_planner.gd")
 const CrewPlannerPanel := preload("res://scripts/ui/crew_planner_panel.gd")
 const TOUCH_UI := preload("res://scripts/ui/touch_controls.gd")
@@ -613,7 +615,7 @@ func _input(event: InputEvent) -> void:
 		_cancel_touch_gesture()
 		return
 	if (event is InputEventScreenTouch or event is InputEventScreenDrag) and _touch_points.has(event.index):
-		_touch_input(event)
+		_touch_input(make_input_local(event))
 		return
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and not event.pressed:
 		_dragging = false
@@ -754,33 +756,141 @@ func _pos(n: Dictionary) -> Vector2:
 	return Vector2(float(n["pos"][0]), float(n["pos"][1]))
 
 
+func _ticket_role(n: Dictionary) -> String:
+	if not Game.is_visible(str(n.id)):
+		return "preview"
+	if n.get("kind", "") == "ticket":
+		return "milestone"
+	if n.id == "start":
+		return "root"
+	return "unlock" if n.get("key", false) or n.id in FEATURE_NODES else "upgrade"
+
+
+func _ticket_summary(n: Dictionary) -> String:
+	return tr(str(n.get("summary", ""))) if Game.is_visible(str(n.id)) else ""
+
+
+func _ticket_summary_layout(n: Dictionary) -> Dictionary:
+	var layout := _ticket_text_layout(n)
+	return {"text": layout.summary_text, "font_size": layout.summary_font_size, "width": layout.summary_rect.size.x}
+
+
+func _ticket_text_layout(n: Dictionary, z := 1.0) -> Dictionary:
+	var font := ThemeDB.fallback_font
+	# The last 22 px are the perforated stub. Keep ink inside the printed inner frame,
+	# using real font metrics at the rendered size (rounding matters when zoomed out).
+	var title_rect := Rect2(Vector2(18, 14) * z, Vector2(116, 45) * z)
+	var summary_rect := Rect2(Vector2(18, 61) * z, Vector2(116, 21) * z)
+	var level_rect := Rect2(Vector2(18, 85) * z, Vector2(36, 17) * z)
+	var visible := Game.is_visible(str(n.id))
+	var title_lines: Array = []
+	var title_font_size := maxi(1, int(20 * z))
+	var title_gap := 2.0 * z
+	if visible:
+		while true:
+			title_lines = _name_lines(font, tr(n.name), title_font_size, title_rect.size.x)
+			var block_height := font.get_height(title_font_size) * title_lines.size() + title_gap * maxi(0, title_lines.size() - 1)
+			if block_height <= title_rect.size.y or title_font_size <= 1:
+				break
+			title_font_size -= 1
+	var title_baselines: Array[Vector2] = []
+	var title_height := font.get_height(title_font_size)
+	var block_height := title_height * title_lines.size() + title_gap * maxi(0, title_lines.size() - 1)
+	var title_y := title_rect.position.y + (title_rect.size.y - block_height) * 0.5 + font.get_ascent(title_font_size)
+	for line in title_lines:
+		var line_width := font.get_string_size(line, HORIZONTAL_ALIGNMENT_LEFT, -1, title_font_size).x
+		title_baselines.append(Vector2(title_rect.position.x + (title_rect.size.x - line_width) * 0.5, title_y))
+		title_y += title_height + title_gap
+	var summary_text := _ticket_summary(n)
+	var summary_font_size := maxi(1, int(15 * z))
+	var summary_min_size := maxi(1, int(14 * z))
+	while summary_font_size > summary_min_size and (font.get_string_size(summary_text, HORIZONTAL_ALIGNMENT_LEFT, -1, summary_font_size).x > summary_rect.size.x or font.get_height(summary_font_size) > summary_rect.size.y):
+		summary_font_size -= 1
+	var summary_baseline := summary_rect.position + Vector2(0, (summary_rect.size.y - font.get_height(summary_font_size)) * 0.5 + font.get_ascent(summary_font_size))
+	var level_text := (tr("门票") if n.get("kind", "") == "ticket" else "%d/%d" % [Game.level(str(n.id)), int(n.max)]) if visible else ""
+	var level_font_size := maxi(1, int(12 * z))
+	while level_font_size > 1 and (font.get_string_size(level_text, HORIZONTAL_ALIGNMENT_LEFT, -1, level_font_size).x > level_rect.size.x or font.get_height(level_font_size) > level_rect.size.y):
+		level_font_size -= 1
+	var level_baseline := level_rect.position + Vector2(0, (level_rect.size.y - font.get_height(level_font_size)) * 0.5 + font.get_ascent(level_font_size))
+	var role := _ticket_role(n)
+	var marker_rect := Rect2(Vector2(144, 20) * z, Vector2(22, 22) * z) if role in ["unlock", "milestone"] or n.get("locked", false) and visible else Rect2()
+	var stamp_rect := Rect2()
+	if visible and Game.is_maxed(str(n.id)):
+		stamp_rect = Transform2D(-0.25, Vector2(155, 91) * z) * Rect2(Vector2(-10, -10) * z, Vector2(20, 20) * z)
+	return {"paper_rect": Rect2(Vector2.ZERO, TICKET * z), "content_rect": Rect2(Vector2(18, 14) * z, Vector2(116, 88) * z),
+		"title_lines": title_lines, "title_font_size": title_font_size, "title_baselines": title_baselines, "title_rect": title_rect,
+		"summary_text": summary_text, "summary_font_size": summary_font_size, "summary_baseline": summary_baseline, "summary_rect": summary_rect,
+		"level_text": level_text, "level_font_size": level_font_size, "level_baseline": level_baseline, "level_rect": level_rect,
+		"marker_rect": marker_rect, "stamp_rect": stamp_rect, "progress_rect": Rect2(Vector2(60, 93) * z, Vector2(74, 4) * z)}
+
+
+func _focused_skill() -> String:
+	return _hover if not _hover.is_empty() and _is_displayed(_hover) and not _has_input_modal() and not _tools_have_focus() else ""
+
+
+func _edge_style(parent_id: String, child_id: String) -> Dictionary:
+	var selected := _focused_skill()
+	var focused := not selected.is_empty() and selected in [parent_id, child_id]
+	var preview := Game.is_preview(child_id)
+	var alpha := 0.14 if preview else (0.40 if Game.level(child_id) > 0 else 0.25)
+	if focused:
+		return {"color": Color(0.72, 0.12, 0.07, 0.95), "width": 3.8, "focused": true}
+	if not selected.is_empty():
+		alpha *= 0.42
+	return {"color": Color(0.59, 0.20, 0.13, alpha), "width": 1.5 if preview else 2.0, "focused": false}
+
+
+func _draw_connection(parent_id: String, child_id: String, style: Dictionary) -> void:
+	var a := _at(Game.node(parent_id))
+	var b := _at(Game.node(child_id))
+	# Keep the original slack red yarn, with a light thread beneath the inspected path.
+	var sag := 14.0 * _zoom + a.distance_to(b) * 0.18
+	var mid := (a + b) * 0.5 + Vector2(0, sag * 2.0)
+	var points := PackedVector2Array()
+	for i in 17:
+		var t := i / 16.0
+		points.append(a.lerp(mid, t).lerp(mid.lerp(b, t), t))
+	if style.focused:
+		draw_polyline(points, Color(1.0, 0.90, 0.65, 0.65), 6.5 * _zoom, true)
+	draw_polyline(points, style.color, float(style.width) * _zoom, true)
+
+
+func _draw_ticket_mark(at: Vector2, role: String, z: float) -> void:
+	if role == "unlock":
+		# A small inked star on the existing ticket stub: no new asset or panel style.
+		var points := PackedVector2Array()
+		for i in 10:
+			points.append(at + Vector2.from_angle(-PI * 0.5 + i * PI / 5.0) * (8.0 if i % 2 == 0 else 3.7) * z)
+		draw_colored_polygon(points, Color("b57723"))
+		points.append(points[0])
+		draw_polyline(points, Color("82501f"), 1.1 * z, true)
+	elif role == "milestone":
+		# Two vermilion chevrons distinguish version releases from ordinary upgrades.
+		for offset in [-4.0, 5.0]:
+			draw_polyline(PackedVector2Array([at + Vector2(-8, offset + 4) * z, at + Vector2(0, offset - 4) * z, at + Vector2(8, offset + 4) * z]), Color("a53b28"), 2.4 * z, true)
+
+
 func _draw() -> void:
 	# the 饭票软木板: cork, red yarn between the tickets, a pin on each, a red stamp once bought
 	if _tex.has("cork_bg"):
-		draw_texture_rect(_tex.cork_bg, Rect2(Vector2.ZERO, size), false)
+		ScreenLayout.background(self, _tex.cork_bg)
 	else:
-		draw_texture(preload("res://assets/canteen/bg_wall.png"), Vector2.ZERO, Color(0.55, 0.5, 0.46))
-	draw_rect(Rect2(Vector2.ZERO, size), Color(0.08, 0.04, 0.02, 0.18))
+		ScreenLayout.background(self, preload("res://assets/canteen/bg_wall.png"), Color(0.55, 0.5, 0.46))
+	draw_rect(ScreenLayout.full_rect(self), Color(0.08, 0.04, 0.02, 0.18))
 	var font := ThemeDB.fallback_font
 	var z := _zoom
-	for n in Game.nodes:
-		if not _is_displayed(n["id"]):
-			continue
-		for p in n["parents"]:
-			if not Game.is_visible(p):
+	# Draw the inspected path last, so other yarn crossings cannot cover it.
+	for focused in [false, true]:
+		for n in Game.nodes:
+			if not _is_displayed(n["id"]):
 				continue
-			var a := _at(Game.node(p))
-			var b := _at(n)
-			var preview := Game.is_preview(n["id"])
-			var owned := Game.level(n["id"]) > 0
-			# red yarn pinned at both tickets, hanging slack: it sags more the longer it runs
-			var sag := 14.0 * z + a.distance_to(b) * 0.18
-			var mid := (a + b) * 0.5 + Vector2(0, sag * 2.0)
-			var pts := PackedVector2Array()
-			for i in 17:
-				var t := i / 16.0
-				pts.append(a.lerp(mid, t).lerp(mid.lerp(b, t), t))
-			draw_polyline(pts, Color(0.6, 0.15, 0.12, 0.26) if preview else (Color(0.78, 0.1, 0.1, 0.95) if owned else Color(0.6, 0.15, 0.12, 0.45)), (1.5 if preview else (4.0 if owned else 2.5)) * z, true)
+			for p in n["parents"]:
+				if not Game.is_visible(p):
+					continue
+				var style := _edge_style(p, n.id)
+				if style.focused == focused:
+					_draw_connection(p, n.id, style)
+	var selected := _focused_skill()
 	for n in Game.nodes:
 		var id: String = n["id"]
 		if not _is_displayed(id):
@@ -790,6 +900,7 @@ func _draw() -> void:
 		var ticket: bool = n.get("kind", "") == "ticket"
 		var sz := TICKET * z
 		var r := Rect2(c - sz * 0.5, sz)
+		var ink_origin := r.position
 		# An unrevealed successor uses only the ordinary paper and pin. No key colour,
 		# name, progress, price, stamp or lock art leaks the skill behind this preview.
 		if Game.is_preview(id):
@@ -800,7 +911,8 @@ func _draw() -> void:
 				draw_rect(r, Color(0.82, 0.76, 0.64, 0.8))
 			_draw_pin(c, r, z)
 			continue
-		var tex: Texture2D = _tex.get("ticket_gold" if n.get("key", false) else "ticket", null)
+		var role := _ticket_role(n)
+		var tex: Texture2D = _tex.get("ticket_gold" if role == "unlock" else "ticket", null)
 		var tint := Color.WHITE
 		if ticket:
 			tint = Color(1.0, 0.62, 0.55)   # a release ticket: pink paper
@@ -808,44 +920,41 @@ func _draw() -> void:
 			tint = tint * Color(0.8, 0.76, 0.7)   # can't buy yet: a little faded
 		if n.get("locked", false):
 			tint = tint * Color(0.72, 0.7, 0.68)   # locked: greyer still, and a padlock (below)
-		if id == _hover:
+		if id == selected:
 			r = r.grow(4.0 * z)
-		if Game.can_buy(id):   # affordable: a warm glow behind the ticket
+		if Game.can_buy(id) and (selected.is_empty() or selected == id):
 			var pulse := 0.5 + 0.5 * sin(Time.get_ticks_msec() / 250.0)
-			var gs := r.size * (1.45 + 0.05 * pulse)
-			draw_texture_rect(UiKit.glow(), Rect2(r.get_center() - gs * 0.5, gs), false, Color(1.0, 0.85, 0.4, 0.45 + 0.2 * pulse))
+			var gs := r.size * (1.25 + 0.04 * pulse)
+			draw_texture_rect(UiKit.glow(), Rect2(r.get_center() - gs * 0.5, gs), false, Color(1.0, 0.85, 0.4, 0.24 + 0.10 * pulse))
 		if tex != null:
 			draw_texture_rect(tex, r, false, tint)
 		else:
 			draw_rect(r, Color(0.95, 0.9, 0.78) * tint)
-		# Keep names and progress inside the paper's safe area. The stub is reserved for
-		# a small completion stamp; a partly purchased skill must never look completed.
-		var fs := int(21 * z)
-		var label := _name_lines(font, tr(n["name"]), fs, sz.x * 0.70)
-		var y := r.position.y + sz.y * 0.34
-		for line in label:
-			var tw := font.get_string_size(line, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
-			draw_string(font, Vector2(r.position.x + sz.x * 0.44 - tw * 0.5, y), line, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, Color(0.3, 0.17, 0.08))
-			y += fs * 1.2
-		var lvtext: String = tr("门票") if ticket else "%d/%d" % [lv, int(n["max"])]
-		var ls := int(16 * z)
-		draw_string(font, r.position + Vector2(16 * z, sz.y - 24 * z), lvtext, HORIZONTAL_ALIGNMENT_LEFT, -1, ls, Color(0.45, 0.25, 0.12))
-		var track := Rect2(r.position + Vector2(16 * z, sz.y - 16 * z), Vector2(sz.x - 64 * z, 5 * z))
+		# Keep the ink fixed when the selected paper grows around it. Names and effects
+		# use the inner frame; the stub carries symbols only. The footer shares one row.
+		var layout := _ticket_text_layout(n, z)
+		for i in layout.title_lines.size():
+			var baseline: Vector2 = layout.title_baselines[i]
+			draw_string(font, ink_origin + baseline, layout.title_lines[i], HORIZONTAL_ALIGNMENT_LEFT, layout.title_rect.end.x - baseline.x, layout.title_font_size, Color(0.3, 0.17, 0.08))
+		draw_string(font, ink_origin + layout.summary_baseline, layout.summary_text, HORIZONTAL_ALIGNMENT_LEFT, layout.summary_rect.size.x, layout.summary_font_size, Color("694b2d"))
+		if layout.marker_rect.has_area() and not n.get("locked", false):
+			_draw_ticket_mark(ink_origin + layout.marker_rect.get_center(), role, z)
+		draw_string(font, ink_origin + layout.level_baseline, layout.level_text, HORIZONTAL_ALIGNMENT_LEFT, layout.level_rect.size.x, layout.level_font_size, Color(0.45, 0.25, 0.12))
+		var track := Rect2(ink_origin + layout.progress_rect.position, layout.progress_rect.size)
 		draw_rect(track, Color(0.48, 0.3, 0.16, 0.22))
 		var fraction := clampf(float(lv) / maxf(1.0, float(n["max"])), 0.0, 1.0)
 		if fraction > 0.0:
 			draw_rect(Rect2(track.position, Vector2(track.size.x * fraction, track.size.y)), Color(0.6, 0.31, 0.1))
 		if Game.is_maxed(id) and _tex.has("stamp"):
-			var ss := 28.0 * z
-			var sc := r.position + Vector2(sz.x - 21 * z, sz.y - 20 * z)
+			var ss := 20.0 * z
+			var sc: Vector2 = ink_origin + layout.stamp_rect.get_center()
 			draw_set_transform(sc, -0.25, Vector2.ONE)
 			draw_texture_rect(_tex.stamp, Rect2(-Vector2(ss, ss) * 0.5, Vector2(ss, ss)), false, Color(1, 1, 1, 0.8))
 			draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 		_draw_pin(c, r, z)
 		if n.get("locked", false):   # not yet: a padlock hung on the ticket
-			var ls2 := sz.y * 0.62
 			if _tex.has("icon_lock"):
-				draw_texture_rect(_tex.icon_lock, Rect2(r.get_center() + Vector2(sz.x * 0.28, -sz.y * 0.05) - Vector2(ls2, ls2) * 0.5, Vector2(ls2, ls2)), false)
+				draw_texture_rect(_tex.icon_lock, Rect2(ink_origin + layout.marker_rect.position, layout.marker_rect.size), false)
 	if _flash_time > 0.0 and _tex.has("fx_burst"):   # bought: a burst and stars
 		var q := 1.0 - _flash_time / 0.3
 		var bs := NODE_R * 2.0 * (1.0 + 1.2 * q) * _zoom
@@ -912,9 +1021,11 @@ func _name_lines(font: Font, text: String, fs: int, max_w: float) -> Array:
 	var fits := func(t: String) -> bool: return font.get_string_size(t, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x <= max_w
 	if fits.call(text):
 		return [text]
-	if text.contains("："):   # 「System Prompt：今日菜单」: the meme on top, the plain name below
-		var parts := text.split("：", true, 1)
-		return [_name_lines(font, parts[0], fs, max_w)[0], _name_lines(font, parts[1], fs, max_w)[0]]
+	# Break at the authored prefix/use boundary, keeping names such as 主食 together.
+	for separator in ["：", "·", ": "]:
+		if text.contains(separator):
+			var parts := text.split(separator, true, 1)
+			return [_name_lines(font, parts[0], fs, max_w)[0], _name_lines(font, parts[1], fs, max_w)[0]]
 	var words: Array = Array(text.split(" ")) if text.contains(" ") else Array(text.split(""))
 	var sep := " " if text.contains(" ") else ""
 	var first := ""

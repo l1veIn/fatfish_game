@@ -9,6 +9,38 @@ import build_toy as build
 
 
 class ToyPackagingTests(unittest.TestCase):
+    def test_fingerprints_keep_engine_urls_stable_when_only_game_data_changes(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            results = []
+            for number, data in enumerate([b"same game", b"same game", b"fixed helper"]):
+                web = root / str(number)
+                web.mkdir()
+                for name in ["index.js", "index.wasm", "index.audio.worklet.js", "index.audio.position.worklet.js", "toy_bridge.js"]:
+                    (web / name).write_bytes(name.encode())
+                (web / "index.data").write_bytes(data)
+                config = {"executable": "index", "mainPack": "index.data", "fileSizes": {"index.data": len(data), "index.wasm": 10}}
+                (web / "index.html").write_text('<script src="toy_bridge.js"></script><script src="index.js"></script>const GODOT_CONFIG = ' + json.dumps(config) + ';', encoding="utf-8")
+                result = build.fingerprint_web_assets(web)
+                results.append(result)
+                for old, new in result["renamed"].items():
+                    self.assertFalse((web / old).exists())
+                    self.assertTrue((web / new).is_file())
+                self.assertIn(f'src="{result["executable"]}.js"', (web / "index.html").read_text())
+                self.assertEqual(result["file_sizes"][result["main_pack"]], len(data))
+            self.assertEqual(results[0], results[1])
+            self.assertEqual(results[0]["executable"], results[2]["executable"])
+            self.assertNotEqual(results[0]["main_pack"], results[2]["main_pack"])
+
+    def test_loader_patch_refuses_an_unrecognized_template_without_writing(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            loader = root / "index.js"
+            loader.write_text("unexpected future loader", encoding="utf-8")
+            with self.assertRaisesRegex(RuntimeError, "loader error handling changed"):
+                build.repair_loader_errors(root)
+            self.assertEqual(loader.read_text(encoding="utf-8"), "unexpected future loader")
+
     def test_data_rename_updates_engine_configuration(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

@@ -41,7 +41,16 @@ def main():
         mismatches = []
         for relative, expected in manifest['source_sha256'].items():
             source = ROOT / 'game' / relative
-            normalized = hashlib.sha256(config.encode('utf-8')).hexdigest() if relative == 'project.godot' else sha(source)
+            if relative == 'project.godot':
+                normalized = hashlib.sha256(config.encode('utf-8')).hexdigest()
+            elif relative == 'export_presets.cfg':
+                version = '.'.join((manifest['version'].split('.') + ['0'] * 4)[:4])
+                preset = re.sub(r'application/(file|product)_version="[^"]*"',
+                                lambda match: f'application/{match.group(1)}_version="{version}"',
+                                source.read_text(encoding='utf-8'))
+                normalized = hashlib.sha256(preset.encode('utf-8')).hexdigest()
+            else:
+                normalized = sha(source)
             verified = verification['source_sha256'].get('game/' + relative)
             if normalized != expected or sha(source) != verified or sha(candidate / 'source' / relative) != manifest['export_source_sha256'][relative]:
                 mismatches.append(relative)
@@ -56,7 +65,13 @@ def main():
                '--autotest', '--runs=1', '--test-profile=package_smoke_' + stamp, '--lang=zh_CN', '--shots=' + str(shots)]
     log_path = candidate / ('smoke-' + stamp + '.log')
     with log_path.open('w', encoding='utf-8') as stream:
-        run = subprocess.run(command, cwd=ROOT, stdout=stream, stderr=subprocess.STDOUT, timeout=300)
+        startup = None
+        if os.name == 'nt':
+            startup = subprocess.STARTUPINFO()
+            startup.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+            startup.wShowWindow = subprocess.SW_HIDE
+        run = subprocess.run(command, cwd=ROOT, stdout=stream, stderr=subprocess.STDOUT, timeout=300,
+                             startupinfo=startup)
     log = log_path.read_text(encoding='utf-8', errors='replace')
     errors = re.findall(r'^.*(?:SCRIPT ERROR:|ERROR:|FAIL ).*$', log, re.M)
     after = player()

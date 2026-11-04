@@ -37,6 +37,8 @@ var _fade: ColorRect
 var _busy := false
 var _title_refresh_pending := false
 var _notices: CanvasLayer
+var _stage: Control
+var _layout: ScreenLayout
 
 
 class CreditsPanel extends Control:
@@ -53,6 +55,13 @@ class CreditsPanel extends Control:
 
 
 func _ready() -> void:
+	_layout = ScreenLayout.new()
+	add_child(_layout)
+	_stage = Control.new()
+	_stage.name = "Stage"
+	_stage.size = ScreenLayout.DESIGN
+	_stage.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(_stage)
 	ThemeDB.get_default_theme().merge_with(UiKit.build_theme())
 	get_tree().node_added.connect(func(n):
 		if n is BaseButton:
@@ -61,6 +70,8 @@ func _ready() -> void:
 		get_tree().root.min_size = Vector2i(960, 540)
 	var layer := CanvasLayer.new()
 	layer.layer = 100
+	layer.add_to_group("screen_canvas_layers")
+	layer.offset = get_viewport().canvas_transform.origin
 	add_child(layer)
 	_fade = ColorRect.new()
 	_fade.color = Color(0.05, 0.03, 0.02, 0.0)
@@ -69,8 +80,14 @@ func _ready() -> void:
 	layer.add_child(_fade)
 	_notices = CanvasLayer.new()
 	_notices.layer = 80
+	_notices.add_to_group("screen_canvas_layers")
+	_notices.offset = get_viewport().canvas_transform.origin
 	add_child(_notices)
 	_notices.add_child(AchievementToast.new())
+	_layout.changed.connect(func():
+		_fade.position = ScreenLayout.visible.position
+		_fade.size = ScreenLayout.visible.size)
+	_layout._reflow()
 	Settings.changed.connect(_on_settings_changed)
 	_lang = Settings.language
 	for a in OS.get_cmdline_user_args():
@@ -146,7 +163,7 @@ func _set_screen(n: Node) -> void:
 	if _screen:
 		_screen.queue_free()
 	_screen = n
-	add_child(n)
+	_stage.add_child(n)
 
 
 var _lang := ""
@@ -238,10 +255,7 @@ func _show_credits(parent: Control) -> void:
 	panel.z_index = 200
 	panel.mouse_filter = Control.MOUSE_FILTER_STOP
 	parent.add_child(panel)
-	var dim := ColorRect.new()
-	dim.color = Color(0.03, 0.02, 0.01, 0.75)
-	dim.size = panel.size
-	panel.add_child(dim)
+	ScreenLayout.shade(panel, Color(0.03, 0.02, 0.01, 0.75))
 	var box := PanelContainer.new()
 	box.position = Vector2(150, 60)
 	box.custom_minimum_size = Vector2(1620, 960)

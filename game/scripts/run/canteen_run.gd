@@ -2782,21 +2782,27 @@ func _plan_crew(y: float) -> Dictionary:
 		var pick: float = c.x
 		var nearest := INF
 		var spots: Array = []
+		var fallback: Array = [[clampf(c.x, 60.0, 1400.0), 0.0]]
 		for arm in _arms:
 			if arm.has("dish") and _helper_accepts(c, int(arm.dish), projected):
 				for offset in [0.0, gap, -gap]:
 					spots.append([clampf(float(arm.x) + offset, 60.0, 1400.0), maxf(float(arm.t), 0.0) * 60.0])
-		spots.append([c.x, 500.0])
 		for slot in 10:
-			spots.append([60.0 + slot * (1340.0 / 9.0), 600.0])
-		for spot in spots:
-			var x: float = spot[0]
-			if _helper_player_column(x) or taken.any(func(tx): return absf(tx - x) < gap):
-				continue
-			var distance: float = absf(x - c.x) + float(spot[1])
-			if distance < nearest:
-				nearest = distance
-				pick = float(x)
+			fallback.append([60.0 + slot * (1340.0 / 9.0), 100.0])
+		# Useful windows always precede idle spots. After delivery c.x is ~1755;
+		# a fixed idle penalty could otherwise beat every distant window forever,
+		# while those windows' falling food is still too far away to intercept.
+		for candidates in [spots, fallback]:
+			for spot in candidates:
+				var x: float = spot[0]
+				if _helper_player_column(x) or taken.any(func(tx): return absf(tx - x) < gap):
+					continue
+				var distance: float = absf(x - c.x) + float(spot[1])
+				if distance < nearest:
+					nearest = distance
+					pick = x
+			if is_finite(nearest):
+				break
 		plan[c.id] = pick
 		taken.append(pick)
 	return plan
@@ -3391,7 +3397,7 @@ func _bot() -> void:
 # --- drawing --------------------------------------------------------------------------------------
 
 func _draw_back() -> void:
-	_back.draw_texture(_bg, Vector2.ZERO)
+	ScreenLayout.background(_back, _bg)
 	# The counter's open middle reveals her face while its front hides her lower body.
 	var tex: Texture2D = _auntie[_mood()]
 	var bob := 0.0 if Settings.reduced_motion else sin(_t * 3.0) * 4.0
@@ -3465,7 +3471,8 @@ func _mood() -> String:
 func _draw() -> void:
 	var font := ThemeDB.fallback_font
 	# a darker floor strip, so the bottom HUD line reads
-	draw_rect(Rect2(0, FLOOR_Y, 1920, 1080 - FLOOR_Y), Color(0.06, 0.04, 0.03, 0.6))
+	var bounds := ScreenLayout.full_rect(self)
+	draw_rect(Rect2(bounds.position.x, FLOOR_Y, bounds.size.x, bounds.end.y - FLOOR_Y), Color(0.06, 0.04, 0.03, 0.6))
 	# the table in front of 大肥鱼
 	draw_texture_rect(_table, Rect2(TABLE_AT, _table.get_size() * TABLE_SCALE), false)
 	# a wooden tray for the empty boxes (left), a red serving tray for the full ones (right)
@@ -3524,7 +3531,7 @@ func _draw() -> void:
 			_label(font, _aim + Vector2(-120, 0), tr("没空饭盒了！等她吃完……"), HORIZONTAL_ALIGNMENT_LEFT, -1, 26, Color(1, 0.7, 0.6))
 	_draw_floaters(font)
 	if _thinking:
-		draw_texture_rect(UiKit.vignette(), Rect2(0, 0, 1920, 1080), false, Color(0.22, 0.12, 0.42, 0.75))
+		draw_texture_rect(UiKit.vignette(), ScreenLayout.full_rect(self), false, Color(0.22, 0.12, 0.42, 0.75))
 		if _hand != null:
 			_label(font, _hand.pos + Vector2(-90, -110), tr("嗯，用户想要") + "……".repeat(1 + int(_t * 3.0) % 3), HORIZONTAL_ALIGNMENT_LEFT, -1, 26, Color(0.9, 0.85, 1.0))
 	if not _checkout:

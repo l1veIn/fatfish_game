@@ -118,6 +118,17 @@ func _ready() -> void:
 	await _click(_tree._at(Game.node("start")), MOUSE_BUTTON_RIGHT)
 	_check(Game.level("start") == 1 and _tree._flash_text == tr("起点与版本门票不能单独退款。"), "root refund refusal has a reason")
 	# Existing modal focus continues to block tree shortcuts.
+	# The preceding refund fixture owns no automation skill; unlock its real toolbar entry.
+	Game.levels["hire"] = 1
+	Game.seen_buttons["crew"] = true
+	Game.seen_buttons["crew_card"] = true
+	Game._recompute()
+	Game.changed.emit()
+	await _frames()
+	_check(is_instance_valid(_tree._crew_button), "automation fixture exposes its unlocked toolbar button")
+	if not is_instance_valid(_tree._crew_button):
+		await _finish()
+		return
 	_tree._crew_button.grab_focus()
 	await _key(KEY_ENTER)
 	before = Game.tokens
@@ -141,6 +152,10 @@ func _ready() -> void:
 		Game.levels[skill.id] = owned
 	_check(FileAccess.get_file_as_bytes("user://save.json") == player_before, "player save bytes unchanged")
 	_check(FileAccess.get_file_as_bytes(Settings.PATH) == settings_before, "player settings bytes unchanged")
+	await _finish()
+
+
+func _finish() -> void:
 	var report := {"checks": _checks, "failures": _failures, "scope": "State fixtures and real mouse, keyboard and simulated-controller GUI events", "language": Settings.language, "window": str(_window), "renderer": DisplayServer.get_name(), "shots": _shots, "source_sha256": {}}
 	for path in ["scripts/tree/tree_screen.gd", "scripts/autoload/game.gd", "data/skill_tree.json", "data/i18n/en.json", "tests/tree_dependency_test.gd"]:
 		report.source_sha256[path] = FileAccess.get_sha256("res://" + path)

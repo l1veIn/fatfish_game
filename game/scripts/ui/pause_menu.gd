@@ -23,10 +23,7 @@ func _ready() -> void:
 	size = Vector2(1920, 1080)
 	z_index = 150
 	mouse_filter = Control.MOUSE_FILTER_STOP
-	var dim := ColorRect.new()
-	dim.color = Color(0.03, 0.02, 0.01, 0.72)
-	dim.size = size
-	add_child(dim)
+	ScreenLayout.shade(self, Color(0.03, 0.02, 0.01, 0.72))
 	var panel := PanelContainer.new()
 	panel.position = Vector2(620, 150)
 	panel.custom_minimum_size = Vector2(680, 780)

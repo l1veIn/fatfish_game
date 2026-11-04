@@ -95,6 +95,17 @@ function harness(options = {}) {
 async function commit(h, value) { h.api.queueSave(value); await h.advance(30000); }
 function setCalls(h) { return h.calls.filter(call => call.type === "set"); }
 
+test("language selection does not claim a cloud read while engine resources are loading", async () => {
+	const h = harness({ dom: true });
+	h.api.setLanguage("zh_CN");
+	assert.equal(h.doc.getElementById("toy-sync"), undefined);
+	assert.equal(h.calls.filter(call => call.type === "get").length, 0);
+	await h.api.init(save(0));
+	assert.match(h.status(), /已同步/);
+	h.api.setLanguage("en");
+	assert.match(h.status(), /Cloud save synced/);
+});
+
 test("missing SDK stays local and init callback fires only once", async () => {
 	const h = harness({ noSDK: true });
 	let count = 0;

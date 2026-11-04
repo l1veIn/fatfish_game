@@ -60,7 +60,7 @@ N = [
     ("hodge", "box", 3, 2.8, "MoE 大杂烩", "饭盒装满、又没有「差一样就能凑齐」的套餐时，3 样不同窗口的散菜压成一份「乱炖」（二级套餐）。", 1, "V3.1", ["temp", "fewshot"], {"hodge": 1}, ""),
     ("cot", "box", 4, 0, "思维链", "盒里每发生一次连锁合成（套餐当原料再合成），这一盒 +30%，最多 3 次。", 1, "V3.1", ["compress"], {"cot": 0.3}, ""),
     ("rag", "box", 4, -1.2, "RAG 检索增强", "套餐里每样优质或金牌原料，每级 +2 价值（再乘套餐等级）。", 3, "V3.1", ["dpo", "agentwf"], {"rag": 2}, ""),
-    ("agirec", "box", 4, 1.5, "AGI 菜谱", "神级套餐更值钱：每级 +0.6 倍。", 5, "V3.2", ["agentwf"], {"tier4": 1}, ""),
+    ("agirec", "box", 4, 1.5, "AGI 菜谱", "首次学习后，图鉴公开所有套餐的完整配方，包括隐藏配方。「神级套餐」（6 样以上，或隐藏配方）更值钱，每级 +0.6 倍。", 5, "V3.2", ["agentwf"], {"tier4": 1}, ""),
     ("spec", "box", 5, 0.6, "投机解码", "每次合成有 20% 几率「猜下一样」：套餐差 1 样就直接补上，不然就变成一口零食。", 1, "V3.2", ["halluc", "cot"], {"spec": 0.2}, ""),
 
     ("eat", "fish", 1, 0, "猛炫", "她吃得更快，每级 +25%。", 12, "V3", ["start"], {"eat_rate": ("mul", 1.25)}, ""),
@@ -145,7 +145,7 @@ DESC = {
     "hodge": "饭盒装满，又没有只差一样的套餐时，3 样来自不同窗口的散菜自动压成一份「乱炖」（二级套餐），腾出格子。",
     "cot": "套餐还能当原料，合成更大的套餐。一盒里每这样连着合成一次，这盒收入 +30%（最多 3 次）。",
     "rag": "套餐里每用到一样优质或金牌原料，这份套餐每级再值钱 +2（还会乘套餐倍率）。",
-    "agirec": "「神级套餐」（6 样以上，或隐藏配方）更值钱，每级 +0.6 倍。",
+    "agirec": "首次学习后，图鉴公开所有套餐的完整配方，包括隐藏配方。「神级套餐」（6 样以上，或隐藏配方）更值钱，每级 +0.6 倍。",
     "spec": "每次合成套餐有 20% 几率「猜下一样」：如果盒里某个套餐只差 1 样，直接帮你补上；不然就送她一口零食。",
     "eat": "她吃得更快，每级 +25%。桌上的饭盒消化得越快，你越不用等空饭盒。",
     "stream": "越吃越香：这一顿她吃过 40 口以后，后面每一口越来越值钱（她头顶会显示现在 ×几）。有上限，发布新版本会抬高。每级涨得更快。",
@@ -183,6 +183,87 @@ DESC = {
     "ticket_v32": "评测：一顿赚到 6 万 token 就发布 V3.2，解锁新技能。未学「顿悟」时，饭盒会避开青菜。V3.1-Terminus 终于不再到处冒「极」字了。",
     "ticket_v4": "评测：一顿赚到 40 万 token 就发布 V4，解锁最后一批技能。",
     "ticket_agi": "终极评测：一顿赚到 200 万 token，大肥鱼就实现了 AGI。但是也要先吃饱。",
+}
+
+
+# One-line ticket effects. Keep the AI names and full explanations above; these answer
+# what a purchase does while the player scans the board, without prescribing a build.
+SUMMARY = {
+    "start": "接菜喂饭赚收益",
+    "stall_main": "主食档口加新菜",
+    "stall_wok": "解锁炒菜档口",
+    "stall_dim": "解锁面点档口",
+    "stall_fry": "解锁炸物档口",
+    "stall_sweet": "解锁甜品档口",
+    "menu": "划掉不想要的菜",
+    "sft": "提高优质菜几率",
+    "lora": "精简菜单升品质",
+    "dpo": "优质菜可升金牌",
+    "fp32": "金牌菜价值提高",
+    "moe": "开饭前选招牌菜",
+    "canteen_std": "出菜额外配青菜",
+    "conc": "增加抛菜触手",
+    "lunch": "提高每口暴击",
+    "api": "加快出菜速度",
+    "batch": "一勺可多一份菜",
+    "peak": "延长出菜高峰",
+    "temp": "入盒随机升级菜",
+    "hot": "火苗菜价值提高",
+    "halluc": "入盒可额外加菜",
+    "regen": "送餐可整盒升菜",
+    "emerge": "火苗菜可成乱炖",
+    "overfit": "顿悟后可变青菜",
+    "vram": "饭盒变宽且变多",
+    "ocr": "提高每盒收入",
+    "prompt": "同菜满盒成拼盘",
+    "mat": "提高整顿收入",
+    "fill": "满盒送餐有加成",
+    "fewshot": "二级套餐更值钱",
+    "inject": "合成偷偷藏青菜",
+    "compress": "套餐省格存缓存",
+    "agentwf": "三级大餐更值钱",
+    "fuse3": "三份同菜升品质",
+    "hodge": "杂菜可合成乱炖",
+    "cot": "连锁合成有加成",
+    "rag": "好原料提升套餐",
+    "agirec": "公开全部配方",
+    "spec": "合成可补缺原料",
+    "eat": "加快吃饭速度",
+    "stream": "吃得越多越值钱",
+    "ttft": "提前越吃越香",
+    "mtp": "每口额外赚收益",
+    "busy": "等饭越久越馋",
+    "queue": "等待更快涨馋",
+    "multiturn": "连击提升收益",
+    "memory": "护连击换菜加成",
+    "warm": "留一盒收摊再吃",
+    "final": "保温盒收入提高",
+    "bon": "自动留最贵盒",
+    "eos": "最后一口有加成",
+    "rlhf": "提高均衡上限",
+    "constit": "放宽均衡判定",
+    "grok": "吃青菜可顿悟",
+    "warmup": "减少顿悟菜数",
+    "aftertaste": "顿悟青菜更值钱",
+    "drift": "顿悟青菜算荤素",
+    "skills": "自动拿盒和送饭",
+    "hire": "增加助手名额",
+    "orch": "助手提速加接力",
+    "fc": "指定助手凑套餐",
+    "nutri": "助手补齐营养",
+    "clip": "垫高低收入饭盒",
+    "async": "玩家饭盒优先吃",
+    "sleep": "收摊剩菜折半算",
+    "think": "延长慢放思考",
+    "diverge": "思考时吸附接菜",
+    "converge": "思考时筛掉余菜",
+    "critic": "套餐种类加成",
+    "bench": "提高种类加成",
+    "ticket_r1": "挑战R1评测",
+    "ticket_v31": "挑战V3.1评测",
+    "ticket_v32": "挑战V3.2评测",
+    "ticket_v4": "挑战V4评测",
+    "ticket_agi": "挑战最终评测",
 }
 
 
@@ -321,6 +402,8 @@ for (nid, br, d, l, name, desc, mx, ring, parents, eff, flags) in N:
         cost *= 1.5
     if "free" in flags:
         cost = 0
+    if nid == "skills":
+        cost = 5   # Preserve the reviewed low-cost first automation unlock.
     growth = 1.0 if mx == 1 else GROWTH.get(nid, 4.0)
     effects = {}
     for k, v in eff.items():
@@ -343,8 +426,11 @@ for (nid, d, l, name, opens, cost, ri, parents, desc) in TICKETS:
 
 if {n["id"] for n in nodes} != set(BOARD_POSITIONS):
     raise ValueError("Node IDs changed: review BOARD_POSITIONS explicitly before generation")
+if {n["id"] for n in nodes} != set(SUMMARY):
+    raise ValueError("Node IDs changed: author a short ticket effect for every node")
 for n in nodes:
     n["pos"] = list(BOARD_POSITIONS[n["id"]])
+    n["summary"] = SUMMARY[n["id"]]
 left = sum(1 for i, a in enumerate(nodes) for b in nodes[i + 1:]
            if ((a["pos"][0] - b["pos"][0]) / TICKET[0]) ** 2 + ((a["pos"][1] - b["pos"][1]) / TICKET[1]) ** 2 < 0.8)
 print("overlaps left:", left, "· extent:", max(max(abs(n["pos"][0]), abs(n["pos"][1])) for n in nodes))

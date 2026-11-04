@@ -9,10 +9,9 @@
 		* { box-sizing: border-box; }
 		html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; }
 		body { touch-action: none; }
-		#game { position: fixed; top: max(env(safe-area-inset-top), var(--toy-safe-top, 0px)); left: max(env(safe-area-inset-left), var(--toy-safe-left, 0px));
-			width: calc(100vw - max(env(safe-area-inset-left), var(--toy-safe-left, 0px)) - max(env(safe-area-inset-right), var(--toy-safe-right, 0px)));
-			height: calc(100vh - max(env(safe-area-inset-top), var(--toy-safe-top, 0px)) - max(env(safe-area-inset-bottom), var(--toy-safe-bottom, 0px)));
-			height: calc(100dvh - max(env(safe-area-inset-top), var(--toy-safe-top, 0px)) - max(env(safe-area-inset-bottom), var(--toy-safe-bottom, 0px))); }
+		#game { position: fixed; inset: 0; width: 100%; height: 100%; }
+		#safe-area-probe { position: fixed; visibility: hidden; pointer-events: none;
+			padding: max(env(safe-area-inset-top), var(--toy-safe-top, 0px)) max(env(safe-area-inset-right), var(--toy-safe-right, 0px)) max(env(safe-area-inset-bottom), var(--toy-safe-bottom, 0px)) max(env(safe-area-inset-left), var(--toy-safe-left, 0px)); }
 		#canvas { display: block; width: 100%; height: 100%; border: 0; outline: none; }
 		button, a { -webkit-tap-highlight-color: transparent; }
 		button { font: inherit; color: #2f2117; background: #f3cf7b; border: 1px solid #f7df9c; border-radius: 10px; padding: .75rem 1.3rem; cursor: pointer; }
@@ -46,6 +45,7 @@
 </head>
 <body>
 	<div id="game"><canvas id="canvas" tabindex="0">请使用支持 WebGL 2 的浏览器。 Please use a browser with WebGL 2.</canvas></div>
+	<div id="safe-area-probe" aria-hidden="true"></div>
 	<div id="rotate"><p>请将手机横过来，开饭啦！<br>Please rotate your phone to landscape.</p></div>
 	<div id="status">
 		<div class="loading-panel">
@@ -53,6 +53,7 @@
 			<p id="status-notice">正在准备饭堂…</p>
 			<progress id="status-progress"></progress>
 			<button id="start-button" type="button" hidden>进入饭堂</button>
+			<button id="retry-load" type="button" hidden>重新加载</button>
 		</div>
 	</div>
 	<noscript>请启用 JavaScript 后进入饭堂。 JavaScript is required.</noscript>
@@ -60,7 +61,7 @@
 	<script>
 		const GODOT_CONFIG = $GODOT_CONFIG;
 		const GODOT_THREADS_ENABLED = $GODOT_THREADS_ENABLED;
-		// The game surface respects the App safe area. Godot observes its CSS size.
+		// Scenery fills the App viewport; Godot applies safe areas to touch controls.
 		GODOT_CONFIG.canvasResizePolicy = 0;
 		const engine = new Engine(GODOT_CONFIG);
 		window.addEventListener("DOMContentLoaded", () => {
@@ -68,6 +69,7 @@
 			const notice = document.getElementById("status-notice");
 			const progress = document.getElementById("status-progress");
 			const start = document.getElementById("start-button");
+			const retryLoad = document.getElementById("retry-load");
 			const isEnglish = (navigator.language || "").toLowerCase().startsWith("en");
 			const tr = (zh, en) => isEnglish ? en : zh;
 			document.documentElement.lang = isEnglish ? "en" : "zh-CN";
@@ -75,25 +77,51 @@
 				window.FatFishToy.setLanguage(isEnglish ? "en" : "zh_CN");
 				void window.FatFishToy.prepare();
 			}
+			let settled = false, stalled = false, stallTimer;
+			const initialNotice = tr("正在准备饭堂…首次加载需要一点时间。", "Preparing the canteen… the first visit may take a moment.");
+			retryLoad.textContent = tr("重新加载", "Reload");
+			retryLoad.addEventListener("click", () => window.location.reload());
 			function fail(error) {
+				if (settled) return;
+				settled = true;
+				clearTimeout(stallTimer);
 				console.error("FatFish startup failed:", error);
 				progress.hidden = true;
 				start.hidden = true;
-				notice.textContent = tr("饭堂暂时打不开，请刷新重试。\n", "Could not open the canteen. Please reload.\n") +
+				retryLoad.hidden = false;
+				notice.textContent = tr("游戏资源加载失败，请重新加载。\n", "Game resources could not load. Please reload.\n") +
 					(error && error.message ? error.message : String(error));
+			}
+			function watchLoading() {
+				clearTimeout(stallTimer);
+				if (settled) return;
+				stallTimer = setTimeout(() => {
+					stalled = true;
+					notice.textContent = tr("加载暂时没有进展。可以继续等待，或重新加载重试。", "Loading has stalled. You can keep waiting or reload to retry.");
+					retryLoad.hidden = false;
+				}, 45000);
 			}
 			const missing = Engine.getMissingFeatures({ threads: GODOT_THREADS_ENABLED });
 			if (missing.length) {
 				fail(tr("浏览器缺少：", "Browser features missing: ") + missing.join(", "));
 				return;
 			}
-			notice.textContent = tr("正在准备饭堂…首次加载需要一点时间。", "Preparing the canteen… the first visit may take a moment.");
+			notice.textContent = initialNotice;
+			watchLoading();
 			engine.startGame({
 				onProgress: (current, total) => {
+					if (settled) return;
+					if (stalled) { stalled = false; retryLoad.hidden = true; }
+					watchLoading();
+					notice.textContent = initialNotice + (total > 0 ? "\n" + (current / 1000000).toFixed(1) + " / " + (total / 1000000).toFixed(1) + " MB" : "");
 					if (current > 0 && total > 0) { progress.value = current; progress.max = total; }
 					else { progress.removeAttribute("value"); progress.removeAttribute("max"); }
 				},
 			}).then(() => {
+				if (settled) return;
+				settled = true;
+				clearTimeout(stallTimer);
+				retryLoad.hidden = true;
 				progress.hidden = true;
 				notice.textContent = tr("饭堂准备好了。进入后点击「开始游戏」开饭。", "The canteen is ready. Enter, then select Play to begin.");
 				start.textContent = tr("进入饭堂", "Enter the canteen");

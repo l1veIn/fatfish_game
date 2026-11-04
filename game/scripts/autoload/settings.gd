@@ -467,4 +467,4 @@ func sanitize_arm_distance(raw: Variant) -> float:
 func touch_rect(id: String, layout: Dictionary = {}) -> Rect2:
 	var spec: Dictionary = (touch_layout if layout.is_empty() else layout)[id]
 	var dimensions: Vector2 = TOUCH_BASE[id] * spec.scale
-	return Rect2(Vector2(spec.x * 1920, spec.y * 1080) - dimensions * 0.5, dimensions)
+	return ScreenLayout.touch_rect(Rect2(Vector2(spec.x * 1920, spec.y * 1080) - dimensions * 0.5, dimensions))

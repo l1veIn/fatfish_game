@@ -16,10 +16,7 @@ func _ready() -> void:
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	z_index = 220
 	mouse_filter = Control.MOUSE_FILTER_STOP
-	var dim := ColorRect.new()
-	dim.color = Color(0.03, 0.02, 0.01, 0.8)
-	dim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	add_child(dim)
+	ScreenLayout.shade(self, Color(0.03, 0.02, 0.01, 0.8))
 	var panel := PanelContainer.new()
 	panel.position = Vector2(480, 300)
 	panel.size = Vector2(960, 470)

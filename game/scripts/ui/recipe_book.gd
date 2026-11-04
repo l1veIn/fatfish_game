@@ -43,12 +43,8 @@ func _ready() -> void:
 	CanteenRun.load_menu()
 	_language = TranslationServer.get_locale()
 	_control_labels = _control_signature()
-	_picture(self, "res://assets/canteen/bg_wall.png", Rect2(Vector2.ZERO, size), false)
-	var backdrop := ColorRect.new()
-	backdrop.color = Color(0.16, 0.08, 0.03, 0.42)
-	backdrop.size = size
-	backdrop.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	add_child(backdrop)
+	ScreenLayout.scenery(self, preload("res://assets/canteen/bg_wall.png"))
+	ScreenLayout.shade(self, Color(0.16, 0.08, 0.03, 0.42))
 	# The generated spread provides the material; text remains crisp, live and accessible.
 	var art_path := "res://assets/ui/premium/recipe_spread.png"
 	if ResourceLoader.exists(art_path):
@@ -171,7 +167,7 @@ func _fill() -> void:
 			for row in leaf.size():
 				var entry = leaf[row]
 				if _page == "sets":
-					_recipe(entry, origin + Vector2(0, row * 296), entries.find(entry), leaf.size() == 1 and entry.needs.size() > 3)
+					_recipe(entry, origin + Vector2(0, row * 296), entries.find(entry), _is_grand_recipe(entry))
 				elif _page == "foods":
 					_food(int(entry), origin + Vector2(0, row * 202))
 				else:
@@ -184,8 +180,8 @@ func _paginate(entries: Array) -> Array:
 	var leaf: Array = []
 	var capacity := 2 if _page == "sets" else (3 if _page == "foods" else 1)
 	for entry in entries:
-		# A grand recipe gets a whole leaf in both languages, rather than shrinking its text.
-		var grand: bool = _page == "sets" and entry.needs.size() > 3
+		# Nested formulas need room for every intermediate combo in both languages.
+		var grand: bool = _page == "sets" and _is_grand_recipe(entry)
 		if grand:
 			if not leaf.is_empty():
 				pages.append(leaf)
@@ -199,6 +195,37 @@ func _paginate(entries: Array) -> Array:
 	if not leaf.is_empty():
 		pages.append(leaf)
 	return pages
+
+
+func _is_grand_recipe(recipe: Dictionary) -> bool:
+	if recipe.needs.size() > 3:
+		return true
+	if Game.recipe_formula_visible(str(recipe.id)):
+		for need in recipe.needs:
+			if CanteenRun.IS_SET[need]:
+				return true
+	return false
+
+
+func _ingredient_names(recipe: Dictionary) -> String:
+	var names: Array[String] = []
+	for need in recipe.needs:
+		names.append(tr(CanteenRun.NAMES[need]))
+	return " + ".join(names)
+
+
+func _nested_formulas(recipe: Dictionary, seen: Dictionary) -> Array[String]:
+	var lines: Array[String] = []
+	for need in recipe.needs:
+		if not CanteenRun.IS_SET[need] or seen.has(need):
+			continue
+		seen[need] = true
+		for child in CanteenRun.RECIPES:
+			if child.result == need:
+				lines.append_array(_nested_formulas(child, seen))
+				lines.append("%s = %s" % [tr(CanteenRun.NAMES[need]), _ingredient_names(child)])
+				break
+	return lines
 
 
 func _entries() -> Array:
@@ -236,24 +263,28 @@ func _fill_index() -> void:
 	_picture(_content, "res://assets/canteen/food_%s.png" % CanteenRun.FOOD_ART[CanteenRun.RECIPES[0].result], Rect2(1280, 312, 260, 215), true)
 	_text(_content, tr("一盒一盒，慢慢收藏"), Rect2(RIGHT.x, 544, PAGE_WIDTH, 60), 38, INK, HORIZONTAL_ALIGNMENT_CENTER)
 	_text(_content, tr("已发现 %d / %d 道套餐") % [discovered, CanteenRun.RECIPES.size()], Rect2(RIGHT.x, 622, PAGE_WIDTH, 46), 28, GOLD, HORIZONTAL_ALIGNMENT_CENTER)
-	_text(_content, tr("每发现一道新套餐，这本书就多一份记录。\n尚未发现的菜保留线索，等你亲手搭出来。"), Rect2(RIGHT.x + 44, 682, PAGE_WIDTH - 88, 208), 28, MUTED, HORIZONTAL_ALIGNMENT_CENTER)
+	var explanation := tr("AGI 菜谱已公开全部配方。\n实际合成后才会点亮图鉴，记录制作次数。") if Game.all_recipes_revealed() else tr("每发现一道新套餐，这本书就多一份记录。\n学习 AGI 菜谱，可公开所有套餐的完整配方。")
+	_text(_content, explanation, Rect2(RIGHT.x + 44, 682, PAGE_WIDTH - 88, 208), 28, MUTED, HORIZONTAL_ALIGNMENT_CENTER)
 
 
 func _recipe(recipe: Dictionary, at: Vector2, index: int, grand := false) -> void:
 	var root := _entry(at, Vector2(PAGE_WIDTH, 602 if grand else 278))
 	var k: int = recipe.result
 	var known := Game.recipes.has(recipe.id)
-	var title := tr(CanteenRun.NAMES[k]) if known else tr("未发现的套餐")
+	var visible_formula := Game.recipe_formula_visible(str(recipe.id))
+	var title := tr(CanteenRun.NAMES[k]) if visible_formula else tr("未发现的套餐")
 	_text(root, "%02d" % (index + 1), Rect2(0, 3, 50, 46), 26, GOLD)
 	_text(root, title, Rect2(56, 0, 564, 88), 30, INK)
-	_picture(root, "res://assets/canteen/food_%s.png" % CanteenRun.FOOD_ART[k], Rect2(2, 150, 218, 218) if grand else Rect2(2, 101, 126, 126), true, known)
+	_picture(root, "res://assets/canteen/food_%s.png" % CanteenRun.FOOD_ART[k], Rect2(2, 146, 180, 170) if grand else Rect2(2, 101, 126, 126), true, known)
 	_text(root, tr(CanteenRun.TIER_NAME[CanteenRun.TIER[k]]), Rect2(0, 100, PAGE_WIDTH, 36) if grand else Rect2(150, 95, 470, 36), 23, GOLD)
-	if known:
-		var names: Array = []
-		for need in recipe.needs:
-			names.append(tr(CanteenRun.NAMES[need]))
-		_text(root, " + ".join(names), Rect2(248, 156, 372, 328) if grand else Rect2(150, 137, 470, 100), 28 if grand else 25, INK)
-		_text(root, tr("已制作 %d 次") % int(Game.recipes[recipe.id]), Rect2(0, 536, PAGE_WIDTH, 40) if grand else Rect2(150, 241, 470, 32), 23, MUTED)
+	if visible_formula:
+		_text(root, _ingredient_names(recipe), Rect2(210, 146, 410, 174) if grand else Rect2(150, 137, 470, 100), 26 if grand else 25, INK)
+		var nested := _nested_formulas(recipe, {})
+		if grand and not nested.is_empty():
+			_text(root, tr("子套餐配方"), Rect2(0, 326, PAGE_WIDTH, 32), 23, GOLD)
+			_text(root, "\n".join(nested), Rect2(0, 366, PAGE_WIDTH, 164), 22, INK)
+		var status := tr("已制作 %d 次") % int(Game.recipes[recipe.id]) if known else tr("尚未制作")
+		_text(root, status, Rect2(0, 550, PAGE_WIDTH, 40) if grand else Rect2(150, 241, 470, 32), 23, MUTED)
 	else:
 		var hint: String = tr(recipe.hint) if recipe.hint != "" else tr("还没吃到过")
 		_text(root, hint, Rect2(248, 156, 372, 328) if grand else Rect2(150, 132, 470, 130), 28 if grand else 26, MUTED)

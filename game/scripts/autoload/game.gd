@@ -132,6 +132,7 @@ var levels := {}          # node id -> level
 var version := 0          # 大肥鱼's version: index into VERSIONS
 var trial_fails := {}
 var recipes := {}         # 菜谱图鉴: recipe id -> times made
+var recipes_revealed := false # AGI 菜谱 permanently reveals formulas without recording a discovery
 var signatures: Array = []  # 招牌菜 picked by the player (food ids); see active_signatures()
 var struck: Array = []      # 今日菜单: dishes struck off (food ids), up to stat menu_cut
 const HELPER_IDS := ["wen", "pu", "g", "ke", "zi", "ge"]
@@ -721,6 +722,8 @@ func stat(key: String) -> float:
 
 
 func _recompute() -> void:
+	if level("agirec") > 0:
+		recipes_revealed = true
 	_stats = {}
 	for key in BASE:
 		var v := float(BASE[key])
@@ -734,6 +737,15 @@ func _recompute() -> void:
 			v += float(e.get("add", 0.0)) * lv
 			mul *= pow(float(e.get("mul", 1.0)), lv)
 		_stats[key] = v * mul
+
+
+## Learning AGI 菜谱 reveals formulas independently of actual recipe discoveries.
+func all_recipes_revealed() -> bool:
+	return recipes_revealed or level("agirec") > 0
+
+
+func recipe_formula_visible(id: String) -> bool:
+	return _recipe_ids.has(id) and (recipes.has(id) or all_recipes_revealed())
 
 
 ## Records a 套餐 made; true the first time (a new entry in the 菜谱图鉴).
@@ -781,7 +793,8 @@ func save_game() -> bool:
 		return _save_error("Cannot write save file (%s)." % error_string(FileAccess.get_open_error()))
 	f.store_string(JSON.stringify({"version": SAVE_VERSION, "tokens": tokens, "total_tokens": total_tokens,
 		"runs": runs, "best_run": best_run, "levels": levels, "fish_version": version,
-		"trial_fails": trial_fails, "recipes": recipes, "signatures": signatures, "struck": struck,
+		"trial_fails": trial_fails, "recipes": recipes, "recipes_revealed": all_recipes_revealed(),
+		"signatures": signatures, "struck": struck,
 		"helper_plan": helper_plan, "automation": automation, "stall_order": active_stall_order(),
 		"seen_buttons": seen_buttons, "achievements": achievements, "lifetime": lifetime,
 		"ending_seen": ending_seen, "saved_at": Time.get_unix_time_from_system()}, "\t"))
@@ -892,6 +905,8 @@ func _read_save(path: String) -> Dictionary:
 	for key in ["signatures", "struck"]:
 		if d.has(key) and not d[key] is Array:
 			return {}
+	if d.has("recipes_revealed") and not d.recipes_revealed is bool:
+		return {}
 	return d
 
 
@@ -942,6 +957,7 @@ func load_game() -> void:
 	best_run = maxf(0.0, float(d.get("best_run", 0.0)))
 	version = clampi(int(d.get("fish_version", 0)), 0, VERSIONS.size() - 1)
 	trial_fails = _count_dict(d.get("trial_fails", {}), 3)
+	recipes_revealed = bool(d.get("recipes_revealed", false))
 	recipes = _count_dict(d.get("recipes", {}))
 	for id in recipes.keys():
 		if not _recipe_ids.has(id):
@@ -1029,6 +1045,7 @@ func reset_save() -> void:
 	version = 0
 	trial_fails = {}
 	recipes = {}
+	recipes_revealed = false
 	signatures = []
 	struck = []
 	helper_plan = {}

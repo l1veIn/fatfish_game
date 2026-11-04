@@ -517,7 +517,8 @@
 		setLanguage(locale) {
 			english = String(locale).toLowerCase().startsWith("en");
 			if (env.document) env.document.documentElement.lang = english ? "en" : "zh-CN";
-			setStatus(status);
+			// Resource loading precedes init(); don't claim a cloud read before it starts.
+			if (statusNode) setStatus(status);
 			updateModeButton();
 		},
 		retry,

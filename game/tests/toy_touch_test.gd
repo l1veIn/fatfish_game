@@ -8,7 +8,7 @@ var _failures: Array = []
 var _out := ""
 var _source := {}
 var _shots: Array = []
-const SOURCES := ["project.godot", "scripts/main.gd", "scripts/run/canteen_run.gd",
+const SOURCES := ["project.godot", "scripts/ui/screen_layout.gd", "scripts/main.gd", "scripts/run/canteen_run.gd",
 	"scripts/tree/tree_screen.gd", "scripts/ui/touch_controls.gd", "scripts/ui/run_coach.gd",
 	"scripts/ui/pause_menu.gd", "scripts/autoload/settings.gd", "scripts/autoload/game.gd",
 	"tests/toy_touch_test.gd", "data/i18n/en.json", "scripts/ui/recipe_book.gd",
@@ -37,7 +37,7 @@ func _ready() -> void:
 	Settings.pause_unfocused = false
 	Settings.hit_pause = false
 	Settings.fullscreen = false
-	Settings.window_size = Vector2i(960, 540)
+	Settings.window_size = Vector2i(1328, 610) if OS.get_cmdline_user_args().has("--expand-screen") else Vector2i(960, 540)
 	Settings.apply()
 	Game.reset_save()
 	Game.version = 1
@@ -49,6 +49,13 @@ func _ready() -> void:
 	_main = load("res://scenes/main.tscn").instantiate()
 	add_child(_main)
 	await wait_frames(8)
+	if OS.get_cmdline_user_args().has("--expand-screen"):
+		_check(get_viewport().get_visible_rect().size.x > 2300, "ultrawide viewport expands beyond the authored stage")
+		_check(ScreenLayout.visible.position.x < -200 and is_equal_approx(ScreenLayout.visible.end.y, 1080), "scenery reaches both screen edges without vertical cropping")
+		_main._layout._css_size = Vector2(1328, 610)
+		_main._layout._insets = Vector4(44, 36, 0, 24) # Explicit App safe-area fixture, CSS px.
+		_main._layout._reflow()
+	await shot("title_fullscreen")
 	await _key(KEY_ENTER)
 	_check(_main._screen is TreeScreen, "main title confirmation opens the production tree")
 	if not _main._screen is TreeScreen:
@@ -61,6 +68,14 @@ func _ready() -> void:
 	_check(_main._screen is CanteenRun, "tree start GUI enters production meal through main controller")
 	if _main._screen is CanteenRun:
 		await _meal_route(_main._screen)
+	if OS.get_cmdline_user_args().has("--expand-screen"):
+		for dimensions in [Vector2i(1280, 720), Vector2i(1200, 800), Vector2i(1328, 610)]:
+			DisplayServer.window_set_size(dimensions)
+			await wait_frames(8)
+			var area := get_viewport().get_visible_rect().size
+			_check(absf(area.x - area.y * float(dimensions.x) / dimensions.y) <= 1.0, "viewport fills resized screen within one render pixel: " + str(dimensions))
+			_check(_main._stage.size == Vector2(1920, 1080), "authored stage keeps its aspect after resizing")
+			await shot("resized_%dx%d" % [dimensions.x, dimensions.y])
 	await _finish(player_save, player_settings)
 
 
@@ -419,7 +434,7 @@ func _wait(seconds: float) -> void:
 func _touch(index: int, at: Vector2, down: bool, canceled := false) -> void:
 	var event := InputEventScreenTouch.new()
 	event.index = index
-	event.position = at
+	event.position = get_viewport().canvas_transform * at
 	event.pressed = down
 	event.canceled = canceled
 	get_viewport().push_input(event, true)
@@ -429,7 +444,7 @@ func _touch(index: int, at: Vector2, down: bool, canceled := false) -> void:
 func _drag(index: int, from: Vector2, to: Vector2) -> void:
 	var event := InputEventScreenDrag.new()
 	event.index = index
-	event.position = to
+	event.position = get_viewport().canvas_transform * to
 	event.relative = to - from
 	get_viewport().push_input(event, true)
 	await wait_frames()
@@ -444,8 +459,8 @@ func _mouse_click(at: Vector2, device := 0) -> void:
 	for down in [true, false]:
 		var event := InputEventMouseButton.new()
 		event.device = device
-		event.position = at
-		event.global_position = at
+		event.position = get_viewport().canvas_transform * at
+		event.global_position = event.position
 		event.button_index = MOUSE_BUTTON_LEFT
 		event.pressed = down
 		get_viewport().push_input(event, true)
@@ -469,7 +484,9 @@ func _key(code: Key) -> void:
 func shot(name: String) -> void:
 	if _out.is_empty() or DisplayServer.get_name() == "headless":
 		return
-	await RenderingServer.frame_post_draw
+	# Hidden QA windows may stop automatic rendering when Chrome covers them.
+	# Explicitly draw the current production scene before reading its GPU texture.
+	RenderingServer.force_draw()
 	var path := _out.path_join(name + ".png")
 	get_viewport().get_texture().get_image().save_png(path)
 	_shots.append({"path": path, "sha256": FileAccess.get_sha256(path)})
@@ -487,7 +504,7 @@ func _finish(player_save: PackedByteArray, player_settings: PackedByteArray) -> 
 	_check(_source == after, "tested source remained stable during this run")
 	var report := {"passed": _failures.is_empty(), "checks": _checks, "failures": _failures,
 		"source_sha256": _source, "source_after": after, "engine": Engine.get_version_info().string,
-		"renderer": DisplayServer.get_name(), "language": Settings.language, "shots": _shots,
+		"renderer": DisplayServer.get_name(), "viewport": str(get_viewport().get_visible_rect()), "language": Settings.language, "shots": _shots,
 		"scope": "Real touch/drag through Viewport.push_input and GUI, explicit emulated mouse events, real main screen flow. Starting progress, random spoon suppression and one falling dish are fixtures. Not physical mobile hardware, browser pointer conversion, or human playtesting."}
 	if not _out.is_empty():
 		FileAccess.open(_out.path_join("report.json"), FileAccess.WRITE).store_string(JSON.stringify(report, "  "))
@@ -577,7 +594,9 @@ func _mobile_preferences(tree: TreeScreen) -> void:
 		await _touch(0, at, true)
 		await _drag(0, at, targets[id])
 		await _touch(0, targets[id], false)
-		_check(Settings.touch_rect(id, editor.draft).get_center().distance_to(targets[id]) < 1, "drag repositions layout preview: " + id)
+		var dimensions: Vector2 = Settings.TOUCH_BASE[id] * editor.draft[id].scale
+		var expected := ScreenLayout.touch_rect(Rect2(targets[id] - dimensions * 0.5, dimensions)).get_center()
+		_check(Settings.touch_rect(id, editor.draft).get_center().distance_to(expected) < 1, "drag repositions layout preview inside the safe area: " + id)
 	for i in 2:
 		await _mouse_click(editor._buttons[i].get_global_rect().get_center())
 		var slider: Rect2 = editor._size_slider.get_global_rect()

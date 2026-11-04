@@ -387,6 +387,73 @@ def platform_package(web: Path) -> dict:
             "loader_main_pack_support_checked": True}
 
 
+def repair_loader_errors(web: Path) -> dict:
+    """Propagate download/initialization failures in the pinned Godot 4.7.2 loader.
+
+    Its tracked stream and nested initialization promises otherwise leave
+    startGame pending forever after a network error. Fail closed on template
+    changes; this is an export-only patch, never an editor/engine modification.
+    """
+    path = web / "index.js"
+    source = path.read_text(encoding="utf-8")
+    before = sha(path)
+    replacements = [
+        ("\t\t\t\t\tcontroller.close();\n\t\t\t\t});",
+         "\t\t\t\t\tcontroller.close();\n\t\t\t\t}).catch(function (error) { controller.error(error); });"),
+        ("getModuleConfig = function (loadPath, response)",
+         "getModuleConfig = function (loadPath, response, onFailure)"),
+        ("WebAssembly.instantiateStreaming(Promise.resolve(r), imports).then(done);",
+         "WebAssembly.instantiateStreaming(Promise.resolve(r), imports).then(done).catch(onFailure);"),
+        ("\t\t\t\t\tr.arrayBuffer().then(function (buffer) {\n"
+         "\t\t\t\t\t\tWebAssembly.instantiate(buffer, imports).then(done);\n\t\t\t\t\t});",
+         "\t\t\t\t\tr.arrayBuffer().then(function (buffer) {\n"
+         "\t\t\t\t\t\treturn WebAssembly.instantiate(buffer, imports).then(done);\n\t\t\t\t\t}).catch(onFailure);"),
+        ("Godot(me.config.getModuleConfig(loadPath, cloned))",
+         "Godot(me.config.getModuleConfig(loadPath, cloned, reject))"),
+        ("\t\t\t\t\t\t\t\t\tresolve();\n\t\t\t\t\t\t\t\t});\n"
+         "\t\t\t\t\t\t\t});\n\t\t\t\t\t\t});",
+         "\t\t\t\t\t\t\t\t\tresolve();\n\t\t\t\t\t\t\t\t}).catch(reject);\n"
+         "\t\t\t\t\t\t\t}).catch(reject);\n\t\t\t\t\t\t}).catch(reject);"),
+    ]
+    for old, new in replacements:
+        if source.count(old) != 1:
+            raise RuntimeError("Godot loader error handling changed; inspect before release.")
+        source = source.replace(old, new, 1)
+    path.write_text(source, encoding="utf-8", newline="\n")
+    return {"upstream_sha256": before, "patched_sha256": sha(path),
+            "download_and_initialization_errors_propagated": True}
+
+
+def fingerprint_web_assets(web: Path) -> dict:
+    """New release bytes must not reuse Toy's immutable cached resource URLs."""
+    engine_files = ["index.js", "index.wasm", "index.audio.worklet.js", "index.audio.position.worklet.js"]
+    engine_key = tree_digest({name: sha(web / name) for name in engine_files})[:12]
+    executable = "index-" + engine_key
+    pack = "index-" + sha(web / "index.data")[:12] + ".data"
+    renames = {name: executable + name[len("index"):] for name in engine_files}
+    renames["index.data"] = pack
+    renames["toy_bridge.js"] = "toy_bridge-" + sha(web / "toy_bridge.js")[:12] + ".js"
+    html = web / "index.html"
+    text = html.read_text(encoding="utf-8")
+    assignment = re.search(r"(?:const|let|var)\s+GODOT_CONFIG\s*=\s*", text)
+    if assignment is None:
+        raise RuntimeError("Missing Godot configuration before fingerprinting.")
+    config, length = json.JSONDecoder().raw_decode(text[assignment.end():])
+    config["executable"] = executable
+    config["mainPack"] = pack
+    config["fileSizes"] = {renames.get(name, name): size for name, size in config["fileSizes"].items()}
+    text = text[:assignment.end()] + json.dumps(config, separators=(",", ":")) + text[assignment.end() + length:]
+    for old in ["index.js", "toy_bridge.js"]:
+        marker = f'src="{old}"'
+        if text.count(marker) != 1:
+            raise RuntimeError(f"Unexpected shell script reference for {old}")
+        text = text.replace(marker, f'src="{renames[old]}"', 1)
+    for old, new in renames.items():
+        (web / old).rename(web / new)
+    html.write_text(text, encoding="utf-8", newline="\n")
+    return {"renamed": renames, "executable": executable, "main_pack": pack, "file_sizes": config["fileSizes"]}
+
+
 def make_zip(folder: Path, target: Path) -> None:
     unexpected = [p.relative_to(folder).as_posix() for p in files(folder)
                   if p.suffix.lower() not in TOY_SUFFIXES]
@@ -470,6 +537,11 @@ def main() -> None:
             raise RuntimeError(f"JavaScript filename collides with Godot output: {path.name}")
         shutil.copy2(path, web / path.name)
     package_adjustments = platform_package(web)
+    package_adjustments["loader_error_handling"] = repair_loader_errors(web)
+    versioned_assets = fingerprint_web_assets(web)
+    package_adjustments["cache_safe_assets"] = versioned_assets
+    package_adjustments["main_pack"] = versioned_assets["main_pack"]
+    package_adjustments["file_sizes"] = versioned_assets["file_sizes"]
     copy_licenses(web)
     (web / "README.md").write_text(
         f"Fatfish's Free Lunch / 吃白饭的大肥鱼 v{version}\n"

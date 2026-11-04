@@ -227,7 +227,7 @@ func _goal_height() -> float:
 
 
 func _draw() -> void:
-	draw_rect(Rect2(Vector2.ZERO, size), Color(0.04, 0.02, 0.01, 0.5))
+	draw_rect(ScreenLayout.full_rect(self), Color(0.04, 0.02, 0.01, 0.5))
 	var r := Rect2(PAPER.position, Vector2(PAPER.size.x, _paper_h))
 	draw_rect(Rect2(r.position + Vector2(10, 14), r.size), Color(0, 0, 0, 0.35))   # its shadow
 	UiKit.nine(self, _tex.get("ui_paper", null), r, 40.0, 0.8)

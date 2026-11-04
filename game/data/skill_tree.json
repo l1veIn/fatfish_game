@@ -13,7 +13,8 @@
    "max": 1,
    "cost": 0,
    "growth": 1,
-   "effects": {}
+   "effects": {},
+   "summary": "接菜喂饭赚收益"
   },
   {
    "id": "stall_main",
@@ -33,7 +34,8 @@
     "stall_main": {
      "add": 1
     }
-   }
+   },
+   "summary": "主食档口加新菜"
   },
   {
    "id": "stall_wok",
@@ -53,7 +55,8 @@
     "stall_wok": {
      "add": 1
     }
-   }
+   },
+   "summary": "解锁炒菜档口"
   },
   {
    "id": "stall_dim",
@@ -73,7 +76,8 @@
     "stall_dim": {
      "add": 1
     }
-   }
+   },
+   "summary": "解锁面点档口"
   },
   {
    "id": "stall_fry",
@@ -94,7 +98,8 @@
      "add": 1
     }
    },
-   "ring": 1
+   "ring": 1,
+   "summary": "解锁炸物档口"
   },
   {
    "id": "stall_sweet",
@@ -115,7 +120,8 @@
      "add": 1
     }
    },
-   "ring": 2
+   "ring": 2,
+   "summary": "解锁甜品档口"
   },
   {
    "id": "menu",
@@ -135,7 +141,8 @@
     "menu_cut": {
      "add": 1
     }
-   }
+   },
+   "summary": "划掉不想要的菜"
   },
   {
    "id": "sft",
@@ -155,7 +162,8 @@
     "sft": {
      "add": 0.08
     }
-   }
+   },
+   "summary": "提高优质菜几率"
   },
   {
    "id": "lora",
@@ -176,7 +184,8 @@
     "lora": {
      "add": 0.03
     }
-   }
+   },
+   "summary": "精简菜单升品质"
   },
   {
    "id": "dpo",
@@ -197,7 +206,8 @@
      "add": 0.2
     }
    },
-   "ring": 1
+   "ring": 1,
+   "summary": "优质菜可升金牌"
   },
   {
    "id": "fp32",
@@ -218,7 +228,8 @@
      "add": 1
     }
    },
-   "ring": 3
+   "ring": 3,
+   "summary": "金牌菜价值提高"
   },
   {
    "id": "moe",
@@ -238,7 +249,8 @@
     "sig_slots": {
      "add": 1
     }
-   }
+   },
+   "summary": "开饭前选招牌菜"
   },
   {
    "id": "canteen_std",
@@ -259,7 +271,8 @@
      "add": 0.15
     }
    },
-   "ring": 1
+   "ring": 1,
+   "summary": "出菜额外配青菜"
   },
   {
    "id": "conc",
@@ -279,7 +292,8 @@
     "tentacles": {
      "add": 1
     }
-   }
+   },
+   "summary": "增加抛菜触手"
   },
   {
    "id": "lunch",
@@ -302,7 +316,8 @@
     "crit_mult": {
      "add": 0.1
     }
-   }
+   },
+   "summary": "提高每口暴击"
   },
   {
    "id": "api",
@@ -322,7 +337,8 @@
     "throw_rate": {
      "mul": 1.12
     }
-   }
+   },
+   "summary": "加快出菜速度"
   },
   {
    "id": "batch",
@@ -343,7 +359,8 @@
      "add": 0.25
     }
    },
-   "ring": 1
+   "ring": 1,
+   "summary": "一勺可多一份菜"
   },
   {
    "id": "peak",
@@ -367,7 +384,8 @@
      "add": 3
     }
    },
-   "ring": 1
+   "ring": 1,
+   "summary": "延长出菜高峰"
   },
   {
    "id": "temp",
@@ -388,7 +406,8 @@
      "add": 0.08
     }
    },
-   "key": true
+   "key": true,
+   "summary": "入盒随机升级菜"
   },
   {
    "id": "hot",
@@ -409,7 +428,8 @@
      "add": 0.25
     }
    },
-   "ring": 1
+   "ring": 1,
+   "summary": "火苗菜价值提高"
   },
   {
    "id": "halluc",
@@ -430,7 +450,8 @@
      "add": 0.08
     }
    },
-   "ring": 1
+   "ring": 1,
+   "summary": "入盒可额外加菜"
   },
   {
    "id": "regen",
@@ -451,7 +472,8 @@
      "add": 0.1
     }
    },
-   "ring": 4
+   "ring": 4,
+   "summary": "送餐可整盒升菜"
   },
   {
    "id": "emerge",
@@ -473,7 +495,8 @@
      "add": 1
     }
    },
-   "ring": 4
+   "ring": 4,
+   "summary": "火苗菜可成乱炖"
   },
   {
    "id": "overfit",
@@ -495,7 +518,8 @@
      "add": 1
     }
    },
-   "ring": 2
+   "ring": 2,
+   "summary": "顿悟后可变青菜"
   },
   {
    "id": "vram",
@@ -518,7 +542,8 @@
     "basins": {
      "add": 1
     }
-   }
+   },
+   "summary": "饭盒变宽且变多"
   },
   {
    "id": "ocr",
@@ -538,7 +563,8 @@
     "box_bonus": {
      "add": 0.2
     }
-   }
+   },
+   "summary": "提高每盒收入"
   },
   {
    "id": "prompt",
@@ -561,7 +587,8 @@
     "mono_bonus": {
      "add": 0.1
     }
-   }
+   },
+   "summary": "同菜满盒成拼盘"
   },
   {
    "id": "mat",
@@ -581,7 +608,8 @@
     "material": {
      "add": 1
     }
-   }
+   },
+   "summary": "提高整顿收入"
   },
   {
    "id": "fill",
@@ -602,7 +630,8 @@
      "add": 0.25
     }
    },
-   "ring": 1
+   "ring": 1,
+   "summary": "满盒送餐有加成"
   },
   {
    "id": "fewshot",
@@ -622,7 +651,8 @@
     "tier2": {
      "add": 1
     }
-   }
+   },
+   "summary": "二级套餐更值钱"
   },
   {
    "id": "inject",
@@ -643,7 +673,8 @@
      "add": 1
     }
    },
-   "ring": 1
+   "ring": 1,
+   "summary": "合成偷偷藏青菜"
   },
   {
    "id": "compress",
@@ -667,7 +698,8 @@
      "add": 0.15
     }
    },
-   "ring": 1
+   "ring": 1,
+   "summary": "套餐省格存缓存"
   },
   {
    "id": "agentwf",
@@ -688,7 +720,8 @@
      "add": 1
     }
    },
-   "ring": 1
+   "ring": 1,
+   "summary": "三级大餐更值钱"
   },
   {
    "id": "fuse3",
@@ -710,7 +743,8 @@
      "add": 1
     }
    },
-   "ring": 2
+   "ring": 2,
+   "summary": "三份同菜升品质"
   },
   {
    "id": "hodge",
@@ -732,7 +766,8 @@
      "add": 1
     }
    },
-   "ring": 2
+   "ring": 2,
+   "summary": "杂菜可合成乱炖"
   },
   {
    "id": "cot",
@@ -753,7 +788,8 @@
      "add": 0.3
     }
    },
-   "ring": 2
+   "ring": 2,
+   "summary": "连锁合成有加成"
   },
   {
    "id": "rag",
@@ -775,12 +811,13 @@
      "add": 2
     }
    },
-   "ring": 2
+   "ring": 2,
+   "summary": "好原料提升套餐"
   },
   {
    "id": "agirec",
    "name": "AGI 菜谱",
-   "desc": "「神级套餐」（6 样以上，或隐藏配方）更值钱，每级 +0.6 倍。",
+   "desc": "首次学习后，图鉴公开所有套餐的完整配方，包括隐藏配方。「神级套餐」（6 样以上，或隐藏配方）更值钱，每级 +0.6 倍。",
    "pos": [
     711,
     543
@@ -796,7 +833,8 @@
      "add": 1
     }
    },
-   "ring": 3
+   "ring": 3,
+   "summary": "公开全部配方"
   },
   {
    "id": "spec",
@@ -818,7 +856,8 @@
      "add": 0.2
     }
    },
-   "ring": 3
+   "ring": 3,
+   "summary": "合成可补缺原料"
   },
   {
    "id": "eat",
@@ -838,7 +877,8 @@
     "eat_rate": {
      "mul": 1.25
     }
-   }
+   },
+   "summary": "加快吃饭速度"
   },
   {
    "id": "stream",
@@ -859,7 +899,8 @@
      "add": 0.2
     }
    },
-   "key": true
+   "key": true,
+   "summary": "吃得越多越值钱"
   },
   {
    "id": "ttft",
@@ -879,7 +920,8 @@
     "ttft": {
      "add": 1
     }
-   }
+   },
+   "summary": "提前越吃越香"
   },
   {
    "id": "mtp",
@@ -899,7 +941,8 @@
     "mtp": {
      "add": 1
     }
-   }
+   },
+   "summary": "每口额外赚收益"
   },
   {
    "id": "busy",
@@ -920,7 +963,8 @@
      "add": 0.5
     }
    },
-   "key": true
+   "key": true,
+   "summary": "等饭越久越馋"
   },
   {
    "id": "queue",
@@ -941,7 +985,8 @@
      "add": -1.25
     }
    },
-   "ring": 1
+   "ring": 1,
+   "summary": "等待更快涨馋"
   },
   {
    "id": "multiturn",
@@ -964,7 +1009,8 @@
     }
    },
    "ring": 1,
-   "key": true
+   "key": true,
+   "summary": "连击提升收益"
   },
   {
    "id": "memory",
@@ -988,7 +1034,8 @@
      "add": 0.1
     }
    },
-   "ring": 2
+   "ring": 2,
+   "summary": "护连击换菜加成"
   },
   {
    "id": "warm",
@@ -1010,7 +1057,8 @@
     }
    },
    "ring": 2,
-   "key": true
+   "key": true,
+   "summary": "留一盒收摊再吃"
   },
   {
    "id": "final",
@@ -1031,7 +1079,8 @@
      "add": 1
     }
    },
-   "ring": 2
+   "ring": 2,
+   "summary": "保温盒收入提高"
   },
   {
    "id": "bon",
@@ -1052,7 +1101,8 @@
      "add": 1
     }
    },
-   "ring": 3
+   "ring": 3,
+   "summary": "自动留最贵盒"
   },
   {
    "id": "eos",
@@ -1073,7 +1123,8 @@
      "add": 1
     }
    },
-   "ring": 2
+   "ring": 2,
+   "summary": "最后一口有加成"
   },
   {
    "id": "rlhf",
@@ -1093,7 +1144,8 @@
     "balance_max": {
      "add": 0.25
     }
-   }
+   },
+   "summary": "提高均衡上限"
   },
   {
    "id": "constit",
@@ -1114,7 +1166,8 @@
      "add": 1
     }
    },
-   "ring": 3
+   "ring": 3,
+   "summary": "放宽均衡判定"
   },
   {
    "id": "grok",
@@ -1137,7 +1190,8 @@
     }
    },
    "ring": 1,
-   "key": true
+   "key": true,
+   "summary": "吃青菜可顿悟"
   },
   {
    "id": "warmup",
@@ -1158,7 +1212,8 @@
      "add": -6
     }
    },
-   "ring": 1
+   "ring": 1,
+   "summary": "减少顿悟菜数"
   },
   {
    "id": "aftertaste",
@@ -1179,7 +1234,8 @@
      "add": 2
     }
    },
-   "ring": 2
+   "ring": 2,
+   "summary": "顿悟青菜更值钱"
   },
   {
    "id": "drift",
@@ -1200,7 +1256,8 @@
      "add": 1
     }
    },
-   "ring": 3
+   "ring": 3,
+   "summary": "顿悟青菜算荤素"
   },
   {
    "id": "skills",
@@ -1223,7 +1280,8 @@
     "auto_return": {
      "add": 1
     }
-   }
+   },
+   "summary": "自动拿盒和送饭"
   },
   {
    "id": "hire",
@@ -1243,7 +1301,8 @@
     "helper": {
      "add": 1
     }
-   }
+   },
+   "summary": "增加助手名额"
   },
   {
    "id": "orch",
@@ -1267,7 +1326,8 @@
      "add": 0.15
     }
    },
-   "ring": 1
+   "ring": 1,
+   "summary": "助手提速加接力"
   },
   {
    "id": "fc",
@@ -1288,7 +1348,8 @@
      "add": 1
     }
    },
-   "ring": 1
+   "ring": 1,
+   "summary": "指定助手凑套餐"
   },
   {
    "id": "nutri",
@@ -1309,7 +1370,8 @@
      "add": 1
     }
    },
-   "ring": 2
+   "ring": 2,
+   "summary": "助手补齐营养"
   },
   {
    "id": "clip",
@@ -1330,7 +1392,8 @@
      "add": 1
     }
    },
-   "ring": 2
+   "ring": 2,
+   "summary": "垫高低收入饭盒"
   },
   {
    "id": "async",
@@ -1353,7 +1416,8 @@
     }
    },
    "ring": 3,
-   "require_all": true
+   "require_all": true,
+   "summary": "玩家饭盒优先吃"
   },
   {
    "id": "sleep",
@@ -1374,7 +1438,8 @@
      "add": 1
     }
    },
-   "ring": 3
+   "ring": 3,
+   "summary": "收摊剩菜折半算"
   },
   {
    "id": "think",
@@ -1395,7 +1460,8 @@
      "add": 1
     }
    },
-   "ring": 1
+   "ring": 1,
+   "summary": "延长慢放思考"
   },
   {
    "id": "diverge",
@@ -1416,7 +1482,8 @@
      "add": 120
     }
    },
-   "ring": 1
+   "ring": 1,
+   "summary": "思考时吸附接菜"
   },
   {
    "id": "converge",
@@ -1437,7 +1504,8 @@
      "add": 1
     }
    },
-   "ring": 1
+   "ring": 1,
+   "summary": "思考时筛掉余菜"
   },
   {
    "id": "critic",
@@ -1459,7 +1527,8 @@
     }
    },
    "ring": 2,
-   "key": true
+   "key": true,
+   "summary": "套餐种类加成"
   },
   {
    "id": "bench",
@@ -1480,7 +1549,8 @@
      "add": 0.02
     }
    },
-   "ring": 2
+   "ring": 2,
+   "summary": "提高种类加成"
   },
   {
    "id": "ticket_r1",
@@ -1498,7 +1568,8 @@
    "max": 1,
    "cost": 300,
    "growth": 1,
-   "effects": {}
+   "effects": {},
+   "summary": "挑战R1评测"
   },
   {
    "id": "ticket_v31",
@@ -1517,7 +1588,8 @@
    "cost": 6000,
    "growth": 1,
    "effects": {},
-   "ring": 1
+   "ring": 1,
+   "summary": "挑战V3.1评测"
   },
   {
    "id": "ticket_v32",
@@ -1536,7 +1608,8 @@
    "cost": 40000,
    "growth": 1,
    "effects": {},
-   "ring": 2
+   "ring": 2,
+   "summary": "挑战V3.2评测"
   },
   {
    "id": "ticket_v4",
@@ -1555,7 +1628,8 @@
    "cost": 250000,
    "growth": 1,
    "effects": {},
-   "ring": 3
+   "ring": 3,
+   "summary": "挑战V4评测"
   },
   {
    "id": "ticket_agi",
@@ -1574,7 +1648,8 @@
    "cost": 1200000,
    "growth": 1,
    "effects": {},
-   "ring": 4
+   "ring": 4,
+   "summary": "挑战最终评测"
   }
  ]
 }

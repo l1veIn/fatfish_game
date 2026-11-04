@@ -23,10 +23,7 @@ func _ready() -> void:
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	z_index = 240
 	mouse_filter = Control.MOUSE_FILTER_STOP
-	var dim := ColorRect.new()
-	dim.color = Color(0.06, 0.035, 0.015, 0.85)
-	dim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	add_child(dim)
+	ScreenLayout.shade(self, Color(0.06, 0.035, 0.015, 0.85))
 	_panel = PanelContainer.new()
 	var paper := UiKit.box(UiKit.CREAM, UiKit.WOOD, 2, 18, 3)
 	for side in ["left", "right", "top", "bottom"]: paper.set("content_margin_" + side, 30.0)

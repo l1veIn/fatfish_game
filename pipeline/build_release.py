@@ -56,6 +56,13 @@ def main() -> None:
     config = re.sub(r'^_mcp_game_helper=.*\n?', '', config, flags=re.M)
     config = re.sub(r'\[editor_plugins\]\s*\n.*?(?=\n\[|\Z)', '', config, flags=re.S)
     (stage / "project.godot").write_text(config, encoding="utf-8", newline="\n")
+    # Keep the Windows file properties aligned with the actual game version.
+    # Only normalize the staged preset; leave the editor's export settings alone.
+    windows_version = ".".join((version.split(".") + ["0"] * 4)[:4])
+    preset = stage / "export_presets.cfg"
+    preset.write_text(re.sub(r'application/(file|product)_version="[^"]*"',
+                            lambda match: f'application/{match.group(1)}_version="{windows_version}"',
+                            preset.read_text(encoding="utf-8")), encoding="utf-8", newline="\n")
     assert "godot_ai" not in config and not (stage / "addons").exists()
     source_hashes = {str(p.relative_to(stage)).replace("\\", "/"): sha(p)
                      for p in sorted(stage.rglob("*")) if p.is_file()}

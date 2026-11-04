@@ -2,7 +2,7 @@
     python pipeline/i18n_extract.py [en]
 Chinese is the source language and the key: every Chinese string literal in game/scripts
 (comments skipped, triple-quoted strings included) plus the skill tree's names and
-descriptions. Existing translations are kept, new keys are added with "" (the game then shows
+descriptions and ticket summaries. Existing translations are kept, new keys are added with "" (the game then shows
 the Chinese), keys that no longer exist are dropped. Prints what is still untranslated.
 Lines ending in "# notr" are skipped (debug keys, autotest log). In code, texts reach the screen through tr(); strings built with % use the format string as
 the key: tr("花费 %s token") % x.
@@ -59,7 +59,7 @@ def main() -> None:
                 keys += from_gd(open(os.path.join(root, f), encoding="utf-8").read())
     tree = json.load(open(os.path.join(ROOT, "game", "data", "skill_tree.json"), encoding="utf-8"))
     for n in tree["nodes"]:
-        keys += [n["name"], n["desc"]]
+        keys += [n["name"], n["desc"]] + ([n["summary"]] if n.get("summary") else [])
     achievements = json.load(open(os.path.join(ROOT, "game", "data", "achievements.json"), encoding="utf-8"))
     for item in achievements["achievements"]:
         keys += [item["name"], item["desc"], item["group"]]
