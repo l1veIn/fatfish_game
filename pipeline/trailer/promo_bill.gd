@@ -1,5 +1,5 @@
 extends Node2D
-## The cost + open-source video (2026-11-07). 梁阿姨 reads the bill, so every number has a voice line.
+## The cost + open-source video (2026-11-07). 大肥鱼 reads the bill, so every number has a voice line.
 ## Shot starts and captions come from promo/timeline.json (bill_timeline.py, from the voice lengths);
 ## real gameplay runs unchanged in a SubViewport. The music and voice are mixed in by bill_export.py.
 const CREAM := Color("fff1cf")
@@ -325,7 +325,7 @@ func _draw_bill() -> void:
 		y += 158.0
 
 
-## 梁阿姨 asks how much the AI ate: a counter rolls up, then one bar shows how little was written.
+## She asks how much the AI ate: a counter rolls up, then one bar shows how little was written.
 func _draw_tokens(_lt: float) -> void:
 	var o := overlay
 	var d: Dictionary = data.tokens

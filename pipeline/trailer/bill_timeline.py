@@ -1,6 +1,6 @@
 """The cost + open-source video (2026-11-07): voice lines, timeline, stage, final mix.
 
-    py -3 pipeline/trailer/bill_timeline.py voice     # 梁阿姨 reads the bill (ElevenLabs, key from .env, skips existing)
+    py -3 pipeline/trailer/bill_timeline.py voice     # 大肥鱼 reads the bill (ElevenLabs, key from .env, skips existing)
     py -3 pipeline/trailer/bill_timeline.py stage     # timeline.json + isolated Godot project in build/bill-20261107/stage
     (record with Godot --write-movie, see README.md)
     py -3 pipeline/trailer/bill_timeline.py export    # music + voice + game sound -> FatFish-Bill-1080p.mp4
@@ -18,7 +18,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 OUT = ROOT / "build/bill-20261107"
-AUD = ROOT / "art_src/promo/audio/bill"
+AUD = ROOT / "art_src/promo/audio/bill_fish"   # 大肥鱼 reads the bill (user's call, 2026-11-07)
 PROMO_AUD = ROOT / "art_src/promo/audio"
 GODOT = ROOT / "tools/godot/Godot_v4.7.2-stable_win64_console.exe"
 GAME_SRC = ROOT / "game"
@@ -33,26 +33,26 @@ def stats() -> dict:
 def lines() -> dict:
     s = stats()
     return {
-        "hook": "[loud, cheerful] 这游戏总成本——三十一块七！[laughs] 美元！",
-        "intro": "[hearty] 来，小票给你念念。",
-        "claude": "[reading aloud, brisk] 写代码，Claude 订阅，二十刀。",
-        "eleven": "[reading aloud, brisk] 音效、配音、配乐，ElevenLabs，十刀。",
-        "image": "[reading aloud, surprised] 将近三百张图，十一块三——人民币！",
-        "total": "[loud] 合计，三十一块七。",
-        "steam": "[laughing hard] Steam 上架费？一百刀！",
-        "tokens": f"[curious, then shouting] 那 AI 到底吃了多少？{s['total_spoken']} token！",
-        "sliver": f"[conspiratorial] 真正写出来的，只有{s['output_spoken']}。",
-        "reread": "[amused] 剩下的，全在翻来覆去读上下文。",
-        "joke": "[laughing] 跟大肥鱼一个样——吃得多，吐得少！",
-        "api": f"[impressed] 按 API 原价算，光 Claude 就要{s['api_spoken']}。",
-        "human": "[bossy] 那人干嘛？人负责说：不对，重来！",
-        "r1": "[scolding] 留样柜的饭不能吃！",
-        "r2": "[scolding] 手指画错了！",
-        "r3": "[scolding] 音效太长了！",
-        "update": "[excited] 这次更新，V4.1 三章！",
-        "update2": "[excited] 会识图，能跑腿，十三个新技能。",
-        "open": "[warm and proud] 账单摊开了，源码也摊开了！",
-        "open2": "[warm, inviting] 全在 GitHub，拿去做你自己的！",
+        "hook": "[smug, bored] 这游戏总成本——三十一块七。[small giggle] 美元哦。",
+        "claude": "[flat, reading aloud] 写代码，Claude 订阅，二十刀。",
+        "eleven": "[flat, reading aloud] 音效、配音、配乐，ElevenLabs，十刀。",
+        "image": "[flat, a little surprised] 将近三百张图，十一块三——人民币。",
+        "total": "[smug] 合计，三十一块七。",
+        "steam": "[giggling, teasing] Steam 上架费？一百刀，嘿嘿。",
+        "tokens": f"[curious, then smug] 那 AI 吃了多少？{s['total_spoken']} token。",
+        "sliver": f"[whispering, cheeky] 真正写出来的，只有{s['output_spoken']}。",
+        "reread": "[flat] 剩下的，全在翻来覆去读上下文。",
+        "api": f"[smug, impressed] 按 API 原价算，光 Claude 就要{s['api_spoken']}。",
+        "joke": "[deadpan, proud] 跟我一个样。吃得多，吐得少。",
+        "human": "[pouting] 那人干嘛？人只会说：不对，重来。",
+        "r1": "[whining] 留样柜的饭不能吃。",
+        "r2": "[huffing] 手指画错了。",
+        "r3": "[annoyed] 音效太长了。",
+        "update": "[perking up] 这次更新，V4.1 三章。",
+        "update2": "[smug] 会识图，能跑腿，十三个新技能。",
+        "open": "[cheeky] 账单摊开了，源码也摊开了。",
+        "open2": "[teasing] 全在 GitHub，拿去做你自己的。",
+        "slogan": "[smug, then hungry] 要实现 AGI，得先吃饱。",
     }
 
 
@@ -64,7 +64,7 @@ def voice() -> None:
             key = line.split("=", 1)[1].strip()
     if not key:
         sys.exit("ELEVENLABS_API_KEY not found")
-    vid = json.load(open(ROOT / "art_src/voice/voices.json", encoding="utf-8"))["auntie"]
+    vid = json.load(open(ROOT / "art_src/voice/voices.json", encoding="utf-8"))["fish"]
     AUD.mkdir(parents=True, exist_ok=True)
     for name, text in lines().items():
         dest = AUD / f"{name}.mp3"
@@ -82,14 +82,14 @@ def voice() -> None:
 
 def trimmed(name: str) -> Path:
     """The line with its leading and trailing silence cut, loudness matched."""
-    wav = OUT / "vo_tight" / f"{name}.wav"
+    wav = OUT / "vo_fish" / f"{name}.wav"
     if not wav.exists():
         wav.parent.mkdir(parents=True, exist_ok=True)
-        src = PROMO_AUD / "auntie_slogan_v2.mp3" if name == "slogan" else AUD / f"{name}.mp3"
+        src = AUD / f"{name}.mp3"
         subprocess.run(["ffmpeg", "-y", "-v", "error", "-i", str(src), "-af",
                         "silenceremove=start_periods=1:start_threshold=-42dB:start_silence=0.02,areverse,"
                         "silenceremove=start_periods=1:start_threshold=-42dB:start_silence=0.08,areverse,"
-                        "silenceremove=stop_periods=-1:stop_duration=0.2:stop_threshold=-40dB:stop_silence=0.1,atempo=1.14,loudnorm=I=-16:TP=-2", "-ar", "48000", "-ac", "2", str(wav)], check=True)
+                        "silenceremove=stop_periods=-1:stop_duration=0.12:stop_threshold=-40dB:stop_silence=0.07,atempo=1.22,loudnorm=I=-16:TP=-2", "-ar", "48000", "-ac", "2", str(wav)], check=True)
     return wav
 
 
@@ -147,7 +147,7 @@ def timeline() -> dict:
     # burned-in subtitles: every voice line, because a lot of people watch with the sound low
     plain = {name: re.sub(r"\[[^\]]*\]\s*", "", text) for name, text in lines().items()}
     for c in clips:
-        if c["name"] in plain:
+        if c["name"] in plain and c["name"] != "slogan":   # the end card shows the slogan already
             captions.append({"text": plain[c["name"]], "style": "sub", "x": 960, "y": 1034, "size": 44,
                              "from": c["t"], "to": c["t"] + c["d"] + 0.05})
     bill = {"lines": [
