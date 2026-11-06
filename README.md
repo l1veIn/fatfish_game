@@ -7,7 +7,7 @@
 - **直接玩（手机电脑都行）**：[B 站 Toy](https://www.bilibili.com/toy/fatfish-free-lunch/index.html)
 - **Windows 版**：[Releases](https://github.com/l1veIn/fatfish_game/releases/latest) 下载 zip，解压后双击 `FatFish.exe`
 - **作者**：[夸夸家族族长（B 站）](https://space.bilibili.com/2501012)
-- **视频**：[如果大肥鱼是一款增量游戏](https://www.bilibili.com/video/BV1Ypnz6pEBR)
+- **视频**：[做这个游戏只花了31.7刀：账单和源码全公开](https://www.bilibili.com/video/BV1bv456fESe) · [如果大肥鱼是一款增量游戏](https://www.bilibili.com/video/BV1Ypnz6pEBR)
 
 ## 做这个游戏花了多少钱
 
