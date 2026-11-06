@@ -122,6 +122,7 @@ func _enter(index: int) -> void:
 		run.autotest = true
 		screen = run
 		vp.add_child(screen)
+		run.can_think = false   # keeps the warm canteen colours (the bot's slow motion tints the frame)
 		for i in (1500 if arg() == "hook" else 700): run._process(1.0 / 60.0)
 	elif kind() == "tree":
 		base_state(7, _late_levels())
@@ -130,8 +131,8 @@ func _enter(index: int) -> void:
 		Game._recompute()
 		screen = TreeScreen.new()
 		vp.add_child(screen)
-		(screen as TreeScreen)._zoom = 0.72
-		(screen as TreeScreen)._pan = Vector2(1000, 760)
+		(screen as TreeScreen)._zoom = 1.0
+		(screen as TreeScreen)._pan = Vector2(1120, 800)
 	Audio.slowmo(false)
 	if kind() in ["ill", "bill", "tokens", "redo", "github"]:
 		Audio.sfx("fling", -8.0)
@@ -153,7 +154,7 @@ func _process(delta: float) -> void:
 	if wanted != shot: _enter(wanted)
 	if kind() == "tree":
 		var tree := screen as TreeScreen
-		tree._pan = Vector2(1000 + local_t * 14.0, 760 + local_t * 8.0)
+		tree._pan = Vector2(1120 + local_t * 16.0, 800 + local_t * 10.0)
 		tree.queue_redraw()
 	# the receipt lines and stamps land with their voice lines
 	for b in data.beats:
@@ -223,6 +224,11 @@ func caption(s: String, style: String, pos: Vector2, size: int, a: float, alpha:
 		"big", "gold":
 			o.draw_set_transform(pos, 0.0, Vector2(sc, sc))
 			outlined(o, s, size, (GOLD if style == "gold" else CREAM) * Color(1, 1, 1, alpha), INK * Color(1, 1, 1, alpha), maxi(10, size / 7))
+		"sub":
+			var w := text_w(body_font, s, size) + 60.0
+			o.draw_style_box(panel(Color(0.05, 0.03, 0.02, 0.66 * alpha), 10), Rect2(pos.x - w * 0.5, pos.y - size * 0.82, w, size * 1.6))
+			o.draw_set_transform(pos, 0.0, Vector2.ONE)
+			outlined(o, s, size, Color(1, 1, 1, alpha), INK, 0, body_font)
 		"paper":
 			var w := text_w(big_font, s, size) + size * 1.6
 			o.draw_set_transform(pos, -0.02, Vector2(sc, sc))
@@ -287,35 +293,36 @@ func _draw_overlay() -> void:
 func _draw_bill() -> void:
 	var o := overlay
 	var bill: Dictionary = data.bill
-	var x := 500.0
-	var w := 920.0
+	var x := 300.0
+	var w := 1320.0
 	var lines: Array = bill.lines
 	var shown := 0
 	for l in lines:
 		if t >= float(l.t): shown += 1
-	var h := 210.0 + 118.0 * shown
-	o.draw_style_box(panel(Color(0, 0, 0, 0.3), 10), Rect2(x + 10, 42, w, h))
-	o.draw_style_box(panel(Color(1.0, 0.96, 0.86), 10, Color(0.55, 0.36, 0.22), 3), Rect2(x, 30, w, h))
-	o.draw_string(big_font, Vector2(x + 300, 104), "食堂结算小票", HORIZONTAL_ALIGNMENT_LEFT, -1, 54, INK)
-	o.draw_string(body_font, Vector2(x + 300, 150), "《吃白饭的大肥鱼》首发版", HORIZONTAL_ALIGNMENT_LEFT, -1, 28, Color(INK, 0.7))
-	o.draw_dashed_line(Vector2(x + 30, 178), Vector2(x + w - 30, 178), Color(INK, 0.5), 3.0, 14.0)
-	var y := 180.0
+	var h := 180.0 + 158.0 * shown
+	o.draw_style_box(panel(Color(0, 0, 0, 0.35), 10), Rect2(x + 12, 34, w, h))
+	o.draw_style_box(panel(Color(1.0, 0.96, 0.86), 10, Color(0.55, 0.36, 0.22), 3), Rect2(x, 20, w, h))
+	o.draw_string(big_font, Vector2(x + 44, 104), "食堂结算小票", HORIZONTAL_ALIGNMENT_LEFT, -1, 70, INK)
+	o.draw_string(body_font, Vector2(x + 500, 100), "《吃白饭的大肥鱼》首发版账单", HORIZONTAL_ALIGNMENT_LEFT, -1, 38, Color(INK, 0.72))
+	o.draw_dashed_line(Vector2(x + 30, 150), Vector2(x + w - 30, 150), Color(INK, 0.5), 3.0, 14.0)
+	var y := 150.0
 	for i in shown:
 		var l: Dictionary = lines[i]
 		var a: float = t - float(l.t)
 		var bounce := lerpf(1.25, 1.0, back_out(a / 0.2))
 		var total: bool = l.get("total", false)
 		if total:
-			o.draw_line(Vector2(x + 30, y + 6), Vector2(x + w - 30, y + 6), Color(INK, 0.7), 4.0)
-		o.draw_set_transform(Vector2(x + 40, y + 74), 0.0, Vector2(bounce, bounce))
-		o.draw_string(big_font, Vector2.ZERO, l.name, HORIZONTAL_ALIGNMENT_LEFT, -1, 50 if total else 44, RED if total else INK)
+			o.draw_line(Vector2(x + 30, y + 6), Vector2(x + w - 30, y + 6), Color(INK, 0.7), 5.0)
+		o.draw_set_transform(Vector2(x + 44, y + 86), 0.0, Vector2(bounce, bounce))
+		o.draw_string(big_font, Vector2.ZERO, l.name, HORIZONTAL_ALIGNMENT_LEFT, -1, 80 if total else 66, RED if total else INK)
 		if l.get("note", "") != "":
-			o.draw_string(body_font, Vector2(0, 38), l.note, HORIZONTAL_ALIGNMENT_LEFT, -1, 25, Color(INK, 0.68))
-		o.draw_set_transform(Vector2(x + w - 40, y + 74), 0.0, Vector2(bounce, bounce))
+			o.draw_string(body_font, Vector2(2, 50), l.note, HORIZONTAL_ALIGNMENT_LEFT, -1, 36, Color(INK, 0.72))
+		o.draw_set_transform(Vector2(x + w - 44, y + 96), 0.0, Vector2(bounce, bounce))
 		var amount: String = l.amount
-		o.draw_string(big_font, Vector2(-text_w(big_font, amount, 60), 0), amount, HORIZONTAL_ALIGNMENT_LEFT, -1, 60, RED if total else INK)
+		var amount_size := 116 if total else 92
+		o.draw_string(big_font, Vector2(-text_w(big_font, amount, amount_size), 0), amount, HORIZONTAL_ALIGNMENT_LEFT, -1, amount_size, RED if total else INK)
 		o.draw_set_transform(Vector2.ZERO)
-		y += 118.0
+		y += 158.0
 
 
 ## 梁阿姨 asks how much the AI ate: a counter rolls up, then one bar shows how little was written.
@@ -324,35 +331,36 @@ func _draw_tokens(_lt: float) -> void:
 	var d: Dictionary = data.tokens
 	var board := Rect2(170, 60, 1580, 960)
 	o.draw_texture_rect(tex["ui_chalkboard"], board, false)
-	var roll := ease_out((t - float(d.t_roll)) / 1.4)
+	var roll := ease_out((t - float(d.t_roll)) / 1.1)
 	if t >= float(d.t_roll):
 		var value: float = float(d.total_yi) * roll
-		var label := "%.1f 亿 token" % value
-		o.draw_set_transform(Vector2(960, 300), 0.0, Vector2.ONE)
-		outlined(o, label, 170, CHALK, NAVY, 0)
+		o.draw_set_transform(Vector2(960, 268), 0.0, Vector2.ONE)
+		outlined(o, "%.1f 亿 token" % value, 170, CHALK, NAVY, 0)
 		o.draw_set_transform(Vector2.ZERO)
-		o.draw_string(body_font, Vector2(420, 180), d.scope, HORIZONTAL_ALIGNMENT_LEFT, -1, 34, Color(CHALK, 0.85))
+		var scope: String = d.scope
+		o.draw_string(body_font, Vector2(960 - text_w(body_font, scope, 36) * 0.5, 382), scope, HORIZONTAL_ALIGNMENT_LEFT, -1, 36, Color(CHALK, 0.88))
 	if t >= float(d.t_bar):
-		var a := ease_out((t - float(d.t_bar)) / 0.9)
-		var bar := Rect2(310, 520, 1300, 130)
+		var a := ease_out((t - float(d.t_bar)) / 0.7)
+		var bar := Rect2(290, 420, 1340, 136)
 		o.draw_style_box(panel(Color(0.12, 0.2, 0.2), 8, Color(CHALK, 0.8), 3), bar)
 		var read_w := (bar.size.x - 6.0) * float(d.read_share) * a
 		o.draw_rect(Rect2(bar.position.x + 3, bar.position.y + 3, read_w, bar.size.y - 6), Color(0.55, 0.72, 0.78))
 		var write_w := maxf((bar.size.x - 6.0) * float(d.write_share) * a, 3.0)
 		o.draw_rect(Rect2(bar.position.x + 3 + read_w, bar.position.y + 3, write_w, bar.size.y - 6), Color(0.95, 0.75, 0.35))
-		var out_w := maxf((bar.size.x - 6.0) * float(d.output_share), 5.0)
+		var out_w := maxf((bar.size.x - 6.0) * float(d.output_share), 7.0)
 		o.draw_rect(Rect2(bar.end.x - 3 - out_w, bar.position.y + 3, out_w, bar.size.y - 6), RED)
-		o.draw_string(big_font, Vector2(330, 610), "翻来覆去读上下文 %s" % d.read_label, HORIZONTAL_ALIGNMENT_LEFT, -1, 54, NAVY)
+		o.draw_string(big_font, Vector2(320, 512), "翻来覆去读上下文 %s" % d.read_label, HORIZONTAL_ALIGNMENT_LEFT, -1, 74, NAVY)
 	if t >= float(d.t_output):
 		var a := back_out((t - float(d.t_output)) / 0.25)
-		o.draw_line(Vector2(1600, 660), Vector2(1600, 730), Color(1.0, 0.55, 0.45), 6.0)
-		var s: String = d.output_label
-		o.draw_set_transform(Vector2(1600, 790), 0.0, Vector2(a, a))
-		o.draw_string(big_font, Vector2(-text_w(big_font, s, 66), 20), s, HORIZONTAL_ALIGNMENT_LEFT, -1, 66, Color(1.0, 0.72, 0.6))
+		o.draw_line(Vector2(1622, 562), Vector2(1622, 610), Color(1.0, 0.55, 0.45), 8.0)
+		var s2: String = d.output_label
+		o.draw_set_transform(Vector2(1622, 680), 0.0, Vector2(a, a))
+		o.draw_string(big_font, Vector2(-text_w(big_font, s2, 92), 20), s2, HORIZONTAL_ALIGNMENT_LEFT, -1, 92, Color(1.0, 0.72, 0.6))
 		o.draw_set_transform(Vector2.ZERO)
 	if t >= float(d.t_api):
 		var a := clampf((t - float(d.t_api)) / 0.15, 0, 1)
-		o.draw_string(big_font, Vector2(330, 930), d.api_label, HORIZONTAL_ALIGNMENT_LEFT, -1, 58, Color(GOLD, a))
+		var label: String = d.api_label
+		o.draw_string(big_font, Vector2(960 - text_w(big_font, label, 72) * 0.5, 830), label, HORIZONTAL_ALIGNMENT_LEFT, -1, 72, Color(GOLD, a))
 
 
 ## Three rejected things, each stamped 重来 as she says it.
@@ -364,13 +372,13 @@ func _draw_redo() -> void:
 			i += 1
 			continue
 		var a: float = t - float(r.t)
-		var pos := Vector2(380 + i * 580, 800 - i * 40)
+		var pos := Vector2(370 + i * 590, 860 - i * 30)
 		var sc := lerpf(1.6, 1.0, back_out(a / 0.22))
 		var w := 500.0
 		o.draw_set_transform(pos, -0.04 + i * 0.03, Vector2(sc, sc))
 		o.draw_style_box(panel(Color(0, 0, 0, 0.3), 12), Rect2(-w * 0.5 + 8, -82, w, 170))
 		o.draw_style_box(panel(Color(1.0, 0.96, 0.86), 12, Color(0.55, 0.36, 0.22), 4), Rect2(-w * 0.5, -90, w, 170))
-		outlined(o, r.text, 46, INK, INK, 0)
+		outlined(o, r.text, 54, INK, INK, 0)
 		var sa := clampf((a - 0.16) / 0.1, 0, 1)
 		if sa > 0.0:
 			var ssc := lerpf(1.6, 1.0, ease_out(sa))

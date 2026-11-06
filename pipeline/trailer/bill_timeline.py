@@ -10,6 +10,7 @@ the local usage logs, passed in via stats.json (usage_stats). Nothing is estimat
 """
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -21,7 +22,7 @@ AUD = ROOT / "art_src/promo/audio/bill"
 PROMO_AUD = ROOT / "art_src/promo/audio"
 GODOT = ROOT / "tools/godot/Godot_v4.7.2-stable_win64_console.exe"
 GAME_SRC = ROOT / "game"
-TITLE = "这游戏总成本31.7刀，还不够Steam上架费：账单和源码全公开"
+TITLE = "做这个游戏只花了31.7刀，还不够Steam上架费：账单和源码全公开"
 BAR = 1.875
 
 
@@ -81,14 +82,14 @@ def voice() -> None:
 
 def trimmed(name: str) -> Path:
     """The line with its leading and trailing silence cut, loudness matched."""
-    wav = OUT / "vo" / f"{name}.wav"
+    wav = OUT / "vo_tight" / f"{name}.wav"
     if not wav.exists():
         wav.parent.mkdir(parents=True, exist_ok=True)
         src = PROMO_AUD / "auntie_slogan_v2.mp3" if name == "slogan" else AUD / f"{name}.mp3"
         subprocess.run(["ffmpeg", "-y", "-v", "error", "-i", str(src), "-af",
                         "silenceremove=start_periods=1:start_threshold=-42dB:start_silence=0.02,areverse,"
                         "silenceremove=start_periods=1:start_threshold=-42dB:start_silence=0.08,areverse,"
-                        "loudnorm=I=-16:TP=-2", "-ar", "48000", "-ac", "2", str(wav)], check=True)
+                        "silenceremove=stop_periods=-1:stop_duration=0.2:stop_threshold=-40dB:stop_silence=0.1,atempo=1.14,loudnorm=I=-16:TP=-2", "-ar", "48000", "-ac", "2", str(wav)], check=True)
     return wav
 
 
@@ -102,10 +103,10 @@ def timeline() -> dict:
     """Lay the lines one after another; each shot starts on its first line."""
     s = stats()
     order = [  # (line, gap after it in seconds)
-        ("hook", 0.15), ("intro", 0.05), ("claude", 0.12), ("eleven", 0.12), ("image", 0.12), ("total", 0.1), ("steam", 0.3),
-        ("tokens", 0.25), ("sliver", 0.12), ("reread", 0.12), ("joke", 0.2), ("api", 0.3),
-        ("human", 0.12), ("r1", 0.1), ("r2", 0.1), ("r3", 0.3),
-        ("update", 0.08), ("update2", 0.3), ("open", 0.1), ("open2", 0.2), ("slogan", 0.2),
+        ("hook", 0.1), ("claude", 0.08), ("eleven", 0.08), ("image", 0.08), ("total", 0.06), ("steam", 0.2),
+        ("tokens", 0.15), ("sliver", 0.06), ("reread", 0.06), ("api", 0.12), ("joke", 0.15),
+        ("human", 0.06), ("r1", 0.05), ("r2", 0.05), ("r3", 0.2),
+        ("update", 0.05), ("update2", 0.2), ("open", 0.06), ("open2", 0.12), ("slogan", 0.1),
     ]
     at = {}
     clips = []
@@ -115,13 +116,12 @@ def timeline() -> dict:
         at[name] = t
         clips.append({"name": name, "t": round(t, 3), "d": round(d, 3)})
         t += d + gap
-    length = round(t + 1.6, 2)
+    length = round(t + 2.6, 2)
     shots = [
         [0.0, "game", "hook"],
-        [at["intro"], "bill", "b1_receipt"],
+        [at["claude"], "bill", "b1_receipt"],
         [at["tokens"], "tokens", "tokens"],
-        [at["joke"], "ill", "b2_context"],
-        [at["api"], "tokens", "api"],
+        [at["api"], "ill", "b2_context"],
         [at["human"], "redo", "b3_redo"],
         [at["update"], "game", "vision"],
         [at["update2"] + 1.1, "tree", "tree"],
@@ -130,11 +130,12 @@ def timeline() -> dict:
         [at["slogan"], "end", "p6_agi"],
     ]
     captions = [
-        {"text": "总成本 31.7 美元", "style": "big", "x": 960, "y": 170, "size": 150, "from": 0.1, "to": at["intro"]},
-        {"text": "账单和源码全公开", "style": "stamp", "x": 960, "y": 350, "size": 64, "from": 0.9, "to": at["intro"]},
-        {"text": "Steam 上架费：100 美元", "style": "stamp", "x": 960, "y": 900, "size": 78, "from": at["steam"], "to": at["tokens"]},
-        {"text": "吃得多，吐得少", "style": "big", "x": 960, "y": 150, "size": 130, "from": at["joke"] + 0.1, "to": at["api"]},
-        {"text": "AI 负责干活，人负责说“不对，重来”", "style": "big", "x": 960, "y": 130, "size": 74, "from": at["human"] + 0.1, "to": at["update"]},
+        {"text": "总成本 31.7 美元", "style": "big", "x": 960, "y": 170, "size": 150, "from": 0.1, "to": at["claude"]},
+        {"text": "首发账单 · 源码全公开", "style": "stamp", "x": 960, "y": 350, "size": 64, "from": 0.9, "to": at["claude"]},
+        {"text": "Steam 上架费：100 美元", "style": "stamp", "x": 960, "y": 930, "size": 84, "from": at["steam"], "to": at["tokens"]},
+        {"text": s["api_label"], "style": "stamp", "x": 900, "y": 150, "size": 60, "from": at["api"] + 0.05, "to": at["joke"]},
+        {"text": "吃得多，吐得少", "style": "big", "x": 960, "y": 150, "size": 130, "from": at["joke"] + 0.1, "to": at["human"]},
+        {"text": "AI 负责干活，人负责说“不对，重来”", "style": "paper", "x": 960, "y": 110, "size": 66, "from": at["human"] + 0.1, "to": at["update"]},
         {"text": "V4.1 三章上线", "style": "big", "x": 960, "y": 130, "size": 120, "from": at["update"], "to": at["update2"] + 1.05},
         {"text": "识图：缺的菜，窗口替你点亮", "style": "paper", "x": 660, "y": 960, "size": 56, "from": at["update"] + 0.3, "to": at["update2"] + 1.05},
         {"text": "13 个新技能 · 3 次新评测", "style": "paper", "x": 620, "y": 960, "size": 56, "from": at["update2"] + 1.15, "to": at["open"]},
@@ -143,6 +144,12 @@ def timeline() -> dict:
         {"text": "拿去做你自己的", "style": "big", "x": 700, "y": 150, "size": 110, "from": at["open2"] + 0.1, "to": at["slogan"]},
         {"text": "要实现 AGI，得先吃饱！", "style": "stamp", "x": 400, "y": 450, "size": 58, "from": at["slogan"] + 0.15, "to": length},
     ]
+    # burned-in subtitles: every voice line, because a lot of people watch with the sound low
+    plain = {name: re.sub(r"\[[^\]]*\]\s*", "", text) for name, text in lines().items()}
+    for c in clips:
+        if c["name"] in plain:
+            captions.append({"text": plain[c["name"]], "style": "sub", "x": 960, "y": 1034, "size": 44,
+                             "from": c["t"], "to": c["t"] + c["d"] + 0.05})
     bill = {"lines": [
         {"t": at["claude"], "name": "Claude Pro 订阅", "note": "写代码 · 用掉一周额度的八成", "amount": "$20"},
         {"t": at["eleven"], "name": "ElevenLabs 首月半价", "note": "54 音效 · 42 配音 · 8 首 BGM", "amount": "$10"},
@@ -150,14 +157,14 @@ def timeline() -> dict:
         {"t": at["total"], "name": "合计", "note": "", "amount": "$31.7", "total": True},
     ]}
     tokens = {
-        "t_roll": at["tokens"] + 0.8, "t_bar": at["sliver"], "t_output": at["sliver"] + 0.5, "t_api": at["api"] + 0.2,
+        "t_roll": at["tokens"] + 0.5, "t_bar": at["sliver"], "t_output": at["sliver"] + 0.5, "t_api": 1e9,
         "total_yi": s["total_yi"], "scope": s["scope"], "read_share": s["read_share"], "write_share": s["write_share"],
         "output_share": s["output_share"], "read_label": s["read_label"], "output_label": s["output_label"],
         "api_label": s["api_label"],
     }
     redo = [{"t": at["r1"], "text": "留样柜的饭不能吃"}, {"t": at["r2"], "text": "手指画错了"}, {"t": at["r3"], "text": "音效太长了"}]
     beats = [{"t": b["t"], "sfx": "ticket", "db": -3.0} for b in bill["lines"]]
-    beats += [{"t": at["steam"], "sfx": "crit", "db": -2.0}, {"t": at["hook"] + 0.1, "sfx": "version_up", "db": -3.0}]
+    beats += [{"t": at["steam"], "sfx": "crit", "db": -2.0}, {"t": at["hook"] + 0.1, "sfx": "version_up", "db": -3.0}, {"t": at["api"] + 0.1, "sfx": "token", "db": -2.0}]
     beats += [{"t": r["t"] + 0.16, "sfx": "ticket", "db": -2.0} for r in redo]
     beats += [{"t": at["open"] + 0.25, "sfx": "ticket", "db": 0.0}, {"t": at["slogan"] + 0.15, "sfx": "ticket", "db": 0.0}]
     kb = {"b1_receipt": [1.05, 0.5, 0.5, 1.18, 0.5, 0.42], "b2_context": [1.0, 0.5, 0.5, 1.14, 0.42, 0.6],
@@ -220,20 +227,25 @@ def export() -> None:
         parts.append(f"[{i + 2}:a]adelay={ms}|{ms},apad=whole_dur={length}[v{i}]")
     n = len(data["clips"])
     voices = "".join(f"[v{i}]" for i in range(n))
-    # the BGM's body: from the 15 s drop for 16 bars, repeated, ending on the 52.5 s final chord
+    # the BGM's body: from the 15 s drop for 16 bars, repeated, ending on the 52.5 s final chord.
+    # Rendered on its own first: chained crossfades of split streams silently ended the track early.
     body = 16 * BAR
     loops = int((length - 5.0) // body) + 1
-    music = [f"[1:a]aresample=48000,asplit={loops + 1}" + "".join(f"[m{i}]" for i in range(loops + 1))]
-    for i in range(loops):
-        music.append(f"[m{i}]atrim=15:{15 + body},asetpts=PTS-STARTPTS[b{i}]")
-    music.append(f"[m{loops}]atrim=52.5:58.5,asetpts=PTS-STARTPTS[chord]")
-    chain = "[b0]"
-    for i in range(1, loops):
-        music.append(f"{chain}[b{i}]acrossfade=d=0.03:c1=tri:c2=tri[j{i}]")
-        chain = f"[j{i}]"
     cut = length - 4.5
-    music.append(f"{chain}atrim=0:{cut},asetpts=PTS-STARTPTS[bodycut]")
-    music.append("[bodycut][chord]acrossfade=d=0.05:c1=tri:c2=tri,volume=0.42[music]")
+    bgm = str(PROMO_AUD / "bgm_promo_a.mp3")
+    music_inputs = []
+    for _ in range(loops):
+        music_inputs += ["-ss", "15", "-t", str(body), "-i", bgm]
+    music_inputs += ["-ss", "52.5", "-t", "6", "-i", bgm]
+    joined = "".join(f"[{i}:a]" for i in range(loops))
+    bed_wav = OUT / "music-bed.wav"
+    subprocess.run(["ffmpeg", "-y", "-v", "error", *music_inputs, "-filter_complex",
+                    f"{joined}concat=n={loops}:v=0:a=1,aresample=48000,atrim=0:{cut},asetpts=PTS-STARTPTS[a];"
+                    f"[{loops}:a]aresample=48000[c];[a][c]acrossfade=d=0.05:c1=tri:c2=tri[m]",
+                    "-map", "[m]", "-ac", "2", "-ar", "48000", str(bed_wav)], check=True)
+    assert duration(bed_wav) > length - 0.5, f"music bed too short: {duration(bed_wav)}"
+    inputs[3] = str(bed_wav)
+    music = ["[1:a]volume=0.42[music]"]
     filters = ";".join(parts + music + [
         f"{voices}amix=inputs={n}:duration=longest:normalize=0,asplit[vo][vokey]",
         "[music][vokey]sidechaincompress=threshold=0.04:ratio=5:attack=12:release=280[bed]",
@@ -246,7 +258,12 @@ def export() -> None:
                     "-map", "0:v", "-map", "[audio]", "-t", str(length), "-c:v", "libx264", "-preset", "slow", "-crf", "18",
                     "-pix_fmt", "yuv420p", "-r", "30", "-c:a", "aac", "-b:a", "256k", "-movflags", "+faststart",
                     "-metadata", f"title={TITLE}", str(final)], check=True)
-    print(final, os.path.getsize(final))
+    # Silent stretches never show up on a contact sheet: audio and video must end together.
+    out = subprocess.run(["ffprobe", "-v", "error", "-show_entries", "stream=codec_type,duration", "-of", "csv=p=0", str(final)],
+                         capture_output=True, text=True, check=True).stdout
+    durations = dict(line.split(",")[:2] for line in out.strip().splitlines())
+    assert abs(float(durations["audio"]) - float(durations["video"])) < 0.2, durations
+    print(final, os.path.getsize(final), durations)
 
 
 if __name__ == "__main__":

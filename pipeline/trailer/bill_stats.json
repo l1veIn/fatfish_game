@@ -1,0 +1,21 @@
+{
+ "total_yi": 9.9,
+ "total_spoken": "将近十亿",
+ "output_spoken": "千分之三",
+ "api_spoken": "两百多刀",
+ "scope": "从开工到这次更新 · Claude + Codex · 本地日志统计",
+ "read_share": 0.9777929403201961,
+ "write_share": 0.01952692864962788,
+ "output_share": 0.002680131030175956,
+ "read_label": "97.8%",
+ "output_label": "真正写出来的 0.3%",
+ "api_label": "光 Claude 按 API 原价折算 ≈ $280",
+ "raw": {
+  "reads": 968645175,
+  "writes": 19344244,
+  "outputs": 2655057,
+  "total": 990644476,
+  "claude_api_usd": 282.64,
+  "prices": "Opus 5.5 $4/$20, cache read $0.20, cache write assumed 1.25x input"
+ }
+}
