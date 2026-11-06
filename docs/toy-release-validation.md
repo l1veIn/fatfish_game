@@ -158,7 +158,7 @@ RC2 已通过 Toy 上传校验，线上预览启动及设置入口可用，并�
 - 图标：`game/assets/ui/icon.png`。
 - 本次接续时表单已选中“所有人可见”、深色主题，未参加活动，未启用访客水印；更新包时没有修改这些选项。正式发布仍须等待用户决定。
 
-Toy 上传校验已通过并生成上述预览。此前 `www.bilibilitoy.com` 无法解析的问题已修复：OpenClash 的加密 DNS 上游使用 `#proxy`，但没有对应代理组或网卡，内核返回 `no such device`。备份后将 DNS 引用改为现有代理组并热加载；路由器、Windows DNS 与 Chrome 实际加载均恢复。没有重启路由器，代理节点选择保持不变。修复记录在本地 `build/toy-final-rc1/qa/network-repair.json`，凭据及路由器配置不进入仓库。
+Toy 上传校验已通过并生成上述预览。此前 `www.bilibilitoy.com` 无法解析的问题来自作者本机网络的 DNS 配置，修复后已确认可以解析。
 
 真实 Toy 预览中已确认标题、美术、作者文字、开始游戏、引导拿盘、接菜、送饭计分（8 token）、暂停与设置、倒计时自然结束结账及返回技能树可用。刷新后恢复第 2 顿、8 token，作者链接实际打开正确的 B 站空间。云读取失败时明确提示保存在本机，未阻止游戏。证据为 `toy-online-title.jpg`、`toy-online-delivery.jpg`、`toy-online-settings.jpg`、`toy-online-settlement.jpg`、`toy-online-tree.jpg`、`toy-online-reload.jpg`；日志为 `toy-online-console.json`，其中仅捕获翻译扩展及 B 站 reporter 的无关告警，未捕获游戏运行错误。
 

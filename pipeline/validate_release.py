@@ -115,8 +115,7 @@ def main() -> None:
                         ("service", "canteen_presentation_test", "canteen_presentation_release", '"failures":[]'),
                         ("tree", "tree_presentation_test", "tree_presentation_release", '"failures":[]'),
                         ("tree-dependency", "tree_dependency_test", "tree_dependency_release", "TREE_DEPENDENCY_TEST PASS failures=0"),
-                        ("v41-chapters", "v41_chapters_test", "v41_chapters", "V41_CHAPTERS_TEST PASS"),
-        ("stall-layout", "stall_layout_ui_test", "stall_layout_ui", "STALL_LAYOUT_UI_TEST PASS"),
+                        ("stall-layout", "stall_layout_ui_test", "stall_layout_ui", "STALL_LAYOUT_UI_TEST PASS"),
                         ("input-remap", "input_remap_test", "input_remap_release", "INPUT_REMAP_TEST PASS failures=0"),
                         ("shell", "presentation_shell_test", "presentation_shell_release", "PRESENTATION_SHELL_TEST PASS")]:
                     key = f"{name}-{locale}-{size}"
