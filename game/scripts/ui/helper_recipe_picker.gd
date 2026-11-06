@@ -7,6 +7,8 @@ const SOFT := Color("79604b")
 const PAPER := preload("res://assets/canteen/ui_paper.png")
 var selected := ""
 var member_name := ""
+var vision_mode := false   # 识图: the player's own target, with a 「不指定」 button
+var _clear: Button
 var _pending := ""
 var _tier := 0
 var _options: Array = []
@@ -26,13 +28,17 @@ func _ready() -> void:
 	size = Vector2(1920, 1080)
 	mouse_filter = Control.MOUSE_FILTER_STOP
 	z_index = 1
-	_options = Game.helper_recipe_options()
+	_options = Game.helper_recipe_options(vision_mode)
 	var sim := CanteenRun.new()
 	for recipe in _options: _parts[recipe.id] = sim._ingredients(int(recipe.kind))
 	sim.free()
 	_pending = selected
-	_label(self, tr("给 %s 点一道套餐") % member_name, Rect2(112, 80, 1390, 68), 42)
-	_label(self, tr("只显示当前菜单和饭盒能配齐的套餐。选中查看原料，确认后下顿生效。"), Rect2(114, 160, 1400, 60), 25, SOFT)
+	_label(self, tr("识图：今天想做哪道套餐？") if vision_mode else tr("给 %s 点一道套餐") % member_name, Rect2(112, 80, 1190, 68), 42)
+	_label(self, tr("开饭时，缺的原料所在窗口会亮起来。学会 AGI 菜谱后也能选隐藏配方。") if vision_mode else tr("只显示当前菜单和饭盒能配齐的套餐。选中查看原料，确认后下顿生效。"), Rect2(114, 160, 1400, 60), 25, SOFT)
+	if vision_mode:
+		_clear = _button(self, tr("不指定"), Rect2(1330, 88, 250, 64))
+		_clear.name = "VisionClear"
+		_clear.pressed.connect(func(): chosen.emit(""))
 	_back = _button(self, tr("返回"), Rect2(1600, 88, 200, 64))
 	_back.pressed.connect(func(): cancelled.emit())
 	_back.set_meta("ui_back", true)
@@ -154,6 +160,7 @@ func _wire_focus() -> void:
 	controls.append_array(_filters)
 	controls.append_array(_cards.values())
 	controls.append(_confirm)
+	if is_instance_valid(_clear): controls.append(_clear)
 	controls.append(_back)
 	controls = controls.filter(func(c): return not (c is BaseButton and c.disabled))
 	for i in controls.size():

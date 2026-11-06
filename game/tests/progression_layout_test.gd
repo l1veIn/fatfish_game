@@ -181,7 +181,7 @@ func test_stall_preferences() -> void:
 	Game.reset_save()
 	check(Game.active_stall_order() == DEFAULT_ORDER,"reset save restores the default layout")
 	var base: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(Game.save_path))
-	check(int(base.version) == 3,"optional layout field does not bump or break schema 3")
+	check(int(base.version) == Game.SAVE_VERSION,"optional layout field does not bump or break the save schema")
 	base.erase("stall_order")
 	Game.stall_order = SWAPPED.duplicate()
 	write_save(base)

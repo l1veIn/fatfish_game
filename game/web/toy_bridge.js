@@ -182,7 +182,7 @@
 			}
 			sdk = env.toy;
 			if (!sdk || typeof sdk.isSupport !== "function") return;
-			const abilities = ["navigate", "saveImageToAlbum", "getCloudStorage", "setCloudStorage", "onContainerChange", "getContainerState", "setContainerMode"];
+			const abilities = ["navigate", "saveImageToAlbum", "getCloudStorage", "setCloudStorage", "onContainerChange", "getContainerState", "setContainerMode", "getAuthorRelation", "getVideoUserActions"];
 			await Promise.all(abilities.map(async ability => {
 				try { support[ability] = await timeout(sdk.isSupport(ability), 2000) === true; }
 				catch (_) { support[ability] = false; }
@@ -440,6 +440,33 @@
 		}
 		if (typeof env.open === "function") env.open("https://space.bilibili.com/2501012", "_blank", "noopener,noreferrer");
 	}
+	// 小礼物: the videos that count for the "like" gift. Only the viewer's own state is read.
+	const GIFT_VIDEOS = ["BV1Ypnz6pEBR"];
+	function giftsSupported() { return !!(sdk && (support.getAuthorRelation || support.getVideoUserActions)); }
+	async function checkGift(kind, callback) {
+		let result = { ok: false, status: "unsupported" };
+		try {
+			if (kind === "follow" && support.getAuthorRelation) {
+				const found = await timeout(sdk.getAuthorRelation());
+				result = { ok: !!(found && found.data && (found.data.isFollowing || found.data.isAuthor)), status: String(found && found.status || "error") };
+			} else if (kind === "like" && support.getVideoUserActions) {
+				const found = await timeout(sdk.getVideoUserActions({ videos: GIFT_VIDEOS.map(bvid => ({ bvid })) }));
+				const items = found && Array.isArray(found.items) ? found.items : [];
+				result = { ok: items.some(item => item && item.liked === true), status: String(found && found.status || "error") };
+			}
+		} catch (_) { result = { ok: false, status: "error" }; }
+		if (typeof callback === "function") callback(JSON.stringify(result));
+		return result;
+	}
+	function openGiftPage(kind) {
+		if (kind === "like") {
+			if (sdk && support.navigate) {
+				try { timeout(sdk.navigate({ type: "video", id: GIFT_VIDEOS[0] }), 2000).catch(() => {}); return; }
+				catch (_) { /* fall through to a new tab */ }
+			}
+			if (typeof env.open === "function") env.open("https://www.bilibili.com/video/" + GIFT_VIDEOS[0], "_blank", "noopener,noreferrer");
+		} else openAuthor();
+	}
 	function showAuthorFallback() {
 		if (!env.document) return;
 		ui();
@@ -486,7 +513,7 @@
 		return result;
 	}
 	const api = {
-		prepare, startGesture, setFullscreen, isFullscreen, openAuthor, saveImage,
+		prepare, startGesture, setFullscreen, isFullscreen, openAuthor, saveImage, giftsSupported, checkGift, openGiftPage,
 		init(local, callback) {
 			if (!initPromise) initPromise = initialize(local, callback);
 			return initPromise;

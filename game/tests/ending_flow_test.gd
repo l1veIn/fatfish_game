@@ -159,6 +159,7 @@ func _ready() -> void:
 	_check(settings_panel != null, "title opens settings through focused button")
 	settings_panel._tabs[3].grab_focus()
 	await _key(KEY_ENTER)
+	await _key(KEY_DOWN)   # the touch layout button comes first on this page
 	await _key(KEY_DOWN)
 	_check(get_viewport().gui_get_focus_owner().get_meta("focus_key", "") == "language", "game settings tab focuses language option")
 	await _key(KEY_ENTER)

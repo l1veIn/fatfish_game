@@ -15,7 +15,7 @@ signal save_committed(payload: String)
 var save_path := "user://save.json"
 ## 2 = the canteen core (tokens). Version-1 saves came from the old task-bubble prototype and
 ## are reset rather than migrated.
-const SAVE_VERSION := 3
+const SAVE_VERSION := 4
 const TREE_PATH := "res://data/skill_tree.json"
 
 ## Shift stats before any upgrade. Every key here can be named in a node's "effects".
@@ -103,6 +103,18 @@ const BASE := {
 	"diverge": 0.0,        # 发散思维: px of pull while thinking
 	"converge": 0.0,       # 收敛思维
 	"critic": 0.0,         # 美食评鉴 (+ Benchmark): + per kind of 套餐 from the 5th
+	"vision": 0.0,         # 多模态·识图: a chosen 套餐 lights up the windows it still needs
+	"vision_filter": 0.0,  # 视觉过滤: while a target is open, useless food passes through the box
+	"vmatch": 0.0,         # 看图说话: + to the box that makes the target
+	"small_x": 0.0,        # 小杯反超大杯: + to one-cell loose dishes
+	"fetch": 0.0,          # Fetch 跑腿: a helper drops a dish over your box every so often
+	"fetch_fast": 0.0,     # Search 预查询: seconds off the interval
+	"fetch_grade": 0.0,    # 抓取加急: grade of a fetched dish
+	"harness": 0.0,        # Harness 升级: 1 s off the interval per helper on shift
+	"pro_x": 0.0,          # 满血 Pro: + to the whole meal
+	"godfeast": 0.0,       # 神级宴席: + per kind of 神级 eaten
+	"longctx": 0.0,        # 超长上下文: raises the stream and combo caps
+	"waitlist": 0.0,       # 这周一定: + per failed try of the current review
 }
 
 ## The version ladder. Releasing a version = its 评测 (trial): one ordinary shift with your own
@@ -120,7 +132,13 @@ const VERSIONS := [
 		"reward": "DSA 稀疏注意力（未学顿悟时避开青菜）、上下文 256K（成长上限提高）、饭点延长"},
 	{"plate": "大肥鱼 V4", "trial": "v4", "trial_name": "下周一定", "target": 400000.0,
 		"reward": "上下文 1M（流式、连击和招牌菜的成长上限提高）、饭点延长"},
-	{"plate": "大肥鱼 AGI", "trial": "agi", "trial_name": "实现 AGI，但是也要先吃饱", "target": 2000000.0,
+	{"plate": "大肥鱼 V4.1 Flash", "trial": "flash", "trial_name": "小杯反超大杯", "target": 30000000.0,
+		"reward": "识图（选一道想做的套餐，缺的原料所在窗口会亮）、成长上限提高、饭点延长"},
+	{"plate": "大肥鱼 V4.1 Flash-1017", "trial": "f1017", "trial_name": "干活更快，话更短", "target": 50000000.0,
+		"reward": "Fetch 跑腿（助手定时把菜送到你饭盒上方）、成长上限提高、饭点延长"},
+	{"plate": "大肥鱼 V4.1 Pro", "trial": "pro", "trial_name": "V4.1 Pro：尚未发布", "target": 80000000.0,
+		"reward": "最后一批技能、上下文 2M（成长上限提高）、饭点延长"},
+	{"plate": "大肥鱼 AGI", "trial": "agi", "trial_name": "实现 AGI，但是也要先吃饱", "target": 150000000.0,
 		"reward": "通关！大肥鱼实现了 AGI，然后又饿了"},
 ]
 
@@ -147,6 +165,9 @@ var seen_buttons := {}      # tree-screen buttons the player has pressed at leas
 var achievements := {}      # stable ids -> first unlock time, independent of refundable skills
 var lifetime := {"eaten": 0, "full_boxes": 0}
 var ending_seen := false
+var agi_cleared := false    # finished the old, shorter ladder: keeps the ending and skips the last review
+var vision_target := ""     # 识图: the recipe id the player wants to make ("" = none)
+var gifts := {}             # Toy 小礼物 already claimed: "follow" / "like" -> true
 var save_status := ""
 var _save_read_only := false
 var _test_profile := false
@@ -303,8 +324,11 @@ func trial_info(trial: String) -> Dictionary:
 
 
 ## Passing a trial releases the next version: its ring shows up on the tree.
+## A save that already beat the old AGI review does not have to pass it a second time.
 func pass_trial() -> void:
 	version = mini(version + 1, VERSIONS.size() - 1)
+	if agi_cleared and version == VERSIONS.size() - 2:
+		version = VERSIONS.size() - 1
 	_check_achievements()
 	save_game()
 	changed.emit()
@@ -593,11 +617,12 @@ func stall_layout_intro_due() -> bool:
 
 ## A recipe must have a feasible collection order, including intermediate auto-merges and
 ## the real two-row packing rule. These pure previews never discover recipes or spend food.
-func helper_recipe_options() -> Array:
+func helper_recipe_options(for_vision := false) -> Array:
 	CanteenRun.load_menu()
 	var known := recipes.keys()
 	known.sort()
-	var key := JSON.stringify([_available_menu().keys(), active_struck(), stat("box_n"), stat("compress"), known])
+	var show_hidden := for_vision and all_recipes_revealed()
+	var key := JSON.stringify([_available_menu().keys(), active_struck(), stat("box_n"), stat("compress"), known, show_hidden])
 	if key == _helper_recipe_cache_key:
 		return _helper_recipe_cache.duplicate(true)
 	var options: Array = []
@@ -608,7 +633,7 @@ func helper_recipe_options() -> Array:
 	sim.box_n = int(stat("box_n"))
 	sim.compress = int(stat("compress"))
 	for r in CanteenRun.RECIPES:
-		if r.kind == "hidden" and not recipes.has(r.id):
+		if r.kind == "hidden" and not recipes.has(r.id) and not show_hidden:
 			continue
 		var parts: Array = sim._ingredients(int(r.result))
 		var possible := not parts.is_empty()
@@ -655,6 +680,42 @@ func _helper_recipe_route(sim: CanteenRun, target: int, items: Array, remaining:
 		if _helper_recipe_route(sim, target, next, missing, memo):
 			return true
 	return false
+
+
+## 识图: the chosen recipe's kind for the next meal, or -1 (none chosen, not learned, or the
+## current menu and box can no longer make it; the saved choice is kept for later).
+func vision_kind() -> int:
+	if stat("vision") <= 0.0 or vision_target.is_empty():
+		return -1
+	for r in helper_recipe_options(true):
+		if str(r.id) == vision_target:
+			return int(r.kind)
+	return -1
+
+
+func set_vision_target(id: String) -> bool:
+	if not id.is_empty() and (stat("vision") <= 0.0 or not helper_recipe_options(true).any(func(r): return str(r.id) == id)):
+		return false
+	vision_target = id
+	save_game()
+	changed.emit()
+	return true
+
+
+## Toy 小礼物: a small one-off gift of tokens that grows with progress. Purely a bonus: nothing
+## in the game ever requires it.
+func gift_amount() -> float:
+	return maxf(300.0, ceilf(next_target() * 0.05))
+
+
+func claim_gift(id: String) -> float:
+	if id not in ["follow", "like"] or gifts.get(id, false) == true:
+		return 0.0
+	var amount := gift_amount()
+	gifts[id] = true
+	add_tokens(amount)
+	save_game()
+	return amount
 
 
 func signature_available(id: String) -> bool:
@@ -797,7 +858,8 @@ func save_game() -> bool:
 		"signatures": signatures, "struck": struck,
 		"helper_plan": helper_plan, "automation": automation, "stall_order": active_stall_order(),
 		"seen_buttons": seen_buttons, "achievements": achievements, "lifetime": lifetime,
-		"ending_seen": ending_seen, "saved_at": Time.get_unix_time_from_system()}, "\t"))
+		"ending_seen": ending_seen, "agi_cleared": agi_cleared, "vision_target": vision_target, "gifts": gifts,
+		"saved_at": Time.get_unix_time_from_system()}, "\t"))
 	f.flush()
 	var write_error := f.get_error()
 	f.close()
@@ -899,7 +961,7 @@ func _read_save(path: String) -> Dictionary:
 	for key in ["tokens", "total_tokens", "runs", "best_run", "fish_version"]:
 		if d.has(key) and not _number(d[key]):
 			return {}
-	for key in ["levels", "trial_fails", "recipes", "seen_buttons", "achievements", "lifetime"]:
+	for key in ["levels", "trial_fails", "recipes", "seen_buttons", "achievements", "lifetime", "gifts"]:
 		if d.has(key) and not d[key] is Dictionary:
 			return {}
 	for key in ["signatures", "struck"]:
@@ -978,6 +1040,13 @@ func load_game() -> void:
 			achievements[def.id] = float(timestamp)
 	lifetime = _count_dict(d.get("lifetime", {}))
 	ending_seen = d.get("ending_seen", false) == true
+	agi_cleared = d.get("agi_cleared", false) == true
+	var saved_target: Variant = d.get("vision_target", "")
+	vision_target = saved_target if saved_target is String and _recipe_ids.has(saved_target) else ""
+	gifts = {}
+	for id in d.get("gifts", {}):
+		if id in ["follow", "like"] and d.gifts[id] == true:
+			gifts[id] = true
 	levels = {}
 	var saved: Dictionary = d.get("levels", {})
 	for id in saved:
@@ -1034,6 +1103,15 @@ func _migrate(d: Dictionary) -> Dictionary:
 		d["lifetime"] = {"eaten": 0, "full_boxes": 0}
 		d["ending_seen"] = false
 		d["version"] = 3
+		v = 3
+	if v == 3:
+		# Three V4.1 versions now sit between V4 (index 4) and AGI (was index 5). Someone who
+		# already reached AGI keeps the ending and achievement, and gets the new chapters: back
+		# to V4, and passing V4.1 Pro returns them to AGI with no second final review.
+		if int(d.get("fish_version", 0)) >= 5:
+			d["fish_version"] = 4
+			d["agi_cleared"] = true
+		d["version"] = 4
 	return d
 
 
@@ -1055,6 +1133,9 @@ func reset_save() -> void:
 	achievements = {}
 	lifetime = {"eaten": 0, "full_boxes": 0}
 	ending_seen = false
+	agi_cleared = false
+	vision_target = ""
+	gifts = {}
 	_save_read_only = false
 	levels = {"start": 1}
 	_recompute()
@@ -1069,7 +1150,12 @@ func achievement_catalog() -> Array:
 
 
 func ending_pending() -> bool:
-	return version == VERSIONS.size() - 1 and not ending_seen
+	return (version == VERSIONS.size() - 1 or agi_cleared) and not ending_seen
+
+
+## The ending exists for this save (the title offers to replay it).
+func ending_unlocked() -> bool:
+	return version == VERSIONS.size() - 1 or agi_cleared
 
 
 func mark_ending_seen() -> void:
@@ -1098,7 +1184,8 @@ func _check_achievements(summary: Dictionary = {}, announce := true) -> void:
 	var conditions := {
 		"first_meal": runs >= 1, "regular": runs >= 10, "resident": runs >= 30,
 		"release_r1": version >= 1, "release_v31": version >= 2, "release_v32": version >= 3,
-		"release_v4": version >= 4, "release_agi": version >= 5,
+		"release_v4": version >= 4, "release_flash": version >= 5, "release_1017": version >= 6,
+		"release_pro": version >= 7, "release_agi": version >= VERSIONS.size() - 1 or agi_cleared,
 		"tokens_10k": total_tokens >= 10000.0, "tokens_1m": total_tokens >= 1000000.0,
 		"recipe_first": recipes.size() >= 1, "recipe_ten": recipes.size() >= 10,
 		"recipe_twentyfive": recipes.size() >= 15,

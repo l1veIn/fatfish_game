@@ -307,11 +307,11 @@ var auto_return := false
 var _push_cd := 0.0
 # --- the scoring model (docs/tree_model.md): 口 -> 盒 -> 顿 ---------------------------------------
 ## 上下文窗口 by version: the caps on what piles up within one shift (only a release raises them)
-const STREAM_CAP := [2.0, 2.5, 3.5, 4.5, 6.5, 6.5]
-const COMBO_CAP := [3, 5, 7, 9, 12, 12]
-const SIG_CAP := [0.3, 0.5, 0.7, 0.85, 1.0, 1.0]
-const WINDOW_NAME := ["32K", "64K", "128K", "256K", "1M", "1M"]
-const MEAL_TIME := [60.0, 70.0, 80.0, 90.0, 105.0, 120.0]   # the canteen closes later every version
+const STREAM_CAP := [2.0, 2.5, 3.5, 4.5, 6.5, 7.0, 7.5, 8.5, 8.5]
+const COMBO_CAP := [3, 5, 7, 9, 12, 13, 14, 16, 16]
+const SIG_CAP := [0.3, 0.5, 0.7, 0.85, 1.0, 1.1, 1.2, 1.3, 1.3]
+const WINDOW_NAME := ["32K", "64K", "128K", "256K", "1M", "1M", "1M", "2M", "2M"]
+const MEAL_TIME := [60.0, 70.0, 80.0, 90.0, 105.0, 110.0, 115.0, 120.0, 120.0]   # the canteen closes later every version
 var stream_from := 40                 # 首 Token 延迟: bites before 越吃越香 starts
 var mtp := 0.0                        # MTP: + tokens per bite
 var g_good := 0.0                     # SFT: chance a dish is 优质 (LoRA adds per struck dish)
@@ -353,6 +353,19 @@ var sleep_eat := false
 var fc := false
 var diverge := 0.0
 var converge := false
+var vision_kind := -1                 # 识图: the 套餐 the player wants to make (-1: none)
+var vision_filter := false            # 视觉过滤
+var vmatch := 0.0                     # 看图说话: + to the box that makes the target
+var small_x := 0.0                    # 小杯反超大杯: + to one-cell loose dishes
+var fetch_every := 0.0                # Fetch 跑腿: seconds between deliveries (0: not learned)
+var fetch_grade := 0                  # 抓取加急
+var godfeast := 0.0                   # 神级宴席
+var longctx := 0                      # 超长上下文
+var _fetch_t := 0.0
+var _vision_need := {}                # basic dish kind -> how many the player's box still lacks
+var _vision_open := false             # the target can still be finished from what the box holds
+var _vision_ok := {}                  # dish kinds worth catching now (recomputed when the box changes)
+var _vision_sig := -1
 var critic := 0.0                     # 美食评鉴: + per kind of 套餐 from the 5th
 var struck := {}                      # 今日菜单: kinds she never serves this shift
 var _g := 1.0                         # 全局: material x version
@@ -749,6 +762,16 @@ func _read_stats() -> void:
 	fc = Game.stat("fc") > 0.0
 	diverge = Game.stat("diverge")
 	converge = Game.stat("converge") > 0.0
+	vision_kind = Game.vision_kind()
+	vision_filter = Game.stat("vision_filter") > 0.0
+	vmatch = Game.stat("vmatch")
+	small_x = Game.stat("small_x")
+	if Game.stat("fetch") > 0.0:
+		fetch_every = maxf(FETCH_MIN, FETCH_BASE - Game.stat("fetch_fast") - Game.stat("harness") * hired.size())
+		_fetch_t = fetch_every
+	fetch_grade = clampi(int(Game.stat("fetch_grade")), 0, 2)
+	godfeast = Game.stat("godfeast")
+	longctx = int(Game.stat("longctx"))
 	critic = Game.stat("critic")
 	mono_bonus = Game.stat("mono_bonus")
 	cache_bonus = Game.stat("cache_bonus")
@@ -785,7 +808,7 @@ func _read_stats() -> void:
 	think_eat = false
 	ji_rate = 0.0
 	token_mult = 1.0
-	_g = MATERIALS[mat_level].mult   # 全局 (a release raises the caps and the meal time instead)
+	_g = MATERIALS[mat_level].mult * (1.0 + Game.stat("pro_x"))   # 全局 (a release raises the caps and the meal time instead)
 	balance_max = Game.stat("balance_max")
 	stream = Game.stat("stream")
 	auto_push = Game.automation_enabled("auto_push")
@@ -801,6 +824,7 @@ func _read_stats() -> void:
 func _setup_trial() -> void:
 	fails = int(Game.trial_fails.get(trial, 0))
 	target = Game.trial_target(trial)
+	_g *= 1.0 + Game.stat("waitlist") * fails   # 这周一定
 
 
 # --- art --------------------------------------------------------------------------------------
@@ -1020,6 +1044,8 @@ func _item_value(it: int) -> float:
 	var v: float = VALUE[k]
 	if k == I.VEG:
 		v = veg_x if _grokked else 0.0
+	if small_x > 0.0 and SPACE[k] == 1:
+		v *= 1.0 + small_x   # 小杯反超大杯
 	return v * _grade_x(it) * (hot_x if is_hot(it) else 1.0)
 
 
@@ -1707,7 +1733,10 @@ func _plan_box(b: Dictionary) -> Dictionary:
 
 
 func _box_rule_bonus(b: Dictionary) -> float:
-	return float(b.get("meal_rule", {}).get("add_bonus", 0.0)) + float(b.get("crew_relay_bonus", 0.0))
+	var bonus := float(b.get("meal_rule", {}).get("add_bonus", 0.0)) + float(b.get("crew_relay_bonus", 0.0))
+	if vmatch > 0.0 and vision_kind >= 0 and not b.get("crew", false) and find_kind(b.items, vision_kind) >= 0:
+		bonus += vmatch   # 看图说话
+	return bonus
 
 
 ## Freeze the chain at submission time: the table is a stack, so eating order can differ.
@@ -1782,6 +1811,8 @@ func _process(delta: float) -> void:
 		_update_arms(wdt)
 	_update_arm_art()
 	_update_hand(delta)
+	_update_vision()
+	_update_fetch(wdt)
 	_update_items(wdt)
 	_update_pile(wdt)
 	_update_flying(wdt)
@@ -1805,6 +1836,8 @@ func _process(delta: float) -> void:
 ## muffles it (Audio, layers from pipeline/make_music_layers.py).
 const FINAL_SECONDS := 10.0
 const EOS_X := [1.0, 3.0, 5.0, 8.0]      # <EOS> 最后一个 token, by level
+const FETCH_BASE := 12.0                 # Fetch 跑腿: seconds between deliveries
+const FETCH_MIN := 3.0
 func _update_music() -> void:
 	Audio.music_layer("peak", _peak_on or (legacy == "hybrid" and not _hard))
 	var left := meal_time - _meal_elapsed()
@@ -2076,6 +2109,80 @@ func _update_hand(delta: float) -> void:
 		Audio.sfx("spill", -4.0)
 
 
+## 识图: what the player's box (or the next empty one) still lacks for the chosen 套餐. Once the
+## box holds the 套餐, or can no longer be finished from what it holds, nothing is asked for.
+func _update_vision() -> void:
+	if vision_kind < 0:
+		return
+	var items: Array = _hand.items if _hand != null else []
+	var signature := items.hash()
+	if signature == _vision_sig:
+		return   # the route search is only worth redoing when the box changes
+	_vision_sig = signature
+	_vision_need = {}
+	_vision_ok = {}
+	_vision_open = false
+	if find_kind(items, vision_kind) >= 0 or not _helper_recipe_reachable(items, vision_kind):
+		return
+	_vision_open = true
+	for kind in _ingredients(vision_kind):
+		_vision_need[kind] = int(_vision_need.get(kind, 0)) + 1
+	for it in items:
+		if is_ghost(it):
+			continue
+		for kind in _ingredients(K(it)):
+			if _vision_need.has(kind):
+				_vision_need[kind] = int(_vision_need[kind]) - 1
+	for kind in _vision_need.keys():
+		if int(_vision_need[kind]) <= 0:
+			_vision_need.erase(kind)
+			continue
+		# Would it move the target forward and keep it buildable in this box?
+		var next: Array = items.duplicate()
+		next.append(make(int(kind)))
+		_merge_items(next)
+		if not _pack(next).is_empty() and _helper_recipe_reachable(next, vision_kind):
+			_vision_ok[kind] = true
+
+
+func _vision_wants(it: int) -> bool:
+	return _hand != null and _vision_ok.has(K(it))
+
+
+## 视觉过滤: with a target open, everything it does not need falls through the box.
+func _vision_blocks(it: int) -> bool:
+	return vision_filter and _vision_open and not _vision_wants(it)
+
+
+## Fetch 跑腿: a helper runs a dish over and drops it above the player's box. It brings what the
+## target still lacks, else anything the open windows serve; it waits if the box has no room.
+func _update_fetch(delta: float) -> void:
+	if fetch_every <= 0.0 or _hand == null or _learning():
+		return
+	_fetch_t -= delta
+	if _fetch_t > 0.0:
+		return
+	var kinds: Array = []
+	if _vision_open:
+		for kind in _vision_need:
+			if _vision_wants(make(int(kind))):
+				kinds.append(int(kind))
+	if kinds.is_empty():
+		for id in STALLS:
+			if int(stall_lv.get(id, 0)) > 0:
+				var pick := _stall_kind(id)
+				if pick >= 0 and not IS_SET[pick] and _accepts(_hand, make(pick)) and not _vision_blocks(make(pick)):
+					kinds.append(pick)
+	if kinds.is_empty():
+		_fetch_t = 1.0
+		return
+	_fetch_t = fetch_every
+	var it := make(int(kinds.pick_random()), fetch_grade)
+	_add_item(_hand.pos + Vector2(0, -240), Vector2(0, 90), it)
+	_chip(_hand.pos + Vector2(0, -120), "bolt")
+	Audio.sfx("bounce", -12.0)
+
+
 ## Local skill attraction: only descending food just above the box, with tapered strength.
 ## It nudges toward a bounded target speed instead of accumulating unlimited sideways speed.
 func _steer_food(p: Vector2, v: Vector2, it: int, delta: float, clock: float) -> Vector2:
@@ -2085,7 +2192,7 @@ func _steer_food(p: Vector2, v: Vector2, it: int, delta: float, clock: float) ->
 	if _hand == null or v.y <= 0.0:
 		return v
 	var pull := clampf(_magnet() + (diverge if _thinking else 0.0), 0.0, PULL_MAX_RANGE)
-	var ignored := (dsa and not grok and (k == I.VEG or k == I.JI)) or (_thinking and converge and not _wanted(it))
+	var ignored := (dsa and not grok and (k == I.VEG or k == I.JI)) or (_thinking and converge and not _wanted(it)) or _vision_blocks(it)
 	var dx: float = _hand.pos.x - p.x
 	var dy: float = _hand.pos.y - p.y
 	if pull > 0.0 and not ignored and absf(dx) < pull and dy > 0.0 and dy < PULL_HEIGHT:
@@ -2140,7 +2247,7 @@ func _update_items(delta: float) -> void:
 			np.y = p.y + initial_vy * delta + 0.5 * _fg[i] * delta * delta
 		_fr[i] += delta * v.x * 0.01
 		var contact := -1.0
-		var pass_through := _thinking and converge and not _wanted(it)
+		var pass_through := (_thinking and converge and not _wanted(it)) or _vision_blocks(it)
 		if _hand != null and v.y > 0.0 and not pass_through:
 			contact = _swept_opening(p, np, _hand.get("previous_pos", _hand.pos), _hand.pos, w * 0.47 + 8.0)
 		# A long frame may cross both boxes; the earliest physical contact wins.
@@ -3023,14 +3130,14 @@ func _crave_x(t: float) -> float:
 
 
 func _combo_cap() -> int:
-	return COMBO_CAP[mini(Game.version, COMBO_CAP.size() - 1)]
+	return COMBO_CAP[mini(Game.version, COMBO_CAP.size() - 1)] + 2 * longctx
 
 
 ## 流式输出: grows fast at first, then levels off (log2: x2 bites -> one more step).
 ## 首 Token 延迟: nothing for the first stream_from bites; capped by the 上下文窗口.
 func _stream_mult() -> float:
 	var x := 1.0 + stream * log(1.0 + maxf(_bites - stream_from, 0) / 20.0) / log(2.0)
-	return minf(x, STREAM_CAP[mini(Game.version, STREAM_CAP.size() - 1)])
+	return minf(x, STREAM_CAP[mini(Game.version, STREAM_CAP.size() - 1)] + float(longctx))
 
 
 ## 招牌菜: extra value of one bite of kind k (a 套餐 counts each 招牌菜 in it), and the
@@ -3080,7 +3187,12 @@ func balance_score() -> float:
 
 ## 美食评鉴: + critic per kind of 套餐 she ate this shift, from the 5th kind on.
 func review_mult() -> float:
-	return 1.0 + critic * maxi(_kinds_eaten.size() - 4, 0)
+	var gods := 0
+	if godfeast > 0.0:
+		for k in _kinds_eaten:
+			if TIER[k] == 4:
+				gods += 1
+	return (1.0 + critic * maxi(_kinds_eaten.size() - 4, 0)) * (1.0 + godfeast * gods)
 
 
 func balance_mult() -> float:
@@ -3239,7 +3351,7 @@ func _end(reason: String, card_too := true) -> void:
 	_score["balance"] = bm
 	_score["review"] = jm
 	var mults: Array = [[tr("均衡"), bm]]
-	if critic > 0.0:
+	if critic > 0.0 or godfeast > 0.0:
 		mults.append([tr("评鉴"), jm])
 	var extra := ""
 	if trial != "":
@@ -3468,6 +3580,37 @@ func _mood() -> String:
 	return "normal"
 
 
+## 识图: the windows that serve what the box still lacks glow, each with the dishes it owes.
+func _draw_vision() -> void:
+	if not _vision_open or _vision_need.is_empty():
+		return
+	var pulse := 1.0 if Settings.reduced_motion else 0.7 + 0.3 * sin(_t * 5.0)
+	var by_stall := {}
+	for kind in _vision_need:
+		var stall: String = STALL[int(kind)]
+		if not stall.is_empty() and int(stall_lv.get(stall, 0)) > 0:
+			if not by_stall.has(stall):
+				by_stall[stall] = []
+			by_stall[stall].append(int(kind))
+	for id in by_stall:
+		var pans := stall_pans(id)
+		if pans.is_empty():
+			continue
+		var x0: float = float(pans[0]) - PAN_W * 0.5
+		var x1: float = float(pans[pans.size() - 1]) + PAN_W * 0.5
+		var band := Rect2(x0 - 6.0, PAN_Y - 32.0, x1 - x0 + 12.0, 70.0)
+		draw_rect(band, Color(1.0, 0.82, 0.3, 0.22 * pulse))
+		draw_rect(band, Color(1.0, 0.82, 0.3, 0.95 * pulse), false, 4.0)
+		var kinds: Array = by_stall[id]
+		var cx: float = (x0 + x1) * 0.5 - (kinds.size() - 1) * 29.0
+		for kind in kinds:
+			var at := Vector2(cx, PAN_Y + 2.0)
+			draw_circle(at, 30.0, Color(0.42, 0.2, 0.05, 0.95))
+			draw_circle(at, 27.0, Color(1.0, 0.97, 0.85, 1.0))
+			_draw_food_tinted(self, kind, at, 0.0, 44.0 / SIZE_PX[kind], Color.WHITE)
+			cx += 58.0
+
+
 func _draw() -> void:
 	var font := ThemeDB.fallback_font
 	# a darker floor strip, so the bottom HUD line reads
@@ -3517,6 +3660,7 @@ func _draw() -> void:
 	for f in _flying:
 		var p: Vector2 = f.from.lerp(f.to, f.t) + Vector2(0, -sin(f.t * PI) * 120.0)
 		_draw_basin(p, f.basin if f.basin != null else _new_basin(p), 0.0, 0.55, font, false)
+	_draw_vision()
 	for i in _pile.size():
 		_draw_food(int(_pile_k[i]), _pile[i], 0.0, 0.9)
 	for i in _fp.size():
@@ -4115,6 +4259,21 @@ func _draw_hand_tag(at: Vector2, b: Dictionary) -> void:
 		rule_text = "%s +%d%%" % [" · ".join(tags), int(round(float(rule.add_bonus) * 100))]
 	if rule_text != "":
 		_write(ThemeDB.fallback_font, at + Vector2(0, 70), rule_text, 20, PAPER, INK, true)
+	if vision_kind >= 0 and _vision_open and is_same(b, _hand):
+		# 识图: the whole target, opened up into its basic dishes, greyed out while still missing.
+		var parts := _ingredients(vision_kind)
+		var owed := _vision_need.duplicate()
+		var step: float = 38.0 if parts.size() <= 6 else 30.0
+		var left: float = at.x - (parts.size() + 1) * step * 0.5
+		for part in parts:
+			var lacking := int(owed.get(part, 0)) > 0
+			if lacking:
+				owed[part] = int(owed[part]) - 1
+			_draw_food_tinted(self, part, Vector2(left, at.y + 34), 0.0, (step - 4.0) / SIZE_PX[part], Color(0.3, 0.3, 0.3, 0.6) if lacking else Color.WHITE)
+			left += step
+		_sprite(self, "ui_arrow", Vector2(left + 2.0, at.y + 34), 26.0)
+		_draw_food_tinted(self, vision_kind, Vector2(left + 32.0, at.y + 34), 0.0, 44.0 / SIZE_PX[vision_kind], Color.WHITE)
+		return
 	var close := _closest_recipe(b.items)
 	if not close.is_empty():
 		var r: Dictionary = close[0]

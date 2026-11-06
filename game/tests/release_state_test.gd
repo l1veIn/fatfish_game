@@ -50,7 +50,7 @@ func _ready() -> void:
 		"signatures": [], "struck": [], "seen_buttons": {"settings": true}}
 	write_save(p, legacy)
 	Game.load_game()
-	check(Game.tokens == 321.0 and Game.version == 5 and Game.runs == 12, "v2 migration keeps currency, version and runs")
+	check(Game.tokens == 321.0 and Game.version == 4 and Game.agi_cleared and Game.runs == 12, "old AGI save keeps currency and runs, returns to V4 for the new chapters")
 	check(Game.ending_pending(), "completed old save receives new ending")
 	check(Game.achievements.has("release_agi") and Game.achievements.has("regular"), "old save backfills proven milestones")
 	check(not Game.achievements.has("bites_100"), "old save does not invent missing bite counters")
@@ -82,7 +82,7 @@ func _ready() -> void:
 	check(not Game.pay_trial("not_a_trial"), "unknown evaluation cannot charge a ticket")
 	check(not Game.pay_trial("spring"), "locked or completed evaluation cannot charge a ticket")
 	Game.reset_save()
-	Game.version = 5
+	Game.version = Game.VERSIONS.size() - 1
 	Game.tokens = 100000000.0
 	for n in Game.nodes:
 		Game.levels[n.id] = 1

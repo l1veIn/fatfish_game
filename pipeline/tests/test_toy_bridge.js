@@ -342,3 +342,34 @@ test("stale initial container read cannot override a newer landscape notificatio
 	assert.equal(h.doc.documentElement.dataset.toyLandscape, "confirmed");
 	assert.equal(h.api.isFullscreen(), true);
 });
+
+test("gifts read the platform's follow and like state and never unlock on failure", async () => {
+	const h = harness({ dom: true, abilities: ["getAuthorRelation", "getVideoUserActions", "navigate"] });
+	const asked = [];
+	h.sdk.getAuthorRelation = async () => ({ status: "ok", data: { isFollowing: true, isAuthor: false } });
+	h.sdk.getVideoUserActions = async req => { asked.push(req); return { status: "ok", items: [{ aid: 1, bvid: "BV1Ypnz6pEBR", status: "ok", liked: false }] }; };
+	await h.api.prepare();
+	assert.equal(h.api.giftsSupported(), true);
+	const follow = [];
+	await h.api.checkGift("follow", value => follow.push(JSON.parse(value)));
+	assert.deepEqual(follow, [{ ok: true, status: "ok" }]);
+	const like = await h.api.checkGift("like");
+	assert.deepEqual(like, { ok: false, status: "ok" });
+	assert.deepEqual(asked[0], { videos: [{ bvid: "BV1Ypnz6pEBR" }] });
+	h.sdk.getVideoUserActions = async () => ({ status: "ok", items: [{ aid: 1, bvid: "x", status: "ok", liked: true }] });
+	assert.equal((await h.api.checkGift("like")).ok, true);
+	h.sdk.getAuthorRelation = async () => ({ status: "unauthorized" });
+	assert.deepEqual(await h.api.checkGift("follow"), { ok: false, status: "unauthorized" });
+	h.sdk.getAuthorRelation = async () => { throw new Error("offline"); };
+	assert.deepEqual(await h.api.checkGift("follow"), { ok: false, status: "error" });
+	assert.deepEqual(await h.api.checkGift("nonsense"), { ok: false, status: "unsupported" });
+});
+
+test("gifts stay hidden without the platform abilities", async () => {
+	const none = harness({ dom: true, abilities: ["getCloudStorage", "setCloudStorage"] });
+	await none.api.prepare();
+	assert.equal(none.api.giftsSupported(), false);
+	assert.deepEqual(await none.api.checkGift("follow"), { ok: false, status: "unsupported" });
+	const missing = harness({ noSDK: true });
+	assert.equal(missing.api.giftsSupported(), false);
+});

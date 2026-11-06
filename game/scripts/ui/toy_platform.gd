@@ -4,11 +4,13 @@ extends Node
 
 signal initialized
 signal image_saved(ok: bool, message: String)
+signal gift_checked(result: Dictionary)
 
 static var active: ToyPlatform
 var _bridge: JavaScriptObject
 var _init_callback: JavaScriptObject
 var _image_callback: JavaScriptObject
+var _gift_callback: JavaScriptObject
 var _initialized := false
 var _image_done := false
 var _image_result := {}
@@ -42,6 +44,31 @@ func _on_initialized(args: Array) -> void:
 		_bridge.disableCloud("Invalid startup response")
 	_initialized = true
 	initialized.emit()
+
+
+## Toy 小礼物 need the platform's follow / like checks, so they exist only inside Toy.
+static func gifts_available() -> bool:
+	return is_instance_valid(active) and active._bridge != null and active._bridge.giftsSupported() == true
+
+
+## kind: "follow" or "like". Resolves to {ok: bool, status: String} (the platform's own answer).
+func check_gift(kind: String) -> Dictionary:
+	if _bridge == null:
+		return {"ok": false, "status": "unsupported"}
+	_gift_callback = JavaScriptBridge.create_callback(_on_gift_checked)
+	_bridge.checkGift(kind, _gift_callback)
+	var result: Dictionary = await gift_checked
+	return result
+
+
+func _on_gift_checked(args: Array) -> void:
+	var result: Variant = JSON.parse_string(str(args[0])) if not args.is_empty() else null
+	gift_checked.emit(result if result is Dictionary else {"ok": false, "status": "error"})
+
+
+static func open_gift_page(kind: String) -> void:
+	if is_instance_valid(active) and active._bridge != null:
+		active._bridge.openGiftPage(kind)
 
 
 static func open_author() -> void:

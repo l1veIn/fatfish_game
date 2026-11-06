@@ -131,7 +131,7 @@ func _ready() -> void:
 		check(DirAccess.make_dir_recursive_absolute(output) == OK, "output directory available")
 	seed(FIXTURE_SEED)
 	Game.reset_save()
-	Game.version = 5
+	Game.version = Game.VERSIONS.size() - 1
 	Game.runs = 1
 	Game.seen_buttons = {"intro_canteen_complete": true, "intro_think": true, "intro_warm": true, "intro_grok": true}
 	Settings.pause_unfocused = false

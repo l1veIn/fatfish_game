@@ -187,7 +187,9 @@ func _ready() -> void:
 		_check(get_viewport().gui_get_focus_owner() == _panel._back, "keyboard reaches return from page %d" % page)
 		await _key(KEY_DOWN)
 		_check(get_viewport().gui_get_focus_owner() == _panel._tabs[page], "keyboard focus loops inside page %d" % page)
-	_panel._controls[0].grab_focus()
+	for control in _panel._controls:
+		if control.get_meta("focus_key", "") == "language":
+			control.grab_focus()
 	Settings.language = "en"
 	Settings.apply()
 	await _frames(8)

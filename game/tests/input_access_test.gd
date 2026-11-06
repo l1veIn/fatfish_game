@@ -111,7 +111,7 @@ func _tree_tools() -> void:
 	Game.version = 4
 	Game.runs = 10
 	Game.tokens = 10000000
-	Game.levels = {"start": 1, "stall_main": 2, "stall_wok": 1, "menu": 1, "moe": 1, "hire": 2, "ticket_agi": 1}
+	Game.levels = {"start": 1, "stall_main": 2, "stall_wok": 1, "menu": 1, "moe": 1, "hire": 2, "ticket_flash": 1}
 	Game.seen_buttons = {"menu": true, "sigs": true, "menu_card": true, "sigs_card": true}
 	Game._recompute()
 	_main = load("res://scenes/main.tscn").instantiate()

@@ -12,9 +12,9 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 OUT = os.path.join(ROOT, "game", "data", "skill_tree.json")
 
 BRANCH = {"stall": -90, "auntie": -30, "box": 30, "fish": 90, "crew": 150, "version": -150}
-RINGS = ["V3", "R1", "V3.1", "V3.2", "V4"]
-RING_COST = [60, 2500, 25000, 250000, 1500000]   # first level of a plain node, by ring
-GROWTH = {"eat": 2.0, "mat": 30.0, "vram": 6.0}   # per-node price growth (default 2.2, stalls 2.5)
+RINGS = ["V3", "R1", "V3.1", "V3.2", "V4", "V4.1F", "V4.1-1017", "V4.1P"]
+RING_COST = [60, 2500, 25000, 250000, 1500000, 5000000, 12000000, 25000000]   # first level of a plain node, by ring
+GROWTH = {"eat": 2.0, "mat": 30.0, "vram": 6.0, "smallcup": 2.5, "vmatch": 2.5, "fetchfast": 2.5, "fetchgold": 2.5, "shorter": 2.5, "pro_full": 2.5, "godfeast": 2.5, "longctx": 2.5}   # per-node price growth (default 2.2, stalls 2.5)
 STEP, LANE_PX, R0 = 195.0, 160.0, 0.9   # a tight radial start; relax() then pushes tickets apart
 TICKET = (235.0, 165.0)                  # room one ticket needs (with its pin and yarn)
 PULL = 0.001
@@ -96,6 +96,25 @@ N = [
     ("converge", "version", 3, -0.1, "收敛思维", "思考时，用不上的菜（包括青菜）直接穿过饭盒。和发散思维都点，就是「只吸需要的菜」。", 1, "R1", ["think"], {"converge": 1}, ""),
     ("critic", "version", 4, -0.6, "美食评鉴（刷榜）", "这一顿吃到的不同套餐，从第 5 种起，每多一种整顿 +4%。", 1, "V3.1", ["stall_dim"], {"critic": 0.04}, "key"),
     ("bench", "version", 5, -0.6, "Benchmark 全家桶", "每多一种套餐的加成，每级再 +2%。", 2, "V3.1", ["critic"], {"critic": 0.02}, ""),
+
+    # V4.1 Flash: 小模型反超旗舰，还能看图
+    ("vision", "version", 6, -1.0, "多模态：识图", "选一道想做的套餐，缺的原料所在窗口会亮起来。", 1, "V4.1F", ["ticket_flash"], {"vision": 1}, "free"),
+    ("vfilter", "version", 6, -1.6, "视觉过滤", "选了识图目标后，用不上的菜直接穿过饭盒。", 1, "V4.1F", ["vision"], {"vision_filter": 1}, ""),
+    ("vmatch", "version", 7, -1.0, "看图说话", "做成识图目标的那一盒更值钱，每级 +30%。", 3, "V4.1F", ["vision"], {"vmatch": 0.3}, ""),
+    ("smallcup", "version", 6, -0.4, "小杯反超大杯", "只占一格的散菜更值钱，每级 +20%。", 3, "V4.1F", ["ticket_flash"], {"small_x": 0.2}, ""),
+
+    # V4.1 Flash-1017: 任务更快、输出更短，开放搜索和抓取
+    ("fetch", "version", 7, -0.2, "Fetch 跑腿", "每隔一会儿，助手把一道菜直接送到你饭盒上方。", 1, "V4.1-1017", ["ticket_1017"], {"fetch": 1}, "free"),
+    ("fetchfast", "version", 8, -0.2, "Search 预查询", "跑腿更勤快，每级间隔少 2 秒。", 3, "V4.1-1017", ["fetch"], {"fetch_fast": 2}, ""),
+    ("fetchgold", "version", 8, 0.4, "抓取加急", "跑腿送来的菜品级更高：优质 → 金牌。", 2, "V4.1-1017", ["fetch"], {"fetch_grade": 1}, ""),
+    ("shorter", "version", 7, 0.4, "输出更短", "她吃得更快，每级 +20%。", 3, "V4.1-1017", ["ticket_1017"], {"eat_rate": ("mul", 1.2)}, ""),
+    ("harness", "version", 9, -0.2, "Harness 升级", "每位上场的助手让跑腿间隔再少 1 秒。", 1, "V4.1-1017", ["fetchfast", "hire"], {"harness": 1}, "require_all"),
+
+    # V4.1 Pro: 压轴
+    ("pro_full", "version", 8, -1.0, "满血 Pro", "整顿收入 ×1.5，第 2 级 ×2。", 2, "V4.1P", ["ticket_pro"], {"pro_x": 0.5}, "key"),
+    ("godfeast", "version", 8, -1.6, "神级宴席", "这一顿每吃过一种神级套餐，整顿收入每级 +15%。", 3, "V4.1P", ["ticket_pro"], {"godfeast": 0.15}, ""),
+    ("longctx", "version", 9, -1.0, "超长上下文", "越吃越香和连击的上限再提高。", 2, "V4.1P", ["pro_full"], {"longctx": 1}, ""),
+    ("waitlist", "version", 9, -1.6, "这周一定", "每没过一次当前评测，下次评测收入 +20%（最多 3 次）。", 1, "V4.1P", ["ticket_pro"], {"waitlist": 0.2}, ""),
 ]
 
 TICKETS = [
@@ -103,7 +122,10 @@ TICKETS = [
     ("ticket_v31", 2, 1.1, "申请发布 V3.1", "hybrid", 6000, 1, ["ticket_r1"], "评测：一顿赚到 2 万就发布 V3.1。"),
     ("ticket_v32", 3, 1.2, "申请发布 V3.2", "ji", 40000, 2, ["ticket_v31"], "评测：一顿赚到 6 万就发布 V3.2。V3.1-Terminus 终于不再到处冒「极」字了。"),
     ("ticket_v4", 4, 1.2, "申请发布 V4", "v4", 250000, 3, ["ticket_v32"], "评测：一顿赚到 40 万就发布 V4。"),
-    ("ticket_agi", 5, 1.2, "实现 AGI", "agi", 1200000, 4, ["ticket_v4"], "终极评测：一顿 200 万。目标是实现 AGI！但是也要先吃饱。"),
+    ("ticket_flash", 5, 1.2, "申请发布 V4.1 Flash", "flash", 10000000, 4, ["ticket_v4"], "评测：一顿赚到 3000 万就发布 V4.1 Flash。"),
+    ("ticket_1017", 6, 1.2, "申请发布 V4.1 Flash-1017", "f1017", 25000000, 5, ["ticket_flash"], "评测：一顿赚到 5000 万就发布 V4.1 Flash-1017。"),
+    ("ticket_pro", 7, 1.2, "申请发布 V4.1 Pro", "pro", 50000000, 6, ["ticket_1017"], "评测：一顿赚到 8000 万就发布 V4.1 Pro。"),
+    ("ticket_agi", 8, 1.2, "实现 AGI", "agi", 100000000, 7, ["ticket_pro"], "终极评测：一顿 1.5 亿。目标是实现 AGI！但是也要先吃饱。"),
 ]
 
 # What each node says on the board: written for the player (what happens when I click it, what
@@ -181,8 +203,24 @@ DESC = {
     "ticket_r1": "交门票，开始「发布 R1」的评测：这一顿赚到 2,000 token 就通过，解锁新的技能和「深度思考」。没过只是门票没了，随时再来。",
     "ticket_v31": "评测：一顿赚到 2 万 token 就发布 V3.1，解锁新技能、自动标出好菜的落点。",
     "ticket_v32": "评测：一顿赚到 6 万 token 就发布 V3.2，解锁新技能。未学「顿悟」时，饭盒会避开青菜。V3.1-Terminus 终于不再到处冒「极」字了。",
-    "ticket_v4": "评测：一顿赚到 40 万 token 就发布 V4，解锁最后一批技能。",
-    "ticket_agi": "终极评测：一顿赚到 200 万 token，大肥鱼就实现了 AGI。但是也要先吃饱。",
+    "ticket_v4": "评测：一顿赚到 40 万 token 就发布 V4，解锁新技能。",
+    "ticket_flash": "评测：一顿赚到 3000 万 token 就发布 V4.1 Flash。小杯反超大杯，还学会了看图：解锁「识图」和新技能。",
+    "ticket_1017": "评测：一顿赚到 5000 万 token 就发布 V4.1 Flash-1017。干活更快、话更短，解锁「Fetch 跑腿」和新技能。",
+    "ticket_pro": "评测：一顿赚到 8000 万 token 就发布 V4.1 Pro。现实里它还没发布，这里你先替她发了。解锁最后一批技能。",
+    "ticket_agi": "终极评测：一顿赚到 1.5 亿 token，大肥鱼就实现了 AGI。但是也要先吃饱。",
+    "vision": "V4.1 Flash 送你的能力：开饭前在顶部「识图」按钮选一道想做的套餐。开饭时，缺的原料所在窗口会亮起来，饭盒旁边显示还差什么。这里点一下就学会。",
+    "vfilter": "选了识图目标后，用不上的菜直接穿过饭盒，再也不会接错。这盒做成以后恢复正常接菜。想多接杂菜时，把目标设成「不指定」就行。",
+    "vmatch": "做成识图目标的那一盒，收入每级 +30%。",
+    "smallcup": "只占一格的散菜更值钱，每级 +20%。青菜、鸡腿、奶茶都算；两格的大菜和套餐不算。",
+    "fetch": "V4.1 Flash-1017 送你的能力：每 12 秒，助手把一道菜直接送到你饭盒上方，接住就行。选了识图目标时优先送还缺的原料，否则从开着的窗口随便挑一道。这里点一下就学会。",
+    "fetchfast": "跑腿更勤快：间隔每级少 2 秒。",
+    "fetchgold": "跑腿送来的菜品级更高：第 1 级是优质菜，第 2 级是金牌菜。",
+    "shorter": "输出更短，她吃得更快，每级 +20%。",
+    "harness": "需要学会招募和 Search 预查询。这一顿每有一位助手上场，跑腿间隔再少 1 秒（最短 3 秒）。",
+    "pro_full": "整顿收入 ×1.5，第 2 级 ×2。在所有结算之前生效，评测也算。",
+    "godfeast": "这一顿每吃过一种不同的神级套餐，整顿收入每级 +15%。深度思考套餐、满血版、食堂全家福和涌现乱炖都算。",
+    "longctx": "越吃越香的上限每级 +1 倍，连击的上限每级 +2 盒。",
+    "waitlist": "每没过一次当前评测，下次评测的收入 +20%，最多算 3 次。过了以后这个版本的次数就用不上了。",
 }
 
 
@@ -259,6 +297,22 @@ SUMMARY = {
     "converge": "思考时筛掉余菜",
     "critic": "套餐种类加成",
     "bench": "提高种类加成",
+    "vision": "选套餐点亮窗口",
+    "vfilter": "用不上的菜穿过",
+    "vmatch": "做成目标有加成",
+    "smallcup": "一格散菜更值钱",
+    "fetch": "助手定时送菜",
+    "fetchfast": "跑腿间隔变短",
+    "fetchgold": "跑腿送好菜",
+    "shorter": "加快吃饭速度",
+    "harness": "助手加快跑腿",
+    "pro_full": "整顿收入翻倍",
+    "godfeast": "神级种类加成",
+    "longctx": "提高成长上限",
+    "waitlist": "没过评测有补偿",
+    "ticket_flash": "挑战Flash评测",
+    "ticket_1017": "挑战1017评测",
+    "ticket_pro": "挑战Pro评测",
     "ticket_r1": "挑战R1评测",
     "ticket_v31": "挑战V3.1评测",
     "ticket_v32": "挑战V3.2评测",
@@ -345,7 +399,23 @@ BOARD_POSITIONS = {
     'ticket_v31': [-492, -364],
     'ticket_v32': [-624, -502],
     'ticket_v4': [-584, -665],
-    'ticket_agi': [-817, -688],
+    'ticket_flash': [-817, -688],
+    'ticket_1017': [-1052, -716],
+    'ticket_pro': [-1288, -744],
+    'ticket_agi': [-1524, -772],
+    'vision': [-817, -858],
+    'vfilter': [-1052, -886],
+    'vmatch': [-817, -1028],
+    'smallcup': [-582, -838],
+    'fetch': [-1062, -546],
+    'fetchfast': [-1298, -574],
+    'fetchgold': [-1196, -394],
+    'shorter': [-1534, -602],
+    'harness': [-1432, -424],
+    'pro_full': [-1288, -914],
+    'godfeast': [-1524, -942],
+    'longctx': [-1288, -1084],
+    'waitlist': [-1524, -1112],
 }
 
 
@@ -434,7 +504,7 @@ for n in nodes:
 left = sum(1 for i, a in enumerate(nodes) for b in nodes[i + 1:]
            if ((a["pos"][0] - b["pos"][0]) / TICKET[0]) ** 2 + ((a["pos"][1] - b["pos"][1]) / TICKET[1]) ** 2 < 0.8)
 print("overlaps left:", left, "· extent:", max(max(abs(n["pos"][0]), abs(n["pos"][1])) for n in nodes))
-doc = ("技能树数据，由 pipeline/build_tree.py 生成（别手改）。模型见 docs/tree_model.md。ring 是节点所属的版本环（0 = V3，1 = R1，2 = V3.1，3 = V3.2，4 = V4），"
+doc = ("技能树数据，由 pipeline/build_tree.py 生成（别手改）。模型见 docs/tree_model.md。ring 是节点所属的版本环（0 = V3，1 = R1，2 = V3.1，3 = V3.2，4 = V4，5 = V4.1 Flash，6 = V4.1 Flash-1017，7 = V4.1 Pro），"
        "版本发布前这一环不显示；kind=ticket 是门票节点，opens 是它开放的评测；key 是开一种新赚钱方式的节点。pos 是相对树中心的坐标（像素）；"
        "parents 默认任意一个父节点买过即可；require_all 为 true 时须全部买过。位置独立于前置关系，固定在生成器 BOARD_POSITIONS；"
        "cost = cost × growth^当前等级（token）；effects 每升一级叠加一次：add 加法，mul 乘法。可用属性见 game.gd 的 BASE。")

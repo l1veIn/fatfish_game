@@ -85,7 +85,7 @@ func has_recipe(id: String) -> bool:
 	return Game.helper_recipe_options().any(func(r): return r.id == id)
 
 func test_data_and_configuration() -> void:
-	check(Game.nodes.size() == 75,"same 75 nodes including root")
+	check(Game.nodes.size() == 91,"same 91 nodes including root")
 	check(Game.node("hire").parents == ["start"],"hire no longer forces automatic boxes")
 	check(Game.node("clip").parents == ["hire"] and Game.node("sleep").parents == ["hire"],"global insurance needs recruitment, not nutrition or orchestration")
 	check(Game.node("async").get("require_all",false),"async data requires all prerequisites")

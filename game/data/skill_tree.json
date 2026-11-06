@@ -1,5 +1,5 @@
 {
- "_doc": "技能树数据，由 pipeline/build_tree.py 生成（别手改）。模型见 docs/tree_model.md。ring 是节点所属的版本环（0 = V3，1 = R1，2 = V3.1，3 = V3.2，4 = V4），版本发布前这一环不显示；kind=ticket 是门票节点，opens 是它开放的评测；key 是开一种新赚钱方式的节点。pos 是相对树中心的坐标（像素）；parents 默认任意一个父节点买过即可；require_all 为 true 时须全部买过。位置独立于前置关系，固定在生成器 BOARD_POSITIONS；cost = cost × growth^当前等级（token）；effects 每升一级叠加一次：add 加法，mul 乘法。可用属性见 game.gd 的 BASE。",
+ "_doc": "技能树数据，由 pipeline/build_tree.py 生成（别手改）。模型见 docs/tree_model.md。ring 是节点所属的版本环（0 = V3，1 = R1，2 = V3.1，3 = V3.2，4 = V4，5 = V4.1 Flash，6 = V4.1 Flash-1017，7 = V4.1 Pro），版本发布前这一环不显示；kind=ticket 是门票节点，opens 是它开放的评测；key 是开一种新赚钱方式的节点。pos 是相对树中心的坐标（像素）；parents 默认任意一个父节点买过即可；require_all 为 true 时须全部买过。位置独立于前置关系，固定在生成器 BOARD_POSITIONS；cost = cost × growth^当前等级（token）；effects 每升一级叠加一次：add 加法，mul 乘法。可用属性见 game.gd 的 BASE。",
  "nodes": [
   {
    "id": "start",
@@ -1553,6 +1553,295 @@
    "summary": "提高种类加成"
   },
   {
+   "id": "vision",
+   "name": "多模态：识图",
+   "desc": "V4.1 Flash 送你的能力：开饭前在顶部「识图」按钮选一道想做的套餐。开饭时，缺的原料所在窗口会亮起来，饭盒旁边显示还差什么。这里点一下就学会。",
+   "pos": [
+    -817,
+    -858
+   ],
+   "parents": [
+    "ticket_flash"
+   ],
+   "max": 1,
+   "cost": 0,
+   "growth": 1.0,
+   "effects": {
+    "vision": {
+     "add": 1
+    }
+   },
+   "ring": 5,
+   "summary": "选套餐点亮窗口"
+  },
+  {
+   "id": "vfilter",
+   "name": "视觉过滤",
+   "desc": "选了识图目标后，用不上的菜直接穿过饭盒，再也不会接错。这盒做成以后恢复正常接菜。想多接杂菜时，把目标设成「不指定」就行。",
+   "pos": [
+    -1052,
+    -886
+   ],
+   "parents": [
+    "vision"
+   ],
+   "max": 1,
+   "cost": 20625000,
+   "growth": 1.0,
+   "effects": {
+    "vision_filter": {
+     "add": 1
+    }
+   },
+   "ring": 5,
+   "summary": "用不上的菜穿过"
+  },
+  {
+   "id": "vmatch",
+   "name": "看图说话",
+   "desc": "做成识图目标的那一盒，收入每级 +30%。",
+   "pos": [
+    -817,
+    -1028
+   ],
+   "parents": [
+    "vision"
+   ],
+   "max": 3,
+   "cost": 15500000,
+   "growth": 2.5,
+   "effects": {
+    "vmatch": {
+     "add": 0.3
+    }
+   },
+   "ring": 5,
+   "summary": "做成目标有加成"
+  },
+  {
+   "id": "smallcup",
+   "name": "小杯反超大杯",
+   "desc": "只占一格的散菜更值钱，每级 +20%。青菜、鸡腿、奶茶都算；两格的大菜和套餐不算。",
+   "pos": [
+    -582,
+    -838
+   ],
+   "parents": [
+    "ticket_flash"
+   ],
+   "max": 3,
+   "cost": 13750000,
+   "growth": 2.5,
+   "effects": {
+    "small_x": {
+     "add": 0.2
+    }
+   },
+   "ring": 5,
+   "summary": "一格散菜更值钱"
+  },
+  {
+   "id": "fetch",
+   "name": "Fetch 跑腿",
+   "desc": "V4.1 Flash-1017 送你的能力：每 12 秒，助手把一道菜直接送到你饭盒上方，接住就行。选了识图目标时优先送还缺的原料，否则从开着的窗口随便挑一道。这里点一下就学会。",
+   "pos": [
+    -1062,
+    -546
+   ],
+   "parents": [
+    "ticket_1017"
+   ],
+   "max": 1,
+   "cost": 0,
+   "growth": 1.0,
+   "effects": {
+    "fetch": {
+     "add": 1
+    }
+   },
+   "ring": 6,
+   "summary": "助手定时送菜"
+  },
+  {
+   "id": "fetchfast",
+   "name": "Search 预查询",
+   "desc": "跑腿更勤快：间隔每级少 2 秒。",
+   "pos": [
+    -1298,
+    -574
+   ],
+   "parents": [
+    "fetch"
+   ],
+   "max": 3,
+   "cost": 41400000,
+   "growth": 2.5,
+   "effects": {
+    "fetch_fast": {
+     "add": 2
+    }
+   },
+   "ring": 6,
+   "summary": "跑腿间隔变短"
+  },
+  {
+   "id": "fetchgold",
+   "name": "抓取加急",
+   "desc": "跑腿送来的菜品级更高：第 1 级是优质菜，第 2 级是金牌菜。",
+   "pos": [
+    -1196,
+    -394
+   ],
+   "parents": [
+    "fetch"
+   ],
+   "max": 2,
+   "cost": 41400000,
+   "growth": 2.5,
+   "effects": {
+    "fetch_grade": {
+     "add": 1
+    }
+   },
+   "ring": 6,
+   "summary": "跑腿送好菜"
+  },
+  {
+   "id": "shorter",
+   "name": "输出更短",
+   "desc": "输出更短，她吃得更快，每级 +20%。",
+   "pos": [
+    -1534,
+    -602
+   ],
+   "parents": [
+    "ticket_1017"
+   ],
+   "max": 3,
+   "cost": 37200000,
+   "growth": 2.5,
+   "effects": {
+    "eat_rate": {
+     "mul": 1.2
+    }
+   },
+   "ring": 6,
+   "summary": "加快吃饭速度"
+  },
+  {
+   "id": "harness",
+   "name": "Harness 升级",
+   "desc": "需要学会招募和 Search 预查询。这一顿每有一位助手上场，跑腿间隔再少 1 秒（最短 3 秒）。",
+   "pos": [
+    -1432,
+    -424
+   ],
+   "parents": [
+    "fetchfast",
+    "hire"
+   ],
+   "max": 1,
+   "cost": 68400000,
+   "growth": 1.0,
+   "effects": {
+    "harness": {
+     "add": 1
+    }
+   },
+   "ring": 6,
+   "require_all": true,
+   "summary": "助手加快跑腿"
+  },
+  {
+   "id": "pro_full",
+   "name": "满血 Pro",
+   "desc": "整顿收入 ×1.5，第 2 级 ×2。在所有结算之前生效，评测也算。",
+   "pos": [
+    -1288,
+    -914
+   ],
+   "parents": [
+    "ticket_pro"
+   ],
+   "max": 2,
+   "cost": 215625000,
+   "growth": 2.5,
+   "effects": {
+    "pro_x": {
+     "add": 0.5
+    }
+   },
+   "ring": 7,
+   "key": true,
+   "summary": "整顿收入翻倍"
+  },
+  {
+   "id": "godfeast",
+   "name": "神级宴席",
+   "desc": "这一顿每吃过一种不同的神级套餐，整顿收入每级 +15%。深度思考套餐、满血版、食堂全家福和涌现乱炖都算。",
+   "pos": [
+    -1524,
+    -942
+   ],
+   "parents": [
+    "ticket_pro"
+   ],
+   "max": 3,
+   "cost": 86250000,
+   "growth": 2.5,
+   "effects": {
+    "godfeast": {
+     "add": 0.15
+    }
+   },
+   "ring": 7,
+   "summary": "神级种类加成"
+  },
+  {
+   "id": "longctx",
+   "name": "超长上下文",
+   "desc": "越吃越香的上限每级 +1 倍，连击的上限每级 +2 盒。",
+   "pos": [
+    -1288,
+    -1084
+   ],
+   "parents": [
+    "pro_full"
+   ],
+   "max": 2,
+   "cost": 95000000,
+   "growth": 2.5,
+   "effects": {
+    "longctx": {
+     "add": 1
+    }
+   },
+   "ring": 7,
+   "summary": "提高成长上限"
+  },
+  {
+   "id": "waitlist",
+   "name": "这周一定",
+   "desc": "每没过一次当前评测，下次评测的收入 +20%，最多算 3 次。过了以后这个版本的次数就用不上了。",
+   "pos": [
+    -1524,
+    -1112
+   ],
+   "parents": [
+    "ticket_pro"
+   ],
+   "max": 1,
+   "cost": 142500000,
+   "growth": 1.0,
+   "effects": {
+    "waitlist": {
+     "add": 0.2
+    }
+   },
+   "ring": 7,
+   "summary": "没过评测有补偿"
+  },
+  {
    "id": "ticket_r1",
    "kind": "ticket",
    "opens": "spring",
@@ -1616,7 +1905,7 @@
    "kind": "ticket",
    "opens": "v4",
    "name": "申请发布 V4",
-   "desc": "评测：一顿赚到 40 万 token 就发布 V4，解锁最后一批技能。",
+   "desc": "评测：一顿赚到 40 万 token 就发布 V4，解锁新技能。",
    "pos": [
     -584,
     -665
@@ -1632,11 +1921,11 @@
    "summary": "挑战V4评测"
   },
   {
-   "id": "ticket_agi",
+   "id": "ticket_flash",
    "kind": "ticket",
-   "opens": "agi",
-   "name": "实现 AGI",
-   "desc": "终极评测：一顿赚到 200 万 token，大肥鱼就实现了 AGI。但是也要先吃饱。",
+   "opens": "flash",
+   "name": "申请发布 V4.1 Flash",
+   "desc": "评测：一顿赚到 3000 万 token 就发布 V4.1 Flash。小杯反超大杯，还学会了看图：解锁「识图」和新技能。",
    "pos": [
     -817,
     -688
@@ -1645,10 +1934,70 @@
     "ticket_v4"
    ],
    "max": 1,
-   "cost": 1200000,
+   "cost": 10000000,
    "growth": 1,
    "effects": {},
    "ring": 4,
+   "summary": "挑战Flash评测"
+  },
+  {
+   "id": "ticket_1017",
+   "kind": "ticket",
+   "opens": "f1017",
+   "name": "申请发布 V4.1 Flash-1017",
+   "desc": "评测：一顿赚到 5000 万 token 就发布 V4.1 Flash-1017。干活更快、话更短，解锁「Fetch 跑腿」和新技能。",
+   "pos": [
+    -1052,
+    -716
+   ],
+   "parents": [
+    "ticket_flash"
+   ],
+   "max": 1,
+   "cost": 25000000,
+   "growth": 1,
+   "effects": {},
+   "ring": 5,
+   "summary": "挑战1017评测"
+  },
+  {
+   "id": "ticket_pro",
+   "kind": "ticket",
+   "opens": "pro",
+   "name": "申请发布 V4.1 Pro",
+   "desc": "评测：一顿赚到 8000 万 token 就发布 V4.1 Pro。现实里它还没发布，这里你先替她发了。解锁最后一批技能。",
+   "pos": [
+    -1288,
+    -744
+   ],
+   "parents": [
+    "ticket_1017"
+   ],
+   "max": 1,
+   "cost": 50000000,
+   "growth": 1,
+   "effects": {},
+   "ring": 6,
+   "summary": "挑战Pro评测"
+  },
+  {
+   "id": "ticket_agi",
+   "kind": "ticket",
+   "opens": "agi",
+   "name": "实现 AGI",
+   "desc": "终极评测：一顿赚到 1.5 亿 token，大肥鱼就实现了 AGI。但是也要先吃饱。",
+   "pos": [
+    -1524,
+    -772
+   ],
+   "parents": [
+    "ticket_pro"
+   ],
+   "max": 1,
+   "cost": 100000000,
+   "growth": 1,
+   "effects": {},
+   "ring": 7,
    "summary": "挑战最终评测"
   }
  ]

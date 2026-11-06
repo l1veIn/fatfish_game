@@ -23,7 +23,7 @@ func _ready() -> void:
 		get_tree().quit(2)
 		return
 	var settings_before := FileAccess.get_file_as_bytes(Settings.PATH)
-	_check(Game.nodes.size() == 75, "74 purchasable nodes plus the unchanged root")
+	_check(Game.nodes.size() == 91, "90 purchasable nodes plus the unchanged root")
 	var effects_known := true
 	for node in Game.nodes:
 		for stat in node.effects:

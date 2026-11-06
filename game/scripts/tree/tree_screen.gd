@@ -19,6 +19,7 @@ const ZOOM := Vector2(0.45, 1.3)
 const FEATURE_NODES := ["menu", "moe", "think", "hire", "skills", "agirec"]
 const MealPlannerPanel := preload("res://scripts/ui/meal_planner.gd")
 const CrewPlannerPanel := preload("res://scripts/ui/crew_planner_panel.gd")
+const RecipePickerPanel := preload("res://scripts/ui/helper_recipe_picker.gd")
 const TOUCH_UI := preload("res://scripts/ui/touch_controls.gd")
 
 var _zoom := 0.75
@@ -40,6 +41,7 @@ var _trial: Button
 var _planner: Control
 var _book: Control
 var _crew_planner: Control
+var _vision_picker: Control
 var _rollback: Control
 var _crew_button: Button
 var _modal_focus: Array = []
@@ -243,6 +245,8 @@ func _build_bar() -> void:
 		specs.append(["sigs", tr("招牌菜"), _open_signatures])
 	if not Game.automation_pages().is_empty():
 		specs.append(["crew", tr("自动化"), _open_crew])
+	if Game.stat("vision") > 0.0:
+		specs.append(["vision", tr("识图"), _open_vision])
 	specs.append_array([["respec", tr("回滚"), _on_respec], ["settings", tr("设置"), func(): open_settings.emit()], ["title", tr("标题"), func(): to_title.emit()]])
 	var key := ",".join(specs.map(func(x): return x[0]))
 	if key == _bar_key:
@@ -268,7 +272,7 @@ func _build_bar() -> void:
 			fn.call())
 		_bar.add_child(b)
 		if id == "crew": _crew_button = b
-		if id in ["menu", "sigs", "crew"] and not Game.seen_buttons.has(id):
+		if id in ["menu", "sigs", "crew", "vision"] and not Game.seen_buttons.has(id):
 			_new_buttons[b] = id
 			var dot := Control.new()   # the red dot sits on the button itself, above its art
 			dot.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -317,13 +321,14 @@ func _tools_have_focus() -> bool:
 
 
 func _has_input_modal() -> bool:
-	return is_instance_valid(_rollback) or is_instance_valid(_planner) or is_instance_valid(_crew_planner) or is_instance_valid(_book) or get_children().any(func(c): return c is SettingsPanel or c is RecipeBook)
+	return is_instance_valid(_rollback) or is_instance_valid(_planner) or is_instance_valid(_crew_planner) or is_instance_valid(_vision_picker) or is_instance_valid(_book) or get_children().any(func(c): return c is SettingsPanel or c is RecipeBook)
 
 
 const FEATURES := {
 	"menu": ["新功能：今日菜单", "开饭前划掉不想要的菜，想要的出得更多。"],
 	"sigs": ["新功能：招牌菜", "选一道招牌菜，这顿它有特别加成。"],
 	"crew": ["自动化", "开饭前安排好，所有改动下顿生效。"],
+	"vision": ["新功能：识图", "选一道想做的套餐，缺的原料所在窗口会亮起来。"],
 }
 
 
@@ -479,6 +484,48 @@ func _open_planner(page: String) -> void:
 		else:
 			_start.grab_focus.call_deferred())
 	add_child(panel)
+
+
+## 识图: the player's own target dish. A full-screen modal, reused from the helper order picker.
+func _open_vision() -> void:
+	if Game.stat("vision") <= 0.0 or is_instance_valid(_vision_picker) or is_instance_valid(_crew_planner) or is_instance_valid(_planner) or is_instance_valid(_book) or get_children().any(func(c): return c is SettingsPanel):
+		return
+	var opener: WeakRef = weakref(get_viewport().gui_get_focus_owner())
+	_dragging = false
+	_hover = ""
+	for child in get_children():
+		if child.has_meta("feature_card"):
+			child.queue_free()
+	_modal_focus.clear()
+	_modal_focus.append({"node": weakref(self), "mode": focus_mode})
+	focus_mode = Control.FOCUS_NONE
+	for control in find_children("*", "Control", true, false):
+		_modal_focus.append({"node": weakref(control), "mode": control.focus_mode})
+		control.focus_mode = Control.FOCUS_NONE
+	var picker = RecipePickerPanel.new()
+	picker.vision_mode = true
+	picker.selected = Game.vision_target
+	_vision_picker = picker
+	var finish := func():
+		if picker.get_parent() == self:
+			remove_child(picker)
+		picker.queue_free()
+		_vision_picker = null
+		for state in _modal_focus:
+			var control = state.node.get_ref()
+			if is_instance_valid(control):
+				control.focus_mode = state.mode
+		_modal_focus.clear()
+		var focus = opener.get_ref()
+		if is_instance_valid(focus) and focus is Control and focus.is_inside_tree():
+			focus.grab_focus.call_deferred()
+		else:
+			_start.grab_focus.call_deferred()
+	picker.cancelled.connect(finish)
+	picker.chosen.connect(func(id: String):
+		Game.set_vision_target(id)
+		finish.call())
+	add_child(picker)
 
 
 func _open_crew() -> void:

@@ -121,7 +121,16 @@ func _ready() -> void:
 	credits.pressed.connect(func(): open_credits.emit())
 	grid.add_child(credits)
 	_buttons.append(credits)
-	if Game.version >= Game.VERSIONS.size() - 1:
+	if ToyPlatform.gifts_available() and (not Game.gifts.has("follow") or not Game.gifts.has("like")):
+		var gift := UiKit.button(tr("小礼物"), 29, Vector2(302, 76))
+		gift.name = "ToyGifts"
+		gift.pressed.connect(func():
+			var panel := GiftPanel.new()
+			panel.closed.connect(func(): gift.grab_focus())
+			add_child(panel))
+		grid.add_child(gift)
+		_buttons.append(gift)
+	if Game.ending_unlocked():
 		var ending := UiKit.button(tr("重看结局"), 29, Vector2(302, 76))
 		ending.name = "ReplayEnding"
 		ending.pressed.connect(func(): replay_ending.emit())
